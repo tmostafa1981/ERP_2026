@@ -1,0 +1,201 @@
+@using Microsoft.Extensions.Localization
+@inject ERP.Application.Interfaces.ICurrentUserContext CurrentUserContext
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["Dashboard"];
+}
+
+@if (CurrentUserContext.IsAuthenticated)
+{
+    <!-- Header Section -->
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
+        <div>
+            <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+                @Localizer["Welcome"], @CurrentUserContext.Username
+            </h4>
+            <span class="text-muted" style="font-size: 12.5px;">
+                <i class="fa-solid fa-layer-group text-primary me-1 ms-0"></i> @Localizer["AppName"] &mdash; @Localizer["FoundationLive"]
+            </span>
+        </div>
+
+        <div class="d-flex gap-2">
+            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-3 py-2 d-flex align-items-center gap-1" style="font-size: 12px;">
+                <i class="fa-solid fa-circle-check"></i> @Localizer["SystemAuthorized"]
+            </span>
+        </div>
+    </div>
+
+    <!-- Phase 1 Context Row (User, Branch, Fiscal Year, System Name) -->
+    <div class="row g-3 mb-4">
+        <!-- Current User Card -->
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-primary bg-opacity-10 text-primary">
+                    <i class="fa-solid fa-user-check"></i>
+                </div>
+                <div>
+                    <div class="kpi-label">@Localizer["User"]</div>
+                    <div class="kpi-value">@CurrentUserContext.Username</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Branch Card -->
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-success bg-opacity-10 text-success">
+                    <i class="fa-solid fa-code-branch"></i>
+                </div>
+                <div>
+                    <div class="kpi-label">@Localizer["CurrentBranch"]</div>
+                    <div class="kpi-value">@CurrentUserContext.BranchName</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Fiscal Year Card -->
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-warning bg-opacity-10 text-warning">
+                    <i class="fa-regular fa-calendar-check"></i>
+                </div>
+                <div>
+                    <div class="kpi-label">@Localizer["CurrentFiscalYear"]</div>
+                    <div class="kpi-value">@CurrentUserContext.FiscalYearName</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Name Card -->
+        <div class="col-xl-3 col-md-6">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-info bg-opacity-10 text-info">
+                    <i class="fa-solid fa-cubes"></i>
+                </div>
+                <div>
+                    <div class="kpi-label">@Localizer["SystemName"]</div>
+                    <div class="kpi-value" style="font-size: 16px;">NextGen ERP v1.0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Access & Basic System Information -->
+    <div class="row g-3">
+        <!-- Quick Access Shortcuts -->
+        <div class="col-lg-6">
+            <div class="erp-card h-100">
+                <div class="erp-card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-bolt text-warning"></i>
+                        <span>@Localizer["QuickAccess"]</span>
+                    </div>
+                </div>
+                <div class="erp-card-body">
+                    <p class="text-muted" style="font-size: 12.5px;">@Localizer["EnterpriseSubtitle"]:</p>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <a href="#" class="btn btn-erp-outline w-100 text-start py-2 d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-code-branch text-primary"></i>
+                                <div>
+                                    <div class="fw-bold" style="font-size: 12px;">@Localizer["BranchManagement"]</div>
+                                    <div class="text-muted" style="font-size: 10.5px;">@Localizer["ManageBranches"]</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="#" class="btn btn-erp-outline w-100 text-start py-2 d-flex align-items-center gap-2">
+                                <i class="fa-regular fa-calendar text-success"></i>
+                                <div>
+                                    <div class="fw-bold" style="font-size: 12px;">@Localizer["FiscalYears"]</div>
+                                    <div class="text-muted" style="font-size: 10.5px;">@Localizer["CurrentFiscalYear"]</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="#" class="btn btn-erp-outline w-100 text-start py-2 d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-users text-info"></i>
+                                <div>
+                                    <div class="fw-bold" style="font-size: 12px;">@Localizer["UserAccounts"]</div>
+                                    <div class="text-muted" style="font-size: 10.5px;">@Localizer["ManageUsers"]</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="#" class="btn btn-erp-outline w-100 text-start py-2 d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-shield-halved text-danger"></i>
+                                <div>
+                                    <div class="fw-bold" style="font-size: 12px;">@Localizer["RolePermissions"]</div>
+                                    <div class="text-muted" style="font-size: 10.5px;">@Localizer["SecurityAuth"]</div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Basic System Information -->
+        <div class="col-lg-6">
+            <div class="erp-card h-100">
+                <div class="erp-card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-circle-info text-primary"></i>
+                        <span>@Localizer["SystemInfo"]</span>
+                    </div>
+                </div>
+                <div class="erp-card-body p-0">
+                    <div class="erp-table-container border-0">
+                        <table class="erp-table">
+                            <tbody>
+                                <tr>
+                                    <td class="fw-semibold text-muted" style="width: 35%;">@Localizer["AppFramework"]:</td>
+                                    <td class="fw-bold">ASP.NET Core 8 MVC (.NET 8.0)</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold text-muted">@Localizer["OrmDatabase"]:</td>
+                                    <td>Entity Framework Core 8 / SQL Server</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold text-muted">@Localizer["Architecture"]:</td>
+                                    <td>Clean Architecture (Web, Domain, App, Infra)</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold text-muted">@Localizer["AuthContext"]:</td>
+                                    <td>ASP.NET Core Identity + Multi-culture Claims</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold text-muted">@Localizer["AuthEnforcer"]:</td>
+                                    <td>Server-Side Authorization & User-Branch Scope</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold text-muted">@Localizer["Phase1Status"]:</td>
+                                    <td><span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">@Localizer["FoundationLive"]</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Not Logged In View -->
+    <div class="d-flex align-items-center justify-content-center" style="min-height: 65vh;">
+        <div class="text-center p-5 bg-white border rounded shadow-sm" style="max-width: 500px;">
+            <div class="mb-3 text-primary">
+                <i class="fa-solid fa-layer-group fa-4x"></i>
+            </div>
+            <h3 class="fw-bold text-dark mb-2">@Localizer["AppName"]</h3>
+            <p class="text-muted mb-4" style="font-size: 13.5px;">
+                @Localizer["EnterpriseSubtitle"]
+            </p>
+            <a asp-controller="Account" asp-action="Login" class="btn btn-erp-primary px-4 py-2 w-100">
+                <i class="fa-solid fa-right-to-bracket me-2 ms-0"></i> @Localizer["SignIn"]
+            </a>
+        </div>
+    </div>
+}

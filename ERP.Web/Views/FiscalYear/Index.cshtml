@@ -1,0 +1,191 @@
+@model IEnumerable<ERP.Domain.Entities.FiscalYear>
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["FiscalYearManagement"];
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-calendar-days text-primary me-2 ms-0"></i> @Localizer["FiscalYearManagement"]
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Localizer["ManageFiscalYears"]</span>
+    </div>
+
+    <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#createFiscalYearModal">
+        <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewFiscalYear"]
+    </button>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-check me-2 ms-0"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-exclamation me-2 ms-0"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Desktop Data Grid -->
+<div class="erp-table-container">
+    <table class="erp-table">
+        <thead>
+            <tr>
+                <th style="width: 100px;">@Localizer["Year"]</th>
+                <th>@Localizer["NameAr"] / @Localizer["NameEn"]</th>
+                <th style="width: 150px;">@Localizer["StartDate"]</th>
+                <th style="width: 150px;">@Localizer["EndDate"]</th>
+                <th style="width: 120px;" class="text-center">@Localizer["Status"]</th>
+                <th style="width: 140px;" class="text-center">@Localizer["Actions"]</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model != null && Model.Any())
+            {
+                foreach (var item in Model)
+                {
+                    <tr>
+                        <td class="fw-bold text-primary" style="font-size: 14px;">@item.Year</td>
+                        <td>
+                            <div class="fw-bold">@item.LocalizedName</div>
+                            <div class="text-muted small" style="font-size: 11px;">@item.NameAr &bull; @item.NameEn</div>
+                        </td>
+                        <td>@item.StartDate.ToString("yyyy-MM-dd")</td>
+                        <td>@item.EndDate.ToString("yyyy-MM-dd")</td>
+                        <td class="text-center">
+                            @if (!item.IsClosed)
+                            {
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">@Localizer["Open"]</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-1">@Localizer["Closed"]</span>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Edit"]" data-bs-toggle="modal" data-bs-target="#editModal_@item.Id">
+                                    <i class="fa-solid fa-pen-to-square text-primary"></i>
+                                </button>
+                                <form asp-action="ToggleClose" asp-route-id="@item.Id" method="post" class="d-inline m-0">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@(item.IsClosed ? Localizer["Open"] : Localizer["Closed"])">
+                                        <i class="fa-solid @(item.IsClosed ? "fa-lock-open text-success" : "fa-lock text-warning")"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Edit Modal -->
+                    <div class="modal fade" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <form asp-action="Edit" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="Id" value="@item.Id" />
+                                    <div class="modal-header">
+                                        <h5 class="modal-title fw-bold"><i class="fa-solid fa-pen-to-square text-primary me-2 ms-0"></i> @Localizer["Edit"] - @item.Year</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row g-3">
+                                            <div class="col-md-4">
+                                                <label class="erp-form-label">@Localizer["Year"] *</label>
+                                                <input type="text" name="Year" value="@item.Year" class="form-control erp-form-control" required />
+                                            </div>
+                                            <div class="col-md-4 d-flex align-items-end">
+                                                <div class="form-check form-switch mb-2">
+                                                    <input type="checkbox" name="IsActive" value="true" class="form-check-input" id="edit_active_@item.Id" @(item.IsActive ? "checked" : "") />
+                                                    <label class="form-check-label fw-bold" for="edit_active_@item.Id">@Localizer["Active"]</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["NameAr"] *</label>
+                                                <input type="text" name="NameAr" value="@item.NameAr" class="form-control erp-form-control" dir="rtl" required />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["NameEn"] *</label>
+                                                <input type="text" name="NameEn" value="@item.NameEn" class="form-control erp-form-control" dir="ltr" required />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["StartDate"] *</label>
+                                                <input type="date" name="StartDate" value="@item.StartDate.ToString("yyyy-MM-dd")" class="form-control erp-form-control" required />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["EndDate"] *</label>
+                                                <input type="date" name="EndDate" value="@item.EndDate.ToString("yyyy-MM-dd")" class="form-control erp-form-control" required />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-erp-outline" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                                        <button type="submit" class="btn btn-erp-primary">@Localizer["Save"]</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">@Localizer["NoFiscalYearsFound"]</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Create Modal -->
+<div class="modal fade" id="createFiscalYearModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2 ms-0"></i> @Localizer["AddNewFiscalYear"]</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="erp-form-label">@Localizer["Year"] *</label>
+                            <input type="text" name="Year" class="form-control erp-form-control" placeholder="2027" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["NameAr"] *</label>
+                            <input type="text" name="NameAr" class="form-control erp-form-control" dir="rtl" placeholder="السنة المالية 2027" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["NameEn"] *</label>
+                            <input type="text" name="NameEn" class="form-control erp-form-control" dir="ltr" placeholder="Fiscal Year 2027" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["StartDate"] *</label>
+                            <input type="date" name="StartDate" value="2027-01-01" class="form-control erp-form-control" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["EndDate"] *</label>
+                            <input type="date" name="EndDate" value="2027-12-31" class="form-control erp-form-control" required />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-erp-outline" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                    <button type="submit" class="btn btn-erp-primary">@Localizer["Save"]</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

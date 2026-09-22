@@ -1,0 +1,33 @@
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["AccessDeniedTitle"];
+    var missingPermission = ViewData["Permission"] as string;
+}
+
+<div class="d-flex align-items-center justify-content-center" style="min-height: 70vh;">
+    <div class="erp-card text-center p-4 p-md-5 border-danger shadow-sm" style="max-width: 540px;">
+        <div class="mb-3 text-danger">
+            <i class="fa-solid fa-user-shield fa-4x"></i>
+        </div>
+        <h3 class="fw-bold text-dark mb-2">@Localizer["AccessDeniedTitle"]</h3>
+        <p class="text-muted mb-3" style="font-size: 13.5px; line-height: 1.6;">
+            @Localizer["AccessDeniedMessage"]
+        </p>
+
+        @if (!string.IsNullOrEmpty(missingPermission))
+        {
+            <div class="alert alert-light border border-danger-subtle p-2 mb-4" style="font-size: 12px;">
+                <span class="text-muted">@Localizer["MissingRequiredPermission"]:</span>
+                <code class="d-block text-danger fw-bold mt-1">@missingPermission</code>
+            </div>
+        }
+
+        <div class="d-flex justify-content-center gap-2">
+            <a href="@Url.Action("Index", "Home")" class="btn btn-erp-primary px-4">
+                <i class="fa-solid fa-house me-1 ms-0"></i> @Localizer["BackToHome"]
+            </a>
+        </div>
+    </div>
+</div>

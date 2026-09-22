@@ -1,0 +1,382 @@
+@model ERP.Web.Models.AuditListViewModel
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+@{
+    ViewData["Title"] = "Audit History";
+    var companies   = ViewBag.Companies   as IEnumerable<ERP.Domain.Entities.Company>   ?? new List<ERP.Domain.Entities.Company>();
+    var branches    = ViewBag.Branches    as IEnumerable<ERP.Domain.Entities.Branch>    ?? new List<ERP.Domain.Entities.Branch>();
+    var fiscalYears = ViewBag.FiscalYears as IEnumerable<ERP.Domain.Entities.FiscalYear>?? new List<ERP.Domain.Entities.FiscalYear>();
+    var filter      = Model.Filter;
+    var grandTotalCount = (int)(ViewBag.GrandTotalCount ?? Model.TotalCount);
+    var hasActiveFilter = (bool)(ViewBag.HasActiveFilter ?? false);
+
+    string GetActionDisplay(string? a) => a switch {
+        "Create" => "Create (إضافة)",
+        "Update" => "Update (تعديل)",
+        "Delete" => "Delete (حذف)",
+        "Login"  => "Login (تسجيل دخول)",
+        "Logout" => "Logout (تسجيل خروج)",
+        "Approve"=> "Approve (اعتماد)",
+        "Reject" => "Reject (رفض)",
+        "Post"   => "Post (ترحيل)",
+        "Void"   => "Void (إلغاء)",
+        "Print"  => "Print (طباعة)",
+        "Export" => "Export (تصدير)",
+        _        => a ?? ""
+    };
+
+    string GetEntityDisplay(string? e) => e switch {
+        "FiscalYear" => "FiscalYear (السنوات المالية)",
+        "Branch"     => "Branch (الفروع)",
+        "Company"    => "Company (الشركات)",
+        "User"       => "User (المستخدمين)",
+        _            => e ?? ""
+    };
+
+    string GetModuleDisplay(string? m) => m switch {
+        "Organization" => "Organization (التهيئة والمؤسسة)",
+        "Account"      => "Account (الحسابات والدخول)",
+        _              => m ?? ""
+    };
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-shield-halved text-primary me-2 ms-0"></i> Audit History – سجل مراجعة النظام
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">
+            عرض <strong>@Model.TotalCount</strong> من إجمالي <strong>@grandTotalCount</strong> حركة مسجلة
+            @if (hasActiveFilter)
+            {
+                <span class="badge bg-warning text-dark ms-2">فلترة مفعلة</span>
+            }
+        </span>
+    </div>
+    @if (hasActiveFilter)
+    {
+        <div>
+            <a asp-controller="Audit" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-rotate-left me-1"></i> عرض كافة الحركات بدون فلترة (@grandTotalCount)
+            </a>
+        </div>
+    }
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-check me-2 ms-0"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- ── Filters ─────────────────────────────────────────────────────────── -->
+<div class="erp-card mb-3">
+    <div class="erp-card-body p-3">
+        <form method="get" asp-controller="Audit" asp-action="Index" id="auditFilterForm">
+            <!-- ── Quick Universal Search ─────────────────────────────── -->
+            <div class="mb-3">
+                <label class="form-label erp-label fw-bold text-primary">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i> بحث شامل وسريع
+                </label>
+                <div class="input-group">
+                    <input type="text" name="SearchTerm" value="@filter.SearchTerm"
+                           class="form-control erp-form-control"
+                           placeholder="اكتب أي كلمة للبحث (اسم السنة مثل 2027، الكيان FiscalYear، كود الشاشة FYR001، اسم المستخدم admin، رقم السجل، نوع الحركة...)" />
+                    @if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
+                    {
+                        <a asp-controller="Audit" asp-action="Index" class="btn btn-outline-secondary" title="إلغاء البحث السريع">
+                            <i class="fa-solid fa-xmark"></i>
+                        </a>
+                    }
+                    <button type="submit" class="btn btn-erp-primary px-4">
+                        <i class="fa-solid fa-magnifying-glass me-1"></i> بحث
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Advanced Filters Toggle / Grid ──────────────────────── -->
+            <div class="border-top pt-2">
+                <div class="row g-2">
+                    <!-- Date Range -->
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">من تاريخ (Date From)</label>
+                        <input type="date" name="DateFrom" value="@filter.DateFrom?.ToString("yyyy-MM-dd")"
+                               class="form-control form-control-sm erp-form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">إلى تاريخ (Date To)</label>
+                        <input type="date" name="DateTo" value="@filter.DateTo?.ToString("yyyy-MM-dd")"
+                               class="form-control form-control-sm erp-form-control" />
+                    </div>
+                    <!-- User -->
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">كود المستخدم (Employee Code)</label>
+                        <input type="text" name="EmployeeCode" value="@filter.EmployeeCode"
+                               class="form-control form-control-sm erp-form-control" placeholder="e.g. ADMIN" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">اسم المستخدم (User Name)</label>
+                        <input type="text" name="UserName" value="@filter.UserName"
+                               class="form-control form-control-sm erp-form-control" placeholder="Search user..." />
+                    </div>
+                    <!-- Org Context -->
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">الشركة (Company)</label>
+                        <select name="CompanyId" class="form-select form-select-sm erp-form-control">
+                            <option value="">-- كل الشركات --</option>
+                            @foreach (var c in companies)
+                            {
+                                <option value="@c.Id" selected="@(filter.CompanyId == c.Id ? "selected" : null)">@c.Code – @c.LocalizedName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">الفرع (Branch)</label>
+                        <select name="BranchId" class="form-select form-select-sm erp-form-control">
+                            <option value="">-- كل الفروع --</option>
+                            @foreach (var b in branches)
+                            {
+                                <option value="@b.Id" selected="@(filter.BranchId == b.Id ? "selected" : null)">@b.Code – @b.LocalizedName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">سنة الجلسة (Session Fiscal Year)</label>
+                        <select name="FiscalYearId" class="form-select form-select-sm erp-form-control">
+                            <option value="">-- كل السنوات --</option>
+                            @foreach (var fy in fiscalYears)
+                            {
+                                <option value="@fy.Id" selected="@(filter.FiscalYearId == fy.Id ? "selected" : null)">@fy.Year – @fy.LocalizedName</option>
+                            }
+                        </select>
+                    </div>
+                    <!-- Module / Screen -->
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">النظام (Module)</label>
+                        <select name="ModuleName" class="form-select form-select-sm erp-form-control">
+                            <option value="">-- كل الأنظمة --</option>
+                            @foreach (var m in Model.AvailableModules)
+                            {
+                                <option value="@m" selected="@(filter.ModuleName == m ? "selected" : null)">@GetModuleDisplay(m)</option>
+                            }
+                        </select>
+                    </div>
+                    <!-- Action -->
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">نوع الحركة (Action)</label>
+                        <select name="AuditAction" class="form-select form-select-sm erp-form-control">
+                            <option value="">-- كل الحركات --</option>
+                            @foreach (var a in Model.AvailableActions)
+                            {
+                                <option value="@a" selected="@(filter.AuditAction == a ? "selected" : null)">@GetActionDisplay(a)</option>
+                            }
+                        </select>
+                    </div>
+                    <!-- Entity -->
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">الكيان / الجدول (Entity)</label>
+                        <select name="EntityName" class="form-select form-select-sm erp-form-control">
+                            <option value="">-- كل الكيانات --</option>
+                            @foreach (var e in Model.AvailableEntities)
+                            {
+                                <option value="@e" selected="@(filter.EntityName == e ? "selected" : null)">@GetEntityDisplay(e)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">رقم السجل (Record ID)</label>
+                        <input type="text" name="EntityId" value="@filter.EntityId"
+                               class="form-control form-control-sm erp-form-control" placeholder="e.g. 2" />
+                    </div>
+                    <!-- Success -->
+                    <div class="col-md-3">
+                        <label class="form-label erp-label">حالة العملية (Result)</label>
+                        <select name="Success" class="form-select form-select-sm erp-form-control">
+                            <option value="">-- الكل --</option>
+                            <option value="true"  selected="@(filter.Success == "true"  ? "selected" : null)">✅ ناجحة (Success)</option>
+                            <option value="false" selected="@(filter.Success == "false" ? "selected" : null)">❌ فاشلة (Failed)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex gap-2 mt-3">
+                    <button type="submit" class="btn btn-erp-primary btn-sm px-4">
+                        <i class="fa-solid fa-filter me-1"></i> تطبيق الفلترة
+                    </button>
+                    <a asp-controller="Audit" asp-action="Index" class="btn btn-outline-secondary btn-sm px-4">
+                        <i class="fa-solid fa-rotate-left me-1"></i> إعادة تعيين (Reset)
+                    </a>
+                    <input type="hidden" name="PageSize" value="@filter.PageSize" />
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Results Grid ───────────────────────────────────────────────────── -->
+<div class="erp-card">
+    <div class="erp-card-body p-0">
+        @if (!Model.Items.Any())
+        {
+            <div class="text-center py-5 px-3">
+                <i class="fa-solid fa-inbox fa-3x mb-3 text-secondary opacity-50 d-block"></i>
+                @if (hasActiveFilter)
+                {
+                    <h5 class="fw-bold text-dark mb-1">لا توجد حركات تطابق خيارات البحث المحددة</h5>
+                    <p class="text-muted small mb-3">
+                        يوجد في النظام <strong>@grandTotalCount</strong> حركة مسجلة بالفعل، ولكن الفلاتر أو الكلمات المحددة استبعدتها.
+                    </p>
+                    <a asp-controller="Audit" asp-action="Index" class="btn btn-erp-primary btn-sm px-4">
+                        <i class="fa-solid fa-rotate-left me-1"></i> مسح جميع الفلاتر وعرض كافة الحركات (@grandTotalCount)
+                    </a>
+                }
+                else
+                {
+                    <h5 class="fw-bold text-dark mb-1">لا توجد حركات مسجلة حتى الآن</h5>
+                    <p class="text-muted small mb-0">
+                        سيتم تسجيل الحركات تلقائياً بمجرد قيام المستخدمين بالعمليات على الشاشات.
+                    </p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover erp-table mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:140px;">Date / Time</th>
+                            <th style="width:110px;">Employee</th>
+                            <th>User</th>
+                            <th>Module</th>
+                            <th>Screen</th>
+                            <th style="width:90px;">Action</th>
+                            <th>Entity</th>
+                            <th style="width:80px;">Record ID</th>
+                            <th style="width:120px;">IP Address</th>
+                            <th style="width:80px;">Result</th>
+                            <th style="width:70px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td class="text-nowrap" style="font-size:11px;">
+                                    @item.TimestampUtc.ToString("yyyy-MM-dd")<br />
+                                    <span class="text-muted">@item.TimestampUtc.ToString("HH:mm:ss") UTC</span>
+                                </td>
+                                <td><span class="badge bg-secondary-subtle text-dark">@item.EmployeeCode</span></td>
+                                <td style="font-size:12px;">@item.UserName</td>
+                                <td style="font-size:12px;">@GetModuleDisplay(item.ModuleName)</td>
+                                <td style="font-size:12px;">
+                                    @if (!string.IsNullOrEmpty(item.ScreenCode))
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary me-1">@item.ScreenCode</span>
+                                    }
+                                    @item.ScreenName
+                                </td>
+                                <td>
+                                    @{
+                                        var actionClass = item.Action switch
+                                        {
+                                            "Create" => "bg-success-subtle text-success",
+                                            "Update" => "bg-warning-subtle text-warning",
+                                            "Delete" => "bg-danger-subtle text-danger",
+                                            "Login"  => "bg-info-subtle text-info",
+                                            _        => "bg-secondary-subtle text-secondary"
+                                        };
+                                    }
+                                    <span class="badge @actionClass">@GetActionDisplay(item.Action)</span>
+                                </td>
+                                <td style="font-size:12px;">@GetEntityDisplay(item.EntityName)</td>
+                                <td style="font-size:12px;"><span class="badge bg-light text-dark border">@item.EntityId</span></td>
+                                <td style="font-size:11px; font-family:monospace;">@item.IpAddress</td>
+                                <td>
+                                    @if (item.Success)
+                                    {
+                                        <span class="badge bg-success-subtle text-success"><i class="fa-solid fa-check"></i></span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger"><i class="fa-solid fa-xmark"></i> Failed</span>
+                                    }
+                                </td>
+                                <td>
+                                    <a asp-action="Details" asp-route-id="@item.Id"
+                                       class="btn btn-sm btn-outline-primary px-2 py-1" title="View Details" style="font-size:11px;">
+                                        <i class="fa-solid fa-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            @if (Model.TotalPages > 1)
+            {
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top" style="font-size:12px;">
+                    <span class="text-muted">
+                        Page @filter.Page of @Model.TotalPages (@Model.TotalCount.ToString("N0") records)
+                    </span>
+                    <div class="d-flex gap-1">
+                        @if (filter.Page > 1)
+                        {
+                            <a asp-action="Index"
+                               asp-all-route-data='@new Dictionary<string,string> {
+                                   ["Page"] = (filter.Page - 1).ToString(),
+                                   ["PageSize"] = filter.PageSize.ToString(),
+                                   ["SearchTerm"] = filter.SearchTerm ?? "",
+                                   ["DateFrom"] = filter.DateFrom?.ToString("yyyy-MM-dd") ?? "",
+                                   ["DateTo"] = filter.DateTo?.ToString("yyyy-MM-dd") ?? "",
+                                   ["EmployeeCode"] = filter.EmployeeCode ?? "",
+                                   ["UserName"] = filter.UserName ?? "",
+                                   ["AuditAction"] = filter.AuditAction ?? "",
+                                   ["EntityName"] = filter.EntityName ?? "",
+                                   ["EntityId"] = filter.EntityId ?? "",
+                                   ["ModuleName"] = filter.ModuleName ?? ""
+                               }'
+                               class="btn btn-sm btn-outline-secondary">‹ Prev</a>
+                        }
+                        @if (filter.Page < Model.TotalPages)
+                        {
+                            <a asp-action="Index"
+                               asp-all-route-data='@new Dictionary<string,string> {
+                                   ["Page"] = (filter.Page + 1).ToString(),
+                                   ["PageSize"] = filter.PageSize.ToString(),
+                                   ["SearchTerm"] = filter.SearchTerm ?? "",
+                                   ["DateFrom"] = filter.DateFrom?.ToString("yyyy-MM-dd") ?? "",
+                                   ["DateTo"] = filter.DateTo?.ToString("yyyy-MM-dd") ?? "",
+                                   ["EmployeeCode"] = filter.EmployeeCode ?? "",
+                                   ["UserName"] = filter.UserName ?? "",
+                                   ["AuditAction"] = filter.AuditAction ?? "",
+                                   ["EntityName"] = filter.EntityName ?? "",
+                                   ["EntityId"] = filter.EntityId ?? "",
+                                   ["ModuleName"] = filter.ModuleName ?? ""
+                               }'
+                               class="btn btn-sm btn-outline-secondary">Next ›</a>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('auditFilterForm')?.addEventListener('submit', function () {
+            var inputs = this.querySelectorAll('input, select');
+            inputs.forEach(function (input) {
+                if (!input.value || input.value.trim() === '') {
+                    input.disabled = true;
+                }
+            });
+        });
+    </script>
+}

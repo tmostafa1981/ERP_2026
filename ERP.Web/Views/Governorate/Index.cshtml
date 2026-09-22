@@ -1,0 +1,216 @@
+@model IEnumerable<ERP.Domain.Entities.Governorate>
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["Governorates"];
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-map-location-dot text-primary me-2 ms-0"></i> @Localizer["Governorates"]
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Localizer["ManageGovernorates"] (@ViewBag.TotalCount)</span>
+    </div>
+
+    <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#createGovernorateModal">
+        <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewGovernorate"]
+    </button>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-check me-2 ms-0"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-exclamation me-2 ms-0"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Search Toolbar -->
+<div class="erp-card mb-3">
+    <div class="erp-card-body p-2">
+        <form method="get" asp-action="Index" class="row g-2 align-items-center">
+            <div class="col-md-6 col-lg-5">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                    <input type="text" name="searchString" value="@ViewBag.SearchString" class="form-control erp-form-control" placeholder="@Localizer["Search"]..." />
+                </div>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-erp-primary btn-sm px-3">@Localizer["Search"]</button>
+                @if (!string.IsNullOrEmpty(ViewBag.SearchString as string))
+                {
+                    <a asp-action="Index" class="btn btn-erp-outline btn-sm">@Localizer["Cancel"]</a>
+                }
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Desktop Data Grid -->
+<div class="erp-table-container">
+    <table class="erp-table">
+        <thead>
+            <tr>
+                <th style="width: 100px;">@Localizer["Code"]</th>
+                <th>@Localizer["NameAr"]</th>
+                <th>@Localizer["NameEn"]</th>
+                <th style="width: 120px;" class="text-center">@Localizer["Cities"]</th>
+                <th style="width: 100px;" class="text-center">@Localizer["Status"]</th>
+                <th style="width: 140px;" class="text-center">@Localizer["Actions"]</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model != null && Model.Any())
+            {
+                foreach (var item in Model)
+                {
+                    <tr>
+                        <td class="fw-bold text-primary">@item.Code</td>
+                        <td>@item.NameAr</td>
+                        <td>@item.NameEn</td>
+                        <td class="text-center">
+                            <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle px-2 py-1">
+                                @(item.Cities?.Count ?? 0)
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            @if (item.IsActive)
+                            {
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">@Localizer["Active"]</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-2 py-1">@Localizer["Inactive"]</span>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Edit"]" data-bs-toggle="modal" data-bs-target="#editModal_@item.Id">
+                                    <i class="fa-solid fa-pen-to-square text-primary"></i>
+                                </button>
+                                <form asp-action="ToggleStatus" asp-route-id="@item.Id" method="post" class="d-inline m-0">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@(item.IsActive ? Localizer["Inactive"] : Localizer["Active"])">
+                                        <i class="fa-solid @(item.IsActive ? "fa-ban text-warning" : "fa-check text-success")"></i>
+                                    </button>
+                                </form>
+                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline m-0" onsubmit="return confirm('@Localizer["ConfirmDelete"]');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Delete"]">
+                                        <i class="fa-solid fa-trash text-danger"></i>
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Edit Modal -->
+                            <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content border-0 shadow">
+                                        <form asp-action="Edit" method="post">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="Id" value="@item.Id" />
+                                            <div class="modal-header bg-light py-2">
+                                                <h6 class="modal-title fw-bold"><i class="fa-solid fa-pen text-primary me-2"></i> @Localizer["Edit"] - @item.LocalizedName</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body p-3">
+                                                <div class="mb-2">
+                                                    <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
+                                                    <input type="text" name="Code" value="@item.Code" class="form-control form-control-sm" required maxlength="50" />
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
+                                                    <input type="text" name="NameAr" value="@item.NameAr" class="form-control form-control-sm" required maxlength="200" dir="rtl" />
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
+                                                    <input type="text" name="NameEn" value="@item.NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" />
+                                                </div>
+                                                <div class="form-check form-switch mt-2">
+                                                    <input class="form-check-input" type="checkbox" name="IsActive" value="true" @(item.IsActive ? "checked" : "") id="editActive_@item.Id" />
+                                                    <label class="form-check-label small" for="editActive_@item.Id">@Localizer["Active"]</label>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer py-2 bg-light">
+                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                                                <button type="submit" class="btn btn-sm btn-erp-primary">@Localizer["Save"]</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">@Localizer["NoDataFound"]</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+@if (ViewBag.TotalPages > 1)
+{
+    <nav class="mt-3">
+        <ul class="pagination pagination-sm justify-content-center">
+            @for (int i = 1; i <= ViewBag.TotalPages; i++)
+            {
+                <li class="page-item @(i == ViewBag.CurrentPage ? "active" : "")">
+                    <a class="page-link" asp-action="Index" asp-route-page="@i" asp-route-searchString="@ViewBag.SearchString">@i</a>
+                </li>
+            }
+        </ul>
+    </nav>
+}
+
+<!-- Create Modal -->
+<div class="modal fade" id="createGovernorateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-light py-2">
+                    <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2"></i> @Localizer["AddNewGovernorate"]</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
+                        <input type="text" name="Code" class="form-control form-control-sm" required maxlength="50" placeholder="GOV-01" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
+                        <input type="text" name="NameAr" class="form-control form-control-sm" required maxlength="200" dir="rtl" placeholder="القاهرة" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
+                        <input type="text" name="NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" placeholder="Cairo" />
+                    </div>
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" name="IsActive" value="true" checked id="createGovActive" />
+                        <label class="form-check-label small" for="createGovActive">@Localizer["Active"]</label>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 bg-light">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                    <button type="submit" class="btn btn-sm btn-erp-primary">@Localizer["Save"]</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

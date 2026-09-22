@@ -1,0 +1,130 @@
+@using ERP.Domain.Entities
+@using ERP.Infrastructure.Identity
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["UserBranchAssignment"];
+    var users = ViewBag.Users as IEnumerable<ApplicationUser> ?? new List<ApplicationUser>();
+    var selectedUser = ViewBag.SelectedUser as ApplicationUser;
+    var assignedBranchIds = ViewBag.AssignedBranchIds as List<int> ?? new List<int>();
+    var allBranches = ViewBag.AllBranches as IEnumerable<Branch> ?? new List<Branch>();
+}
+
+<div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-user-gear text-primary me-2 ms-0"></i> @Localizer["UserBranchAssignment"]
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Localizer["AssignBranches"]</span>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-check me-2 ms-0"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row g-3">
+    <!-- User List Panel -->
+    <div class="col-md-4 col-lg-3">
+        <div class="erp-card h-100">
+            <div class="erp-card-header">
+                <span><i class="fa-solid fa-users text-primary me-2 ms-0"></i> @Localizer["Users"]</span>
+            </div>
+            <div class="list-group list-group-flush p-2">
+                @foreach (var user in users)
+                {
+                    <a href="@Url.Action("Index", new { userId = user.Id })" 
+                       class="list-group-item list-group-item-action d-flex align-items-center justify-content-between rounded mb-1 p-2 border-0 @(selectedUser?.Id == user.Id ? "bg-primary text-white" : "")"
+                       style="font-size: 13px;">
+                        <div>
+                            <div class="fw-bold">@user.UserName</div>
+                            <div class="small opacity-75" style="font-size: 11px;">@(string.IsNullOrEmpty(user.FullName) ? user.Email : user.FullName)</div>
+                        </div>
+                        @if (user.HasAllBranches)
+                        {
+                            <span class="badge @(selectedUser?.Id == user.Id ? "bg-white text-primary" : "bg-primary")" style="font-size: 10px;">@Localizer["All"]</span>
+                        }
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Assignment Form Panel -->
+    <div class="col-md-8 col-lg-9">
+        @if (selectedUser != null)
+        {
+            <form asp-action="SaveAssignment" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="userId" value="@selectedUser.Id" />
+
+                <div class="erp-card">
+                    <div class="erp-card-header d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="fw-bold me-2"><i class="fa-solid fa-user-tag text-primary me-2 ms-0"></i> @selectedUser.UserName</span>
+                            <span class="text-muted" style="font-size: 12px;">(@(selectedUser.FullName ?? selectedUser.Email))</span>
+                        </div>
+                        <button type="submit" class="btn btn-erp-primary btn-sm px-4">
+                            <i class="fa-solid fa-floppy-disk me-1 ms-0"></i> @Localizer["Save"]
+                        </button>
+                    </div>
+
+                    <div class="erp-card-body">
+                        <!-- Has All Branches Scope Flag -->
+                        <div class="alert alert-light border d-flex align-items-center justify-content-between mb-4 p-3">
+                            <div>
+                                <div class="fw-bold mb-1" style="font-size: 13.5px;"><i class="fa-solid fa-shield-halved text-warning me-2 ms-0"></i> @Localizer["HasAllBranches"]</div>
+                                <div class="text-muted" style="font-size: 11.5px;">@Localizer["HasAllBranchesHelp"]</div>
+                            </div>
+                            <div class="form-check form-switch ms-3">
+                                <input type="checkbox" name="hasAllBranches" value="true" class="form-check-input" id="hasAllBranchesToggle" @(selectedUser.HasAllBranches ? "checked" : "") style="width: 2.5em; height: 1.3em;" />
+                            </div>
+                        </div>
+
+                        <h6 class="fw-bold mb-3 text-muted" style="font-size: 13px;"><i class="fa-solid fa-code-branch me-1 ms-0"></i> @Localizer["SpecificBranchScope"]</h6>
+
+                        <!-- Branch Selection Grid -->
+                        <div class="row g-2" id="branchGrid">
+                            @foreach (var branch in allBranches)
+                            {
+                                bool isChecked = assignedBranchIds.Contains(branch.Id);
+                                <div class="col-md-6 col-lg-4">
+                                    <div class="border rounded p-2 d-flex align-items-center justify-content-between bg-white hover-shadow" style="font-size: 12.5px;">
+                                        <div>
+                                            <div class="fw-bold">
+                                                <span class="badge bg-light text-dark border me-1">@branch.Code</span>
+                                                @branch.LocalizedName
+                                            </div>
+                                            <div class="text-muted mt-1" style="font-size: 11px;">
+                                                <i class="fa-solid fa-building me-1 ms-0 text-primary"></i> @(branch.Company?.LocalizedName ?? "—")
+                                            </div>
+                                        </div>
+                                        <div class="form-check me-1">
+                                            <input type="checkbox" name="selectedBranchIds" value="@branch.Id" class="form-check-input branch-checkbox" id="branch_@branch.Id" @(isChecked ? "checked" : "") @(selectedUser.HasAllBranches ? "disabled" : "") />
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </form>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('hasAllBranchesToggle')?.addEventListener('change', function () {
+            const isChecked = this.checked;
+            document.querySelectorAll('.branch-checkbox').forEach(cb => {
+                cb.disabled = isChecked;
+            });
+        });
+    </script>
+}

@@ -1,0 +1,373 @@
+@model ERP.Web.Models.UserListViewModel
+@using ERP.Infrastructure.Identity
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["UserManagement"];
+    var allRoles = ViewBag.AllRoles as List<ApplicationRole> ?? new List<ApplicationRole>();
+}
+
+<!-- Page Header -->
+<div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-users-gear text-primary me-2 ms-0"></i> @Localizer["UserManagement"]
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Localizer["ManageUserAccountsSubtitle"]</span>
+    </div>
+    <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#userModal" onclick="prepareCreateUserModal()">
+        <i class="fa-solid fa-user-plus me-1 ms-0"></i> @Localizer["AddUser"]
+    </button>
+</div>
+
+<!-- Success/Error Alerts -->
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-check me-2 ms-0"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-triangle-exclamation me-2 ms-0"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Filters Bar -->
+<div class="erp-card mb-3 p-3">
+    <form method="get" asp-action="Index" class="row g-2 align-items-center">
+        <div class="col-md-5">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                <input type="text" name="searchTerm" value="@Model.SearchTerm" class="form-control erp-form-control" placeholder="@Localizer["SearchByEmployeeCodeOrName"]" />
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select name="statusFilter" class="form-select erp-form-select form-select-sm" onchange="this.form.submit()">
+                <option value="All" selected="@(Model.StatusFilter == "All")">@Localizer["AllStatuses"]</option>
+                <option value="Active" selected="@(Model.StatusFilter == "Active")">@Localizer["ActiveOnly"]</option>
+                <option value="Inactive" selected="@(Model.StatusFilter == "Inactive")">@Localizer["InactiveOnly"]</option>
+                <option value="Locked" selected="@(Model.StatusFilter == "Locked")">@Localizer["LockedOnly"]</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-sm btn-outline-primary w-100">
+                <i class="fa-solid fa-filter me-1 ms-0"></i> @Localizer["Filter"]
+            </button>
+        </div>
+        <div class="col-md-2 text-end">
+            <span class="text-muted" style="font-size: 12px;">@Localizer["TotalUsers"]: <strong>@Model.TotalItems</strong></span>
+        </div>
+    </form>
+</div>
+
+<!-- User Table Grid -->
+<div class="erp-card">
+    <div class="erp-card-body p-0">
+        <div class="erp-table-container">
+            <table class="erp-table">
+                <thead>
+                    <tr>
+                        <th style="width: 110px;">@Localizer["EmployeeCode"]</th>
+                        <th>@Localizer["FullName"]</th>
+                        <th>@Localizer["Email"] / @Localizer["Mobile"]</th>
+                        <th>@Localizer["Roles"]</th>
+                        <th>@Localizer["Scope"]</th>
+                        <th class="text-center" style="width: 100px;">@Localizer["Status"]</th>
+                        <th class="text-center" style="width: 120px;">@Localizer["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Users != null && Model.Users.Any())
+                    {
+                        foreach (var user in Model.Users)
+                        {
+                            <tr>
+                                <td class="fw-bold text-primary">@user.EmployeeCode</td>
+                                <td>
+                                    <div class="fw-bold" style="font-size: 13px;">@user.LocalizedFullName</div>
+                                    <div class="text-muted" style="font-size: 11px;">@(user.LocalizedFullName == user.FullNameAr ? user.FullNameEn : user.FullNameAr)</div>
+                                </td>
+                                <td style="font-size: 12px;">
+                                    <div><i class="fa-regular fa-envelope text-muted me-1 ms-0"></i>@(user.Email ?? "-")</div>
+                                    <div class="text-muted"><i class="fa-solid fa-phone text-muted me-1 ms-0"></i>@(user.Mobile ?? "-")</div>
+                                </td>
+                                <td>
+                                    @if (user.Roles.Any())
+                                    {
+                                        foreach (var r in user.Roles)
+                                        {
+                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle me-1 mb-1">@r</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
+                                <td style="font-size: 11px;">
+                                    @if (user.HasAllBranches)
+                                    {
+                                        <span class="badge bg-purple bg-opacity-10 text-purple border border-purple-subtle d-inline-block" title="@Localizer["AccessToAllBranches"]"><i class="fa-solid fa-code-branch me-1 ms-0"></i>@Localizer["AllBranches"]</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (!user.IsActive)
+                                    {
+                                        <span class="badge bg-danger">@Localizer["Inactive"]</span>
+                                    }
+                                    else if (user.IsLockedOut)
+                                    {
+                                        <span class="badge bg-warning text-dark"><i class="fa-solid fa-lock me-1 ms-0"></i>@Localizer["Locked"]</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">@Localizer["Active"]</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-light border dropdown-toggle px-2 py-1" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 11.5px;">
+                                            <i class="fa-solid fa-ellipsis-vertical"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size: 12.5px;">
+                                            <li>
+                                                <button class="dropdown-item" type="button" onclick="prepareEditUserModal('@user.Id', '@user.EmployeeCode', '@user.UserName', '@user.FullNameAr', '@user.FullNameEn', '@user.Email', '@user.Mobile', @(user.IsActive.ToString().ToLower()), @(user.HasAllBranches.ToString().ToLower()), @(System.Text.Json.JsonSerializer.Serialize(user.Roles)))">
+                                                    <i class="fa-regular fa-pen-to-square me-2 ms-0 text-primary"></i> @Localizer["Edit"]
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" href="@Url.Action("Index", "UserBranch", new { userId = user.Id })">
+                                                    <i class="fa-solid fa-user-gear me-2 ms-0 text-secondary"></i> @Localizer["AssignBranches"]
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <button class="dropdown-item" type="button" onclick="prepareResetPasswordModal('@user.Id', '@user.EmployeeCode')">
+                                                    <i class="fa-solid fa-key me-2 ms-0 text-warning"></i> @Localizer["ResetPassword"]
+                                                </button>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <form asp-action="ToggleActive" method="post" class="d-inline">
+                                                    <input type="hidden" name="userId" value="@user.Id" />
+                                                    <button type="submit" class="dropdown-item @(user.IsActive ? "text-danger" : "text-success")">
+                                                        <i class="fa-solid @(user.IsActive ? "fa-user-slash" : "fa-user-check") me-2 ms-0"></i>
+                                                        @(user.IsActive ? Localizer["Deactivate"] : Localizer["Activate"])
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            <li>
+                                                <form asp-action="ToggleLockout" method="post" class="d-inline">
+                                                    <input type="hidden" name="userId" value="@user.Id" />
+                                                    <button type="submit" class="dropdown-item @(user.IsLockedOut ? "text-success" : "text-danger")">
+                                                        <i class="fa-solid @(user.IsLockedOut ? "fa-lock-open" : "fa-lock") me-2 ms-0"></i>
+                                                        @(user.IsLockedOut ? Localizer["UnlockUser"] : Localizer["LockUser"])
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">@Localizer["NoDataFound"]</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @if (Model.TotalPages > 1)
+    {
+        <div class="erp-card-header bg-light justify-content-between">
+            <span class="text-muted" style="font-size: 12px;">@Localizer["Page"] <strong>@Model.PageNumber</strong> @Localizer["Of"] <strong>@Model.TotalPages</strong></span>
+            <nav aria-label="User grid navigation">
+                <ul class="pagination pagination-sm m-0">
+                    <li class="page-item @(!Model.HasPreviousPage ? "disabled" : "")">
+                        <a class="page-link" href="@Url.Action("Index", new { searchTerm = Model.SearchTerm, statusFilter = Model.StatusFilter, pageNumber = Model.PageNumber - 1 })">@Localizer["Previous"]</a>
+                    </li>
+                    @for (int p = 1; p <= Model.TotalPages; p++)
+                    {
+                        <li class="page-item @(p == Model.PageNumber ? "active" : "")">
+                            <a class="page-link" href="@Url.Action("Index", new { searchTerm = Model.SearchTerm, statusFilter = Model.StatusFilter, pageNumber = p })">@p</a>
+                        </li>
+                    }
+                    <li class="page-item @(!Model.HasNextPage ? "disabled" : "")">
+                        <a class="page-link" href="@Url.Action("Index", new { searchTerm = Model.SearchTerm, statusFilter = Model.StatusFilter, pageNumber = Model.PageNumber + 1 })">@Localizer["Next"]</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
+</div>
+
+<!-- Modal: Create / Edit User -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="userForm" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="userId" name="Id" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="userModalTitle"><i class="fa-solid fa-user-plus text-primary me-2 ms-0"></i>@Localizer["AddUser"]</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["EmployeeCode"] *</label>
+                            <input type="text" id="userEmpCode" name="EmployeeCode" class="form-control erp-form-control" required placeholder="EMP001" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["Username"]</label>
+                            <input type="text" id="userUsername" name="UserName" class="form-control erp-form-control" placeholder="Optional" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["FullNameAr"] *</label>
+                            <input type="text" id="userFullNameAr" name="FullNameAr" class="form-control erp-form-control" dir="rtl" required placeholder="الاسم الكامل بالعربية" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["FullNameEn"] *</label>
+                            <input type="text" id="userFullNameEn" name="FullNameEn" class="form-control erp-form-control" dir="ltr" required placeholder="Full Name in English" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["Email"]</label>
+                            <input type="email" id="userEmail" name="Email" class="form-control erp-form-control" placeholder="user@company.com" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["Mobile"]</label>
+                            <input type="text" id="userMobile" name="Mobile" class="form-control erp-form-control" placeholder="+20 100 000 0000" />
+                        </div>
+                        <div class="col-md-6" id="passwordFieldGroup">
+                            <label class="erp-form-label">@Localizer["Password"]</label>
+                            <input type="password" id="userPassword" name="Password" class="form-control erp-form-control" placeholder="••••••••" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label mb-2">@Localizer["AssignRoles"]</label>
+                            <div class="border rounded p-2" style="max-height: 120px; overflow-y: auto;">
+                                @foreach (var r in allRoles)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input role-checkbox" type="checkbox" name="SelectedRoleIds" value="@r.Id" id="role_@r.Id" />
+                                        <label class="form-check-label" for="role_@r.Id" style="font-size: 12.5px;">@r.LocalizedName</label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Access Scopes & Toggles -->
+                        <div class="col-12 border-top pt-3">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" name="IsActive" value="true" id="userIsActive" checked />
+                                        <label class="form-check-label fw-bold" for="userIsActive">@Localizer["IsActive"]</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" name="HasAllBranches" value="true" id="userHasAllBranches" />
+                                        <label class="form-check-label fw-semibold text-purple" for="userHasAllBranches">@Localizer["HasAllBranches"]</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                    <button type="submit" class="btn btn-erp-primary btn-sm px-4">@Localizer["Save"]</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Reset Password -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="ResetPassword" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="resetUserId" name="UserId" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-key text-warning me-2 ms-0"></i>@Localizer["ResetPassword"]</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted" style="font-size: 13px;">@Localizer["ResetPasswordForUser"] <strong id="resetEmpCodeDisplay"></strong></p>
+                    <div class="mb-3">
+                        <label class="erp-form-label">@Localizer["NewPassword"] *</label>
+                        <input type="password" name="NewPassword" class="form-control erp-form-control" required minlength="6" placeholder="••••••••" />
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="RequirePasswordResetOnNextLogin" value="true" id="reqReset" checked />
+                        <label class="form-check-label" for="reqReset" style="font-size: 12.5px;">@Localizer["RequirePasswordResetOnNextLogin"]</label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                    <button type="submit" class="btn btn-warning btn-sm px-4 fw-bold">@Localizer["ResetPassword"]</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function prepareCreateUserModal() {
+        $('#userForm').attr('action', '@Url.Action("Create")');
+        $('#userModalTitle').html('<i class="fa-solid fa-user-plus text-primary me-2 ms-0"></i>@Localizer["AddUser"]');
+        $('#userId').val('');
+        $('#userEmpCode').val('');
+        $('#userUsername').val('');
+        $('#userFullNameAr').val('');
+        $('#userFullNameEn').val('');
+        $('#userEmail').val('');
+        $('#userMobile').val('');
+        $('#userPassword').val('');
+        $('#passwordFieldGroup').show();
+        $('#userIsActive').prop('checked', true);
+        $('#userHasAllBranches').prop('checked', false);
+        $('.role-checkbox').prop('checked', false);
+    }
+
+    function prepareEditUserModal(id, empCode, username, nameAr, nameEn, email, mobile, isActive, hasAllBranches, userRoles) {
+        $('#userForm').attr('action', '@Url.Action("Edit")');
+        $('#userModalTitle').html('<i class="fa-regular fa-pen-to-square text-primary me-2 ms-0"></i>@Localizer["EditUser"]');
+        $('#userId').val(id);
+        $('#userEmpCode').val(empCode);
+        $('#userUsername').val(username);
+        $('#userFullNameAr').val(nameAr);
+        $('#userFullNameEn').val(nameEn);
+        $('#userEmail').val(email);
+        $('#userMobile').val(mobile);
+        $('#passwordFieldGroup').hide();
+        $('#userIsActive').prop('checked', isActive);
+        $('#userHasAllBranches').prop('checked', hasAllBranches);
+        
+        $('.role-checkbox').prop('checked', false);
+        if (userRoles && Array.isArray(userRoles)) {
+            userRoles.forEach(rName => {
+                $(`.role-checkbox[data-role-name="${rName}"]`).prop('checked', true);
+            });
+        }
+        $('#userModal').modal('show');
+    }
+
+    function prepareResetPasswordModal(id, empCode) {
+        $('#resetUserId').val(id);
+        $('#resetEmpCodeDisplay').text(empCode);
+        $('#resetPasswordModal').modal('show');
+    }
+</script>
+}

@@ -1,0 +1,341 @@
+@model ERP.Web.Models.LoginViewModel
+@using System.Globalization
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["SignIn"];
+    Layout = null;
+    var isRtl = CultureInfo.CurrentUICulture.TextInfo.IsRightToLeft;
+    var currentCulture = CultureInfo.CurrentUICulture.Name;
+}
+<!DOCTYPE html>
+<html lang="@currentCulture" dir="@(isRtl ? "rtl" : "ltr")">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - @Localizer["AppName"]</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    @if (isRtl)
+    {
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet" />
+    }
+    else
+    {
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    }
+
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+
+    <style>
+        body {
+            background-color: #0f172a;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 940px;
+            background: #ffffff;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3), 0 10px 10px -5px rgba(0,0,0,0.2);
+        }
+        .login-banner {
+            background: linear-gradient(135deg, #1e40af 0%, #0f172a 100%);
+            color: #ffffff;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px; height: 20px;
+            background: #1e40af;
+            color: #fff;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: 700;
+            margin-inline-end: 6px;
+            flex-shrink: 0;
+        }
+        .erp-form-label { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; }
+        .dropdown-item.loading { opacity: 0.6; pointer-events: none; }
+        select:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="container p-3">
+        <div class="login-card mx-auto">
+            <div class="row g-0">
+
+                <!-- Banner Column -->
+                <div class="col-md-5 login-banner d-none d-md-flex flex-column">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-4">
+                            <i class="fa-solid fa-layer-group fs-3 text-info"></i>
+                            <span class="fs-4 fw-bold">@Localizer["AppName"]</span>
+                        </div>
+                        <h5 class="fw-bold mb-3">@Localizer["EnterpriseSubtitle"]</h5>
+                        <p class="text-white-50" style="font-size: 13px; line-height: 1.8;">
+                            @Localizer["LoginSubtitle"]
+                        </p>
+                        <div class="mt-4 pt-3 border-top border-secondary border-opacity-25" style="font-size: 12px;">
+                            <div class="d-flex align-items-center gap-2 mb-2 text-white-50">
+                                <span class="step-badge">1</span> @Localizer["FiscalYear"]
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2 text-white-50">
+                                <span class="step-badge">2</span> @Localizer["EmployeeCode"]
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2 text-white-50">
+                                <span class="step-badge">3</span> @Localizer["SisterCompany"]
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2 text-white-50">
+                                <span class="step-badge">4</span> @Localizer["Branch"]
+                            </div>
+                            <div class="d-flex align-items-center gap-2 text-white-50">
+                                <span class="step-badge">5</span> @Localizer["Password"]
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pt-4 border-top border-secondary border-opacity-25" style="font-size: 11.5px;">
+                        <span class="d-block text-white-50"><i class="fa-solid fa-shield-halved text-success me-1 ms-0"></i> @Localizer["SecurityScope"]</span>
+                        <span class="d-block text-white-50 mt-1"><i class="fa-solid fa-server me-1 ms-0"></i> @Localizer["AuthEnforcer"]</span>
+                    </div>
+                </div>
+
+                <!-- Form Column -->
+                <div class="col-md-7 p-4 p-lg-5">
+                    <div class="d-flex justify-content-between align-items-start mb-4">
+                        <div>
+                            <h5 class="fw-bold mb-1" style="color: var(--erp-text-dark);">@Localizer["SignIn"]</h5>
+                            <span class="text-muted" style="font-size: 12px;">@Localizer["LoginSubtitle"]</span>
+                        </div>
+                        <!-- Language Selector -->
+                        <form asp-controller="Account" asp-action="SetLanguage" method="post" class="d-inline m-0">
+                            <input type="hidden" name="returnUrl" value="@(Context.Request.Path + Context.Request.QueryString)" />
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle px-2 py-1" type="button"
+                                        data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 11.5px;">
+                                    <i class="fa-solid fa-globe me-1 text-primary"></i>
+                                    @(isRtl ? "العربية" : "English")
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="font-size: 12px;">
+                                    <li>
+                                        <button type="submit" name="culture" value="ar-EG"
+                                                class="dropdown-item d-flex align-items-center justify-content-between @(isRtl ? "active" : "")">
+                                            <span>🇸🇦 العربية (RTL)</span>
+                                            @if (isRtl) { <i class="fa-solid fa-check ms-2"></i> }
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <button type="submit" name="culture" value="en-US"
+                                                class="dropdown-item d-flex align-items-center justify-content-between @(!isRtl ? "active" : "")">
+                                            <span>🇺🇸 English (LTR)</span>
+                                            @if (!isRtl) { <i class="fa-solid fa-check ms-2"></i> }
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
+                        </form>
+                    </div>
+
+                    <form asp-action="Login" method="post" id="loginForm">
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger p-2 mb-3" style="font-size: 12px;"></div>
+
+                        <!-- Step 1: Fiscal Year -->
+                        <div class="mb-3">
+                            <label asp-for="FiscalYearId" class="erp-form-label">
+                                <span class="step-badge">1</span>
+                                <i class="fa-regular fa-calendar me-1 ms-0 text-primary"></i>
+                                @Localizer["FiscalYear"]
+                            </label>
+                            <select asp-for="FiscalYearId" asp-items="Model.FiscalYears"
+                                    class="form-select erp-form-select" id="FiscalYearId">
+                                <option value="">@Localizer["SelectFiscalYear"]</option>
+                            </select>
+                            <span asp-validation-for="FiscalYearId" class="text-danger" style="font-size: 11px;"></span>
+                        </div>
+
+                        <!-- Step 2: Employee Code -->
+                        <div class="mb-3">
+                            <label asp-for="EmployeeCode" class="erp-form-label">
+                                <span class="step-badge">2</span>
+                                <i class="fa-solid fa-id-badge me-1 ms-0 text-primary"></i>
+                                @Localizer["EmployeeCode"]
+                            </label>
+                            <input asp-for="EmployeeCode" id="EmployeeCode"
+                                   class="form-control erp-form-control"
+                                   placeholder="ADMIN"
+                                   autocomplete="username" />
+                            <span asp-validation-for="EmployeeCode" class="text-danger" style="font-size: 11px;"></span>
+                            <div id="employeeStatus" class="mt-1" style="font-size: 11px; min-height: 16px;"></div>
+                        </div>
+
+                        <!-- Step 3: Sister Company -->
+                        <div class="mb-3">
+                            <label asp-for="CompanyId" class="erp-form-label">
+                                <span class="step-badge">3</span>
+                                <i class="fa-solid fa-building-columns me-1 ms-0 text-primary"></i>
+                                @Localizer["SisterCompany"]
+                            </label>
+                            <select asp-for="CompanyId" id="CompanyId"
+                                    class="form-select erp-form-select" disabled>
+                                <option value="">@Localizer["SelectCompany"]</option>
+                            </select>
+                            <span asp-validation-for="CompanyId" class="text-danger" style="font-size: 11px;"></span>
+                        </div>
+
+                        <!-- Step 4: Branch -->
+                        <div class="mb-3">
+                            <label asp-for="BranchId" class="erp-form-label">
+                                <span class="step-badge">4</span>
+                                <i class="fa-solid fa-code-branch me-1 ms-0 text-primary"></i>
+                                @Localizer["BranchContext"]
+                            </label>
+                            <select asp-for="BranchId" id="BranchId"
+                                    class="form-select erp-form-select" disabled>
+                                <option value="">@Localizer["SelectBranch"]</option>
+                            </select>
+                            <span asp-validation-for="BranchId" class="text-danger" style="font-size: 11px;"></span>
+                        </div>
+
+                        <!-- Step 5: Password -->
+                        <div class="mb-4">
+                            <label asp-for="Password" class="erp-form-label">
+                                <span class="step-badge">5</span>
+                                <i class="fa-solid fa-lock me-1 ms-0 text-primary"></i>
+                                @Localizer["Password"]
+                            </label>
+                            <input asp-for="Password" type="password"
+                                   class="form-control erp-form-control"
+                                   placeholder="••••••••"
+                                   autocomplete="current-password" required />
+                            <span asp-validation-for="Password" class="text-danger" style="font-size: 11px;"></span>
+                        </div>
+
+                        <!-- Submit -->
+                        <button type="submit" class="btn btn-erp-primary w-100 py-2 fw-semibold mb-3">
+                            <i class="fa-solid fa-right-to-bracket me-2 ms-0"></i>
+                            @Localizer["AuthenticateAndLaunch"]
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function () {
+
+            var empTimer;
+            var selectCompanyText = '@Html.Raw(Localizer["SelectCompany"].Value)';
+            var selectBranchText  = '@Html.Raw(Localizer["SelectBranch"].Value)';
+            var noBranchText      = '@Html.Raw(Localizer["NoBranchAccess"].Value)';
+            var loadingText       = '...';
+
+            // ── Reset company & branch dropdowns ──────────────────────────────────
+            function resetCompany() {
+                $('#CompanyId').empty().append($('<option>').val('').text(selectCompanyText));
+                $('#CompanyId').prop('disabled', true);
+                resetBranch();
+            }
+
+            function resetBranch() {
+                $('#BranchId').empty().append($('<option>').val('').text(selectBranchText));
+                $('#BranchId').prop('disabled', true);
+            }
+
+            // ── Load companies by employee code ───────────────────────────────────
+            function loadCompanies() {
+                var empCode = $('#EmployeeCode').val().trim();
+                if (!empCode) { resetCompany(); return; }
+
+                $('#employeeStatus').html('<span class="text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i>' + loadingText + '</span>');
+                resetCompany();
+
+                $.ajax({
+                    url: '@Url.Action("GetCompanies", "Account")',
+                    type: 'GET',
+                    data: { employeeCode: empCode },
+                    success: function (res) {
+                        if (res.success && res.companies.length > 0) {
+                            $('#employeeStatus').html('<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i></span>');
+                            var $cmp = $('#CompanyId');
+                            $cmp.prop('disabled', false);
+                            $.each(res.companies, function (i, c) {
+                                $cmp.append($('<option>').val(c.id).text(c.code + ' - ' + c.name));
+                            });
+                            if (res.companies.length === 1) {
+                                $cmp.val(res.companies[0].id);
+                                loadBranches();
+                            }
+                        } else {
+                            $('#employeeStatus').html('<span class="text-danger" style="font-size:11px;"><i class="fa-solid fa-circle-xmark me-1"></i>' + (res.message || 'Employee not found') + '</span>');
+                        }
+                    },
+                    error: function () {
+                        $('#employeeStatus').html('<span class="text-danger" style="font-size:11px;"><i class="fa-solid fa-triangle-exclamation me-1"></i>Error</span>');
+                    }
+                });
+            }
+
+            // ── Load branches by employee code + company ───────────────────────────
+            function loadBranches() {
+                var empCode   = $('#EmployeeCode').val().trim();
+                var companyId = $('#CompanyId').val();
+                if (!empCode || !companyId) { resetBranch(); return; }
+
+                resetBranch();
+
+                $.ajax({
+                    url: '@Url.Action("GetBranches", "Account")',
+                    type: 'GET',
+                    data: { employeeCode: empCode, companyId: companyId },
+                    success: function (res) {
+                        var $br = $('#BranchId');
+                        $br.prop('disabled', false);
+                        if (res.success && res.branches.length > 0) {
+                            $.each(res.branches, function (i, b) {
+                                $br.append($('<option>').val(b.id).text(b.code + ' - ' + b.name));
+                            });
+                            if (res.branches.length === 1) {
+                                $br.val(res.branches[0].id);
+                            }
+                        } else {
+                            $br.append($('<option>').val('').text(noBranchText));
+                        }
+                    }
+                });
+            }
+
+            // ── Event bindings ────────────────────────────────────────────────────
+            $('#EmployeeCode').on('input', function () {
+                clearTimeout(empTimer);
+                empTimer = setTimeout(loadCompanies, 450);
+            });
+
+            $('#CompanyId').on('change', function () {
+                loadBranches();
+            });
+
+            // ── Auto-trigger if employee code pre-filled (validation re-render) ──
+            if ($('#EmployeeCode').val()) {
+                loadCompanies();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+@model IEnumerable<ERP.Domain.Entities.Branch>
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["BranchManagement"];
+    var companies = ViewBag.Companies as IEnumerable<ERP.Domain.Entities.Company> ?? new List<ERP.Domain.Entities.Company>();
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-code-branch text-primary me-2 ms-0"></i> @Localizer["BranchManagement"]
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Localizer["ManageBranches"] (@ViewBag.TotalCount)</span>
+    </div>
+
+    <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#createBranchModal">
+        <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewBranch"]
+    </button>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-check me-2 ms-0"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-exclamation me-2 ms-0"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Search Toolbar -->
+<div class="erp-card mb-3">
+    <div class="erp-card-body p-2">
+        <form method="get" asp-action="Index" class="row g-2 align-items-center">
+            <div class="col-md-5 col-lg-4">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                    <input type="text" name="searchString" value="@ViewBag.SearchString" class="form-control erp-form-control" placeholder="@Localizer["Search"]..." />
+                </div>
+            </div>
+            <div class="col-md-4 col-lg-3">
+                <select name="companyIdFilter" class="form-select form-select-sm erp-form-control" onchange="this.form.submit()">
+                    <option value="">-- @Localizer["Company"] (الكل) --</option>
+                    @foreach (var c in companies)
+                    {
+                        <option value="@c.Id" selected="@(ViewBag.CompanyIdFilter == c.Id ? "selected" : null)">@c.Code - @c.LocalizedName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-erp-primary btn-sm px-3">@Localizer["Search"]</button>
+                @if (!string.IsNullOrEmpty(ViewBag.SearchString as string) || (ViewBag.CompanyIdFilter != null && (int)ViewBag.CompanyIdFilter > 0))
+                {
+                    <a asp-action="Index" class="btn btn-erp-outline btn-sm">@Localizer["Cancel"]</a>
+                }
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Desktop Data Grid -->
+<div class="erp-table-container">
+    <table class="erp-table">
+        <thead>
+            <tr>
+                <th style="width: 80px;">@Localizer["Code"]</th>
+                <th>@Localizer["NameAr"] / @Localizer["NameEn"]</th>
+                <th><i class="fa-solid fa-building text-primary me-1 ms-0"></i> @Localizer["Company"]</th>
+                <th>@Localizer["Phone"]</th>
+                <th>@Localizer["Email"]</th>
+                <th>@Localizer["AddressAr"]</th>
+                <th style="width: 90px;" class="text-center">@Localizer["Status"]</th>
+                <th style="width: 120px;" class="text-center">@Localizer["Actions"]</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model != null && Model.Any())
+            {
+                foreach (var item in Model)
+                {
+                    <tr>
+                        <td class="fw-bold text-primary">@item.Code</td>
+                        <td>
+                            <div class="fw-bold">@item.LocalizedName</div>
+                            <div class="text-muted small" style="font-size: 11px;">@item.NameAr &bull; @item.NameEn</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-1" style="font-size: 11.5px;">
+                                <i class="fa-solid fa-building me-1 ms-0"></i> @(item.Company?.LocalizedName ?? $"ID: {item.CompanyId}")
+                            </span>
+                        </td>
+                        <td>@(item.Phone ?? "—")</td>
+                        <td>@(item.Email ?? "—")</td>
+                        <td class="text-muted">@(item.LocalizedAddress ?? "—")</td>
+                        <td class="text-center">
+                            @if (item.IsActive)
+                            {
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">@Localizer["Active"]</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-2 py-1">@Localizer["Inactive"]</span>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Edit"]" data-bs-toggle="modal" data-bs-target="#editModal_@item.Id">
+                                    <i class="fa-solid fa-pen-to-square text-primary"></i>
+                                </button>
+                                <form asp-action="ToggleStatus" asp-route-id="@item.Id" method="post" class="d-inline m-0">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@(item.IsActive ? Localizer["Inactive"] : Localizer["Active"])">
+                                        <i class="fa-solid @(item.IsActive ? "fa-ban text-danger" : "fa-check text-success")"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Edit Branch Modal -->
+                    <div class="modal fade" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <form asp-action="Edit" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="Id" value="@item.Id" />
+                                    <div class="modal-header">
+                                        <h5 class="modal-title fw-bold"><i class="fa-solid fa-pen-to-square text-primary me-2 ms-0"></i> @Localizer["Edit"] - @item.Code</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="row g-3">
+                                            <div class="col-md-4">
+                                                <label class="erp-form-label">@Localizer["Code"] *</label>
+                                                <input type="text" name="Code" value="@item.Code" class="form-control erp-form-control" required />
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="erp-form-label">@Localizer["Company"] *</label>
+                                                <select name="CompanyId" class="form-select erp-form-control" required>
+                                                    @foreach (var c in companies)
+                                                    {
+                                                        <option value="@c.Id" selected="@(item.CompanyId == c.Id ? "selected" : null)">@c.Code - @c.LocalizedName</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4 d-flex align-items-end">
+                                                <div class="form-check form-switch mb-2">
+                                                    <input type="checkbox" name="IsActive" value="true" class="form-check-input" id="edit_active_@item.Id" @(item.IsActive ? "checked" : "") />
+                                                    <label class="form-check-label fw-bold" for="edit_active_@item.Id">@Localizer["Active"]</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["NameAr"] *</label>
+                                                <input type="text" name="NameAr" value="@item.NameAr" class="form-control erp-form-control" dir="rtl" required />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["NameEn"] *</label>
+                                                <input type="text" name="NameEn" value="@item.NameEn" class="form-control erp-form-control" dir="ltr" required />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["AddressAr"]</label>
+                                                <input type="text" name="AddressAr" value="@item.AddressAr" class="form-control erp-form-control" dir="rtl" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["AddressEn"]</label>
+                                                <input type="text" name="AddressEn" value="@item.AddressEn" class="form-control erp-form-control" dir="ltr" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["Phone"]</label>
+                                                <input type="text" name="Phone" value="@item.Phone" class="form-control erp-form-control" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="erp-form-label">@Localizer["Email"]</label>
+                                                <input type="email" name="Email" value="@item.Email" class="form-control erp-form-control" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-erp-outline" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                                        <button type="submit" class="btn btn-erp-primary">@Localizer["Save"]</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-muted">@Localizer["NoBranchesFound"]</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Create Branch Modal -->
+<div class="modal fade" id="createBranchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2 ms-0"></i> @Localizer["AddNewBranch"]</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="erp-form-label">@Localizer["Code"] *</label>
+                            <input type="text" name="Code" class="form-control erp-form-control" placeholder="B03" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="erp-form-label">@Localizer["Company"] *</label>
+                            <select name="CompanyId" class="form-select erp-form-control" required>
+                                <option value="">-- @Localizer["Company"] --</option>
+                                @foreach (var c in companies)
+                                {
+                                    <option value="@c.Id">@c.Code - @c.LocalizedName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check form-switch mb-2">
+                                <input type="checkbox" name="IsActive" value="true" class="form-check-input" id="create_active" checked />
+                                <label class="form-check-label fw-bold" for="create_active">@Localizer["Active"]</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["NameAr"] *</label>
+                            <input type="text" name="NameAr" class="form-control erp-form-control" dir="rtl" placeholder="فرع الجيزة" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["NameEn"] *</label>
+                            <input type="text" name="NameEn" class="form-control erp-form-control" dir="ltr" placeholder="Giza Branch" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["AddressAr"]</label>
+                            <input type="text" name="AddressAr" class="form-control erp-form-control" dir="rtl" placeholder="الجيزة - شارع الأهرام" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["AddressEn"]</label>
+                            <input type="text" name="AddressEn" class="form-control erp-form-control" dir="ltr" placeholder="Giza - Haram Street" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["Phone"]</label>
+                            <input type="text" name="Phone" class="form-control erp-form-control" placeholder="+20 2 33334444" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-form-label">@Localizer["Email"]</label>
+                            <input type="email" name="Email" class="form-control erp-form-control" placeholder="giza@abc-erp.com" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-erp-outline" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                    <button type="submit" class="btn btn-erp-primary">@Localizer["Save"]</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,68 @@
+@model IEnumerable<IGrouping<string, ERP.Domain.Entities.Permission>>
+@using System.Globalization
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["PermissionInfrastructure"];
+    var isRtl = CultureInfo.CurrentUICulture.TextInfo.IsRightToLeft;
+}
+
+<!-- Page Header -->
+<div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-shield-cat text-primary me-2 ms-0"></i> @Localizer["PermissionInfrastructure"]
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Localizer["PermissionInfrastructureSubtitle"]</span>
+    </div>
+</div>
+
+<!-- Categorized Permission Cards -->
+<div class="row g-3">
+    @if (Model != null && Model.Any())
+    {
+        foreach (var group in Model)
+        {
+            <div class="col-lg-6">
+                <div class="erp-card h-100">
+                    <div class="erp-card-header d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-cubes text-primary"></i>
+                            <span class="fw-bold">@Localizer[group.Key]</span>
+                        </div>
+                        <span class="badge bg-primary px-3 py-1">@group.Count() @Localizer["Permissions"]</span>
+                    </div>
+                    <div class="erp-card-body p-0">
+                        <div class="erp-table-container border-0">
+                            <table class="erp-table">
+                                <thead>
+                                    <tr>
+                                        <th>@Localizer["Screen"]</th>
+                                        <th>@Localizer["Action"]</th>
+                                        <th>@Localizer["PermissionCode"]</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var perm in group)
+                                    {
+                                        <tr>
+                                            <td class="fw-semibold" style="font-size: 12.5px;">@Localizer[perm.Screen]</td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border me-1">@perm.Action</span>
+                                                <span class="text-muted" style="font-size: 11.5px;">@(isRtl ? perm.NameAr : perm.NameEn)</span>
+                                            </td>
+                                            <td>
+                                                <code style="font-size: 11px;" class="text-primary">@perm.Code</code>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>

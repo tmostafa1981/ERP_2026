@@ -1,0 +1,162 @@
+@model IEnumerable<ERP.Web.Models.RoleItemViewModel>
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["RoleManagement"];
+}
+
+<!-- Page Header -->
+<div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-id-card-clip text-primary me-2 ms-0"></i> @Localizer["RoleManagement"]
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Localizer["ManageRolesSubtitle"]</span>
+    </div>
+    <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#roleModal" onclick="prepareCreateRoleModal()">
+        <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddRole"]
+    </button>
+</div>
+
+<!-- Alerts -->
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-check me-2 ms-0"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-triangle-exclamation me-2 ms-0"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Roles Grid -->
+<div class="row g-3">
+    @if (Model != null && Model.Any())
+    {
+        foreach (var role in Model)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="erp-card h-100 position-relative">
+                    <div class="erp-card-header d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-shield-halved text-primary"></i>
+                            <span class="fw-bold">@role.LocalizedName</span>
+                        </div>
+                        @if (role.IsActive)
+                        {
+                            <span class="badge bg-success">@Localizer["Active"]</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger">@Localizer["Inactive"]</span>
+                        }
+                    </div>
+                    <div class="erp-card-body">
+                        <div class="mb-2">
+                            <div class="fw-semibold text-dark" style="font-size: 13px;">@role.LocalizedName</div>
+                            <div class="text-muted" style="font-size: 11px;">@(role.LocalizedName == role.NameAr ? role.NameEn : role.NameAr)</div>
+                        </div>
+                        <p class="text-muted mb-3" style="font-size: 12px; min-height: 36px;">
+                            @(string.IsNullOrWhiteSpace(role.Description) ? Localizer["NoDescription"] : role.Description)
+                        </p>
+                        <div class="d-flex align-items-center justify-content-between pt-2 border-top" style="font-size: 11.5px;">
+                            <span class="text-muted"><i class="fa-solid fa-users me-1 ms-0 text-primary"></i> @Localizer["AssignedUsers"]: <strong>@role.UserCount</strong></span>
+                            <span class="text-muted"><i class="fa-solid fa-key me-1 ms-0 text-warning"></i> @Localizer["Permissions"]: <strong>@role.GrantedPermissionCount</strong></span>
+                        </div>
+                    </div>
+                    <div class="erp-card-header bg-light justify-content-between gap-2">
+                        <a href="@Url.Action("Permissions", "Role", new { roleId = role.Id })" class="btn btn-sm btn-outline-primary px-3" style="font-size: 12px;">
+                            <i class="fa-solid fa-sliders me-1 ms-0"></i> @Localizer["ManagePermissions"]
+                        </a>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-light border p-1 px-2" title="@Localizer["Edit"]" onclick="prepareEditRoleModal('@role.Id', '@role.Name', '@role.NameAr', '@role.NameEn', '@role.Description', @(role.IsActive.ToString().ToLower()))">
+                                <i class="fa-regular fa-pen-to-square text-primary"></i>
+                            </button>
+                            <form asp-action="ToggleActive" method="post" class="d-inline">
+                                <input type="hidden" name="roleId" value="@role.Id" />
+                                <button type="submit" class="btn btn-sm btn-light border p-1 px-2" title="@(role.IsActive ? Localizer["Deactivate"] : Localizer["Activate"])">
+                                    <i class="fa-solid @(role.IsActive ? "fa-user-slash text-danger" : "fa-user-check text-success")"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<!-- Modal: Create / Edit Role -->
+<div class="modal fade" id="roleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="roleForm" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="roleId" name="Id" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="roleModalTitle"><i class="fa-solid fa-id-card-clip text-primary me-2 ms-0"></i>@Localizer["AddRole"]</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="erp-form-label">@Localizer["RoleName"] *</label>
+                        <input type="text" id="roleName" name="Name" class="form-control erp-form-control" required placeholder="Sales Manager" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="erp-form-label">@Localizer["NameAr"]</label>
+                        <input type="text" id="roleNameAr" name="NameAr" class="form-control erp-form-control" dir="rtl" placeholder="مدير المبيعات" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="erp-form-label">@Localizer["NameEn"]</label>
+                        <input type="text" id="roleNameEn" name="NameEn" class="form-control erp-form-control" dir="ltr" placeholder="Sales Manager" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="erp-form-label">@Localizer["Description"]</label>
+                        <textarea id="roleDescription" name="Description" class="form-control erp-form-control" rows="2" placeholder="Role duties and scope"></textarea>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="IsActive" value="true" id="roleIsActive" checked />
+                        <label class="form-check-label fw-bold" for="roleIsActive">@Localizer["IsActive"]</label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                    <button type="submit" class="btn btn-erp-primary btn-sm px-4">@Localizer["Save"]</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function prepareCreateRoleModal() {
+        $('#roleForm').attr('action', '@Url.Action("Create")');
+        $('#roleModalTitle').html('<i class="fa-solid fa-plus text-primary me-2 ms-0"></i>@Localizer["AddRole"]');
+        $('#roleId').val('');
+        $('#roleName').val('');
+        $('#roleNameAr').val('');
+        $('#roleNameEn').val('');
+        $('#roleDescription').val('');
+        $('#roleIsActive').prop('checked', true);
+    }
+
+    function prepareEditRoleModal(id, name, nameAr, nameEn, description, isActive) {
+        $('#roleForm').attr('action', '@Url.Action("Edit")');
+        $('#roleModalTitle').html('<i class="fa-regular fa-pen-to-square text-primary me-2 ms-0"></i>@Localizer["EditRole"]');
+        $('#roleId').val(id);
+        $('#roleName').val(name);
+        $('#roleNameAr').val(nameAr);
+        $('#roleNameEn').val(nameEn);
+        $('#roleDescription').val(description);
+        $('#roleIsActive').prop('checked', isActive);
+        $('#roleModal').modal('show');
+    }
+</script>
+}

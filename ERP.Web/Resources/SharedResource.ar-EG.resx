@@ -1,0 +1,874 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="0" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AppName" xml:space="preserve">
+    <value>نظام إدارة الموارد</value>
+  </data>
+  <data name="Company" xml:space="preserve">
+    <value>الشركة الشقيقة</value>
+  </data>
+  <data name="Companies" xml:space="preserve">
+    <value>الشركات</value>
+  </data>
+  <data name="Branch" xml:space="preserve">
+    <value>الفرع</value>
+  </data>
+  <data name="Branches" xml:space="preserve">
+    <value>الفروع</value>
+  </data>
+  <data name="FiscalYear" xml:space="preserve">
+    <value>السنة المالية</value>
+  </data>
+  <data name="FiscalYears" xml:space="preserve">
+    <value>السنوات المالية</value>
+  </data>
+  <data name="User" xml:space="preserve">
+    <value>المستخدم</value>
+  </data>
+  <data name="Users" xml:space="preserve">
+    <value>المستخدمين</value>
+  </data>
+  <data name="Dashboard" xml:space="preserve">
+    <value>لوحة التحكم</value>
+  </data>
+  <data name="Administration" xml:space="preserve">
+    <value>إدارة النظام والتراخيص</value>
+  </data>
+  <data name="Organization" xml:space="preserve">
+    <value>الهيكل التنظيمي</value>
+  </data>
+  <data name="Roles" xml:space="preserve">
+    <value>الأدوار والصلاحيات</value>
+  </data>
+  <data name="Permissions" xml:space="preserve">
+    <value>الصلاحيات</value>
+  </data>
+  <data name="UserCompanyAssignment" xml:space="preserve">
+    <value>ربط المستخدم بالشركات</value>
+  </data>
+  <data name="UserBranchAssignment" xml:space="preserve">
+    <value>ربط المستخدم بالفروع</value>
+  </data>
+  <data name="Sales" xml:space="preserve">
+    <value>المبيعات</value>
+  </data>
+  <data name="Purchases" xml:space="preserve">
+    <value>المشتريات</value>
+  </data>
+  <data name="Inventory" xml:space="preserve">
+    <value>المخازن</value>
+  </data>
+  <data name="Accounting" xml:space="preserve">
+    <value>الحسابات العامة</value>
+  </data>
+  <data name="Reports" xml:space="preserve">
+    <value>التقارير</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>الإعدادات</value>
+  </data>
+  <data name="Notifications" xml:space="preserve">
+    <value>التنبيهات</value>
+  </data>
+  <data name="Profile" xml:space="preserve">
+    <value>الملف الشخصي</value>
+  </data>
+  <data name="Logout" xml:space="preserve">
+    <value>تسجيل الخروج</value>
+  </data>
+  <data name="SignIn" xml:space="preserve">
+    <value>تسجيل الدخول</value>
+  </data>
+  <data name="Home" xml:space="preserve">
+    <value>الرئيسية</value>
+  </data>
+  <data name="AuthContext" xml:space="preserve">
+    <value>سياق التحقق</value>
+  </data>
+  <data name="ServerOnline" xml:space="preserve">
+    <value>الخادم متصل</value>
+  </data>
+  <data name="SqlConnected" xml:space="preserve">
+    <value>قاعدة البيانات متصلة</value>
+  </data>
+  <data name="SisterCompany" xml:space="preserve">
+    <value>شركة شقيقة</value>
+  </data>
+  <data name="SwitchCompany" xml:space="preserve">
+    <value>تغيير الشركة</value>
+  </data>
+  <data name="SwitchBranch" xml:space="preserve">
+    <value>تغيير الفرع</value>
+  </data>
+  <data name="SwitchFiscalYear" xml:space="preserve">
+    <value>تغيير السنة المالية</value>
+  </data>
+  <data name="Username" xml:space="preserve">
+    <value>اسم المستخدم</value>
+  </data>
+  <data name="Password" xml:space="preserve">
+    <value>كلمة المرور</value>
+  </data>
+  <data name="EmployeeCode" xml:space="preserve">
+    <value>كود الموظف</value>
+  </data>
+  <data name="SelectFiscalYear" xml:space="preserve">
+    <value>-- اختر السنة المالية --</value>
+  </data>
+  <data name="SelectCompany" xml:space="preserve">
+    <value>-- اختر الشركة --</value>
+  </data>
+  <data name="SelectBranch" xml:space="preserve">
+    <value>-- اختر الفرع المصرح --</value>
+  </data>
+  <data name="BranchContext" xml:space="preserve">
+    <value>الفرع المصرح</value>
+  </data>
+  <data name="RequiredField" xml:space="preserve">
+    <value>هذا الحقل مطلوب</value>
+  </data>
+  <data name="InvalidLogin" xml:space="preserve">
+    <value>كود الموظف أو كلمة المرور غير صحيحة</value>
+  </data>
+  <data name="NoBranchAccess" xml:space="preserve">
+    <value>ليس لديك صلاحية للوصول إلى الفرع المحدد</value>
+  </data>
+  <data name="Welcome" xml:space="preserve">
+    <value>مرحباً بك</value>
+  </data>
+  <data name="CurrentBranch" xml:space="preserve">
+    <value>الفرع الحالي</value>
+  </data>
+  <data name="CurrentFiscalYear" xml:space="preserve">
+    <value>السنة المالية الحالية</value>
+  </data>
+  <data name="SystemName" xml:space="preserve">
+    <value>اسم النظام</value>
+  </data>
+  <data name="QuickAccess" xml:space="preserve">
+    <value>وصول سريع</value>
+  </data>
+  <data name="SystemInfo" xml:space="preserve">
+    <value>معلومات النظام الأساسية</value>
+  </data>
+  <data name="RecentTransactions" xml:space="preserve">
+    <value>أحدث العمليات</value>
+  </data>
+  <data name="SecurityScope" xml:space="preserve">
+    <value>التحقق من نطاق الأمان</value>
+  </data>
+  <data name="AuthEnforcer" xml:space="preserve">
+    <value>منفذ الصلاحيات</value>
+  </data>
+  <data name="AuthenticateAndLaunch" xml:space="preserve">
+    <value>دخول إلى النظام</value>
+  </data>
+  <data name="LoginSubtitle" xml:space="preserve">
+    <value>حدد السنة المالية والفرع المصرح للدخول</value>
+  </data>
+  <data name="EnterpriseSubtitle" xml:space="preserve">
+    <value>نظام إدارة الموارد المؤسسية متعدد الشركات والفروع</value>
+  </data>
+  <data name="Posted" xml:space="preserve">
+    <value>ترحيل</value>
+  </data>
+  <data name="Pending" xml:space="preserve">
+    <value>قيد الانتظار</value>
+  </data>
+  <data name="View" xml:space="preserve">
+    <value>عرض</value>
+  </data>
+  <data name="Print" xml:space="preserve">
+    <value>طباعة</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>اللغة</value>
+  </data>
+  <data name="Arabic" xml:space="preserve">
+    <value>العربية</value>
+  </data>
+  <data name="English" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>حفظ</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>تعديل</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>حذف</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>إلغاء</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>بحث</value>
+  </data>
+  <data name="Active" xml:space="preserve">
+    <value>نشط</value>
+  </data>
+  <data name="Inactive" xml:space="preserve">
+    <value>غير نشط</value>
+  </data>
+  <data name="Locked" xml:space="preserve">
+    <value>مقفل</value>
+  </data>
+  <data name="Open" xml:space="preserve">
+    <value>مفتوح</value>
+  </data>
+  <data name="Closed" xml:space="preserve">
+    <value>مغلق</value>
+  </data>
+  <data name="CompanyInfo" xml:space="preserve">
+    <value>بيانات الشركة الشقيقة</value>
+  </data>
+  <data name="BranchManagement" xml:space="preserve">
+    <value>إدارة الفروع</value>
+  </data>
+  <data name="ManageBranches" xml:space="preserve">
+    <value>إدارة وتنظيم فروع الشركة</value>
+  </data>
+  <data name="FiscalYearManagement" xml:space="preserve">
+    <value>إدارة السنوات المالية</value>
+  </data>
+  <data name="ManageFiscalYears" xml:space="preserve">
+    <value>عرض وتجهيز السنوات المالية</value>
+  </data>
+  <data name="Code" xml:space="preserve">
+    <value>الكود</value>
+  </data>
+  <data name="NameAr" xml:space="preserve">
+    <value>الاسم بالعربية</value>
+  </data>
+  <data name="NameEn" xml:space="preserve">
+    <value>الاسم بالإنجليزية</value>
+  </data>
+  <data name="AddressAr" xml:space="preserve">
+    <value>العنوان بالعربية</value>
+  </data>
+  <data name="AddressEn" xml:space="preserve">
+    <value>العنوان بالإنجليزية</value>
+  </data>
+  <data name="Phone" xml:space="preserve">
+    <value>الهاتف</value>
+  </data>
+  <data name="Email" xml:space="preserve">
+    <value>البريد الإلكتروني</value>
+  </data>
+  <data name="TaxNumber" xml:space="preserve">
+    <value>الرقم الضريبي</value>
+  </data>
+  <data name="Status" xml:space="preserve">
+    <value>الحالة</value>
+  </data>
+  <data name="Actions" xml:space="preserve">
+    <value>الإجراءات</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>رجوع</value>
+  </data>
+  <data name="Filter" xml:space="preserve">
+    <value>تصفية</value>
+  </data>
+  <data name="All" xml:space="preserve">
+    <value>الكل</value>
+  </data>
+  <data name="Page" xml:space="preserve">
+    <value>صفحة</value>
+  </data>
+  <data name="Of" xml:space="preserve">
+    <value>من</value>
+  </data>
+  <data name="Previous" xml:space="preserve">
+    <value>السابق</value>
+  </data>
+  <data name="Next" xml:space="preserve">
+    <value>التالي</value>
+  </data>
+  <data name="NoDataFound" xml:space="preserve">
+    <value>لم يتم العثور على بيانات</value>
+  </data>
+  <data name="ConfirmDelete" xml:space="preserve">
+    <value>هل أنت تأكد من تنفيذ عملية الحذف؟</value>
+  </data>
+  <data name="SavedSuccessfully" xml:space="preserve">
+    <value>تم الحفظ بنجاح</value>
+  </data>
+  <data name="UpdatedSuccessfully" xml:space="preserve">
+    <value>تم التحديث بنجاح</value>
+  </data>
+  <data name="DeletedSuccessfully" xml:space="preserve">
+    <value>تم الحذف بنجاح</value>
+  </data>
+  <data name="FullName" xml:space="preserve">
+    <value>الاسم الكامل</value>
+  </data>
+  <data name="FullNameAr" xml:space="preserve">
+    <value>الاسم الكامل بالعربية</value>
+  </data>
+  <data name="FullNameEn" xml:space="preserve">
+    <value>الاسم الكامل بالإنجليزية</value>
+  </data>
+  <data name="Mobile" xml:space="preserve">
+    <value>رقم الجوال</value>
+  </data>
+  <data name="UserManagement" xml:space="preserve">
+    <value>إدارة المستخدمين</value>
+  </data>
+  <data name="ManageUserAccountsSubtitle" xml:space="preserve">
+    <value>إدارة حسابات المستخدمين، الصلاحيات والأدوار</value>
+  </data>
+  <data name="AddUser" xml:space="preserve">
+    <value>إضافة مستخدم جديد</value>
+  </data>
+  <data name="EditUser" xml:space="preserve">
+    <value>تعديل حساب مستخدم</value>
+  </data>
+  <data name="SearchByEmployeeCodeOrName" xml:space="preserve">
+    <value>بحث بالكود، الاسم، أو البريد الإلكتروني...</value>
+  </data>
+  <data name="AllStatuses" xml:space="preserve">
+    <value>جميع الحالات</value>
+  </data>
+  <data name="ActiveOnly" xml:space="preserve">
+    <value>النشطين فقط</value>
+  </data>
+  <data name="InactiveOnly" xml:space="preserve">
+    <value>غير النشطين فقط</value>
+  </data>
+  <data name="LockedOnly" xml:space="preserve">
+    <value>الحسابات المقفلة فقط</value>
+  </data>
+  <data name="TotalUsers" xml:space="preserve">
+    <value>إجمالي المستخدمين</value>
+  </data>
+  <data name="Scope" xml:space="preserve">
+    <value>نطاق الوصول</value>
+  </data>
+  <data name="AllCompanies" xml:space="preserve">
+    <value>جميع الشركات</value>
+  </data>
+  <data name="AllBranches" xml:space="preserve">
+    <value>جميع الفروع</value>
+  </data>
+  <data name="AccessToAllCompanies" xml:space="preserve">
+    <value>وصول لكافة الشركات الشقيقة</value>
+  </data>
+  <data name="AccessToAllBranches" xml:space="preserve">
+    <value>وصول لكافة فروع الشركة</value>
+  </data>
+  <data name="Deactivate" xml:space="preserve">
+    <value>تعطيل المستخدم</value>
+  </data>
+  <data name="Activate" xml:space="preserve">
+    <value>تنشيط المستخدم</value>
+  </data>
+  <data name="LockUser" xml:space="preserve">
+    <value>قفل الحساب</value>
+  </data>
+  <data name="UnlockUser" xml:space="preserve">
+    <value>إلغاء قفل الحساب</value>
+  </data>
+  <data name="ResetPassword" xml:space="preserve">
+    <value>إعادة ضبط كلمة المرور</value>
+  </data>
+  <data name="PasswordResetRequired" xml:space="preserve">
+    <value>يتطلب تغيير كلمة المرور عند الدخول القادم</value>
+  </data>
+  <data name="ResetPasswordForUser" xml:space="preserve">
+    <value>إعادة ضبط كلمة المرور للموظف:</value>
+  </data>
+  <data name="NewPassword" xml:space="preserve">
+    <value>كلمة المرور الجديدة</value>
+  </data>
+  <data name="RequirePasswordResetOnNextLogin" xml:space="preserve">
+    <value>إجبار تغيير كلمة المرور في الدخول القادم</value>
+  </data>
+  <data name="AssignRoles" xml:space="preserve">
+    <value>تخصيص الأدوار</value>
+  </data>
+  <data name="IsActive" xml:space="preserve">
+    <value>حساب نشط</value>
+  </data>
+  <data name="HasAllCompanies" xml:space="preserve">
+    <value>صلاحية جميع الشركات</value>
+  </data>
+  <data name="HasAllBranches" xml:space="preserve">
+    <value>صلاحية جميع الفروع</value>
+  </data>
+  <data name="RoleManagement" xml:space="preserve">
+    <value>إدارة الأدوار والصلاحيات</value>
+  </data>
+  <data name="ManageRolesSubtitle" xml:space="preserve">
+    <value>تعريف أدوار الأمان وتحديد صلاحيات الشاشات</value>
+  </data>
+  <data name="AddRole" xml:space="preserve">
+    <value>إضافة دور جديد</value>
+  </data>
+  <data name="EditRole" xml:space="preserve">
+    <value>تعديل الدور</value>
+  </data>
+  <data name="RoleName" xml:space="preserve">
+    <value>اسم الدور</value>
+  </data>
+  <data name="Description" xml:space="preserve">
+    <value>الوصف</value>
+  </data>
+  <data name="NoDescription" xml:space="preserve">
+    <value>لا يوجد وصف</value>
+  </data>
+  <data name="AssignedUsers" xml:space="preserve">
+    <value>المستخدمين المعينين</value>
+  </data>
+  <data name="ManagePermissions" xml:space="preserve">
+    <value>إدارة الصلاحيات</value>
+  </data>
+  <data name="RolePermissions" xml:space="preserve">
+    <value>صلاحيات الدور</value>
+  </data>
+  <data name="BackToRoles" xml:space="preserve">
+    <value>العودة للأدوار</value>
+  </data>
+  <data name="SavePermissions" xml:space="preserve">
+    <value>حفظ مصفوفة الصلاحيات</value>
+  </data>
+  <data name="GrantAllPermissions" xml:space="preserve">
+    <value>منح جميع الصلاحيات</value>
+  </data>
+  <data name="RevokeAllPermissions" xml:space="preserve">
+    <value>إلغاء جميع الصلاحيات</value>
+  </data>
+  <data name="MatrixPermissionsSubtitle" xml:space="preserve">
+    <value>تحديد صلاحيات الشاشات والعمليات بهذا الدور</value>
+  </data>
+  <data name="CategoryPermissions" xml:space="preserve">
+    <value>صلاحيات القسم</value>
+  </data>
+  <data name="SelectAllInModule" xml:space="preserve">
+    <value>تحديد الكل في الموديول</value>
+  </data>
+  <data name="ToggleScreen" xml:space="preserve">
+    <value>تحديد/إلغاء الشاشة</value>
+  </data>
+  <data name="PermissionInfrastructure" xml:space="preserve">
+    <value>بنية الصلاحيات بالمنظومة</value>
+  </data>
+  <data name="PermissionInfrastructureSubtitle" xml:space="preserve">
+    <value>عرض كافة أكواد وشاشات وعمليات الأمان بالنظام</value>
+  </data>
+  <data name="PermissionCode" xml:space="preserve">
+    <value>كود الصلاحية</value>
+  </data>
+  <data name="Screen" xml:space="preserve">
+    <value>الشاشة / الميزة</value>
+  </data>
+  <data name="Action" xml:space="preserve">
+    <value>العملية / الإجراء</value>
+  </data>
+  <data name="AddNewBranch" xml:space="preserve">
+    <value>إضافة فرع جديد</value>
+  </data>
+  <data name="AddNewFiscalYear" xml:space="preserve">
+    <value>إضافة سنة مالية جديدة</value>
+  </data>
+  <data name="NoBranchesFound" xml:space="preserve">
+    <value>لم يتم العثور على فروع</value>
+  </data>
+  <data name="NoFiscalYearsFound" xml:space="preserve">
+    <value>لم يتم العثور على سنوات مالية</value>
+  </data>
+  <data name="Year" xml:space="preserve">
+    <value>السنة</value>
+  </data>
+  <data name="StartDate" xml:space="preserve">
+    <value>تاريخ البداية</value>
+  </data>
+  <data name="EndDate" xml:space="preserve">
+    <value>تاريخ النهاية</value>
+  </data>
+  <data name="ManageUserCompanies" xml:space="preserve">
+    <value>ربط حسابات المستخدمين بالشركات الشقيقة</value>
+  </data>
+  <data name="SelectUser" xml:space="preserve">
+    <value>اختر المستخدم</value>
+  </data>
+  <data name="AssignCompanies" xml:space="preserve">
+    <value>تخصيص الشركات</value>
+  </data>
+  <data name="AssignBranches" xml:space="preserve">
+    <value>تخصيص الفروع</value>
+  </data>
+  <data name="SpecificBranchScope" xml:space="preserve">
+    <value>نطاق الفروع المحددة</value>
+  </data>
+  <data name="HasAllBranchesHelp" xml:space="preserve">
+    <value>يتيح للمستخدم حرية الاختيار من كافة فروع الشركة عند الدخول</value>
+  </data>
+  <data name="AccessDeniedTitle" xml:space="preserve">
+    <value>غير مصرح - وصول مرفوض</value>
+  </data>
+  <data name="AccessDeniedMessage" xml:space="preserve">
+    <value>عفواً، ليس لديك الصلاحية الكافية للوصول لهذه الشاشة أو تنفيذ هذا الإجراء.</value>
+  </data>
+  <data name="MissingRequiredPermission" xml:space="preserve">
+    <value>كود الصلاحية المطلوب:</value>
+  </data>
+  <data name="BackToHome" xml:space="preserve">
+    <value>العودة للوحة التحكم</value>
+  </data>
+  <data name="SalesInvoice" xml:space="preserve">
+    <value>فواتير المبيعات</value>
+  </data>
+  <data name="SalesReturn" xml:space="preserve">
+    <value>مردودات المبيعات</value>
+  </data>
+  <data name="Customers" xml:space="preserve">
+    <value>العملاء</value>
+  </data>
+  <data name="PurchaseInvoice" xml:space="preserve">
+    <value>فواتير المشتريات</value>
+  </data>
+  <data name="PurchaseReturn" xml:space="preserve">
+    <value>مردودات المشتريات</value>
+  </data>
+  <data name="Vendors" xml:space="preserve">
+    <value>الموردين</value>
+  </data>
+  <data name="Items" xml:space="preserve">
+    <value>الأصناف والمخزون</value>
+  </data>
+  <data name="StockMovement" xml:space="preserve">
+    <value>حركة المخزون</value>
+  </data>
+  <data name="StockTake" xml:space="preserve">
+    <value>الجرد المخزني</value>
+  </data>
+  <data name="JournalVoucher" xml:space="preserve">
+    <value>قيود اليومية</value>
+  </data>
+  <data name="ChartOfAccounts" xml:space="preserve">
+    <value>دليل الحسابات</value>
+  </data>
+  <data name="ReceiptVoucher" xml:space="preserve">
+    <value>سندات القبض</value>
+  </data>
+  <data name="PaymentVoucher" xml:space="preserve">
+    <value>سندات الصرف</value>
+  </data>
+  <data name="Cash" xml:space="preserve">
+    <value>الخزائن والنقدية</value>
+  </data>
+  <data name="Banks" xml:space="preserve">
+    <value>البنوك والجرارات</value>
+  </data>
+  <data name="SalesReports" xml:space="preserve">
+    <value>تقارير المبيعات</value>
+  </data>
+  <data name="PurchaseReports" xml:space="preserve">
+    <value>تقارير المشتريات</value>
+  </data>
+  <data name="InventoryReports" xml:space="preserve">
+    <value>تقارير المخازن</value>
+  </data>
+  <data name="FinancialReports" xml:space="preserve">
+    <value>التقارير المالية</value>
+  </data>
+  <data name="SystemSettings" xml:space="preserve">
+    <value>إعدادات النظام</value>
+  </data>
+  <data name="UserCompany" xml:space="preserve">
+    <value>ربط الشركات</value>
+  </data>
+  <data name="UserBranch" xml:space="preserve">
+    <value>ربط الفروع</value>
+  </data>
+  <data name="FoundationLive" xml:space="preserve">
+    <value>البنية التحتية جاهزة ومفعلة</value>
+  </data>
+  <data name="SystemAuthorized" xml:space="preserve">
+    <value>النظام مصرح ومؤمن</value>
+  </data>
+  <data name="UserAccounts" xml:space="preserve">
+    <value>حسابات المستخدمين</value>
+  </data>
+  <data name="ManageUsers" xml:space="preserve">
+    <value>إدارة وتعيين المستخدمين</value>
+  </data>
+  <data name="SecurityAuth" xml:space="preserve">
+    <value>الصلاحيات والأمان</value>
+  </data>
+  <data name="AppFramework" xml:space="preserve">
+    <value>إطار عمل التطبيق</value>
+  </data>
+  <data name="OrmDatabase" xml:space="preserve">
+    <value>قاعدة البيانات ومحرك الـ ORM</value>
+  </data>
+  <data name="Architecture" xml:space="preserve">
+    <value>الهيكلية البرمجية</value>
+  </data>
+  <data name="Phase1Status" xml:space="preserve">
+    <value>حالة المرحلة الأولى</value>
+  </data>
+  <data name="MasterData" xml:space="preserve">
+    <value>البيانات الأساسية</value>
+  </data>
+  <data name="Governorate" xml:space="preserve">
+    <value>المحافظة</value>
+  </data>
+  <data name="Governorates" xml:space="preserve">
+    <value>المحافظات</value>
+  </data>
+  <data name="City" xml:space="preserve">
+    <value>المدينة</value>
+  </data>
+  <data name="Cities" xml:space="preserve">
+    <value>المدن</value>
+  </data>
+  <data name="Salesman" xml:space="preserve">
+    <value>المندوب</value>
+  </data>
+  <data name="Salesmen" xml:space="preserve">
+    <value>المناديب</value>
+  </data>
+  <data name="Currency" xml:space="preserve">
+    <value>العملة</value>
+  </data>
+  <data name="Currencies" xml:space="preserve">
+    <value>العملات</value>
+  </data>
+  <data name="CustomerCategory" xml:space="preserve">
+    <value>فئة العملاء</value>
+  </data>
+  <data name="CustomerCategories" xml:space="preserve">
+    <value>فئات العملاء</value>
+  </data>
+  <data name="Customer" xml:space="preserve">
+    <value>العميل</value>
+  </data>
+  <data name="VendorCategory" xml:space="preserve">
+    <value>فئة الموردين</value>
+  </data>
+  <data name="VendorCategories" xml:space="preserve">
+    <value>فئات الموردين</value>
+  </data>
+  <data name="Vendor" xml:space="preserve">
+    <value>المورد</value>
+  </data>
+  <data name="Unit" xml:space="preserve">
+    <value>الوحدة</value>
+  </data>
+  <data name="Units" xml:space="preserve">
+    <value>الوحدات</value>
+  </data>
+  <data name="ItemGroup" xml:space="preserve">
+    <value>مجموعة الأصناف</value>
+  </data>
+  <data name="ItemGroups" xml:space="preserve">
+    <value>مجموعات الأصناف</value>
+  </data>
+  <data name="Item" xml:space="preserve">
+    <value>الصنف</value>
+  </data>
+  <data name="ItemUnit" xml:space="preserve">
+    <value>وحدة الصنف</value>
+  </data>
+  <data name="ItemUnits" xml:space="preserve">
+    <value>وحدات الصنف</value>
+  </data>
+  <data name="Warehouse" xml:space="preserve">
+    <value>المخزن</value>
+  </data>
+  <data name="Warehouses" xml:space="preserve">
+    <value>المخازن</value>
+  </data>
+  <data name="StorageLocation" xml:space="preserve">
+    <value>مكان التخزين (الرف/القطاع)</value>
+  </data>
+  <data name="Barcode" xml:space="preserve">
+    <value>الباركود</value>
+  </data>
+  <data name="TaxCode" xml:space="preserve">
+    <value>كود الضريبة</value>
+  </data>
+  <data name="CommercialRegister" xml:space="preserve">
+    <value>السجل التجاري</value>
+  </data>
+  <data name="TaxPayerType" xml:space="preserve">
+    <value>نوع الممول</value>
+  </data>
+  <data name="ExchangeRate" xml:space="preserve">
+    <value>سعر الصرف</value>
+  </data>
+  <data name="ConversionFactor" xml:space="preserve">
+    <value>معامل التحويل</value>
+  </data>
+  <data name="SalesPrice" xml:space="preserve">
+    <value>سعر البيع</value>
+  </data>
+  <data name="PurchasePrice" xml:space="preserve">
+    <value>سعر الشراء</value>
+  </data>
+  <data name="DefaultSalesUnit" xml:space="preserve">
+    <value>وحدة البيع الافتراضية</value>
+  </data>
+  <data name="DefaultPurchaseUnit" xml:space="preserve">
+    <value>وحدة الشراء الافتراضية</value>
+  </data>
+  <data name="IsDefaultSales" xml:space="preserve">
+    <value>افتراضي بيع</value>
+  </data>
+  <data name="IsDefaultPurchase" xml:space="preserve">
+    <value>افتراضي شراء</value>
+  </data>
+  <data name="IsService" xml:space="preserve">
+    <value>صنف خدمي</value>
+  </data>
+  <data name="ParentGroup" xml:space="preserve">
+    <value>المجموعة الرئيسية</value>
+  </data>
+  <data name="ControlAccount" xml:space="preserve">
+    <value>حساب المراقبة</value>
+  </data>
+  <data name="InventoryAccount" xml:space="preserve">
+    <value>حساب المخزون</value>
+  </data>
+  <data name="Symbol" xml:space="preserve">
+    <value>الرمز</value>
+  </data>
+  <data name="AddNewGovernorate" xml:space="preserve">
+    <value>إضافة محافظة جديدة</value>
+  </data>
+  <data name="AddNewCity" xml:space="preserve">
+    <value>إضافة مدينة جديدة</value>
+  </data>
+  <data name="AddNewSalesman" xml:space="preserve">
+    <value>إضافة مندوب جديد</value>
+  </data>
+  <data name="AddNewCurrency" xml:space="preserve">
+    <value>إضافة عملة جديدة</value>
+  </data>
+  <data name="AddNewCustomerCategory" xml:space="preserve">
+    <value>إضافة فئة عملاء جديدة</value>
+  </data>
+  <data name="AddNewCustomer" xml:space="preserve">
+    <value>إضافة عميل جديد</value>
+  </data>
+  <data name="AddNewVendorCategory" xml:space="preserve">
+    <value>إضافة فئة موردين جديدة</value>
+  </data>
+  <data name="AddNewVendor" xml:space="preserve">
+    <value>إضافة مورد جديد</value>
+  </data>
+  <data name="AddNewUnit" xml:space="preserve">
+    <value>إضافة وحدة قياس جديدة</value>
+  </data>
+  <data name="AddNewItemGroup" xml:space="preserve">
+    <value>إضافة مجموعة أصناف جديدة</value>
+  </data>
+  <data name="AddNewItem" xml:space="preserve">
+    <value>إضافة صنف جديد</value>
+  </data>
+  <data name="AddNewItemUnit" xml:space="preserve">
+    <value>إضافة وحدة للصنف</value>
+  </data>
+  <data name="AddNewWarehouse" xml:space="preserve">
+    <value>إضافة مخزن جديد</value>
+  </data>
+  <data name="ManageGovernorates" xml:space="preserve">
+    <value>إدارة المحافظات</value>
+  </data>
+  <data name="ManageCities" xml:space="preserve">
+    <value>إدارة المدن</value>
+  </data>
+  <data name="ManageSalesmen" xml:space="preserve">
+    <value>إدارة المناديب</value>
+  </data>
+  <data name="ManageCurrencies" xml:space="preserve">
+    <value>إدارة العملات</value>
+  </data>
+  <data name="ManageCustomerCategories" xml:space="preserve">
+    <value>إدارة فئات العملاء</value>
+  </data>
+  <data name="ManageCustomers" xml:space="preserve">
+    <value>إدارة العملاء</value>
+  </data>
+  <data name="ManageVendorCategories" xml:space="preserve">
+    <value>إدارة فئات الموردين</value>
+  </data>
+  <data name="ManageVendors" xml:space="preserve">
+    <value>إدارة الموردين</value>
+  </data>
+  <data name="ManageUnits" xml:space="preserve">
+    <value>إدارة وحدات القياس</value>
+  </data>
+  <data name="ManageItemGroups" xml:space="preserve">
+    <value>إدارة مجموعات الأصناف</value>
+  </data>
+  <data name="ManageItems" xml:space="preserve">
+    <value>إدارة الأصناف</value>
+  </data>
+  <data name="ManageItemUnits" xml:space="preserve">
+    <value>إدارة وحدات الأصناف</value>
+  </data>
+  <data name="ManageWarehouses" xml:space="preserve">
+    <value>إدارة المخازن</value>
+  </data>
+</root>

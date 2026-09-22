@@ -1,0 +1,105 @@
+@model ERP.Domain.Entities.Company
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+
+@{
+    ViewData["Title"] = Localizer["CompanyInfo"];
+}
+
+<div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-building text-primary me-2 ms-0"></i> @Localizer["CompanyInfo"]
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Localizer["EnterpriseSubtitle"]</span>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show p-2 mb-3" role="alert" style="font-size: 12.5px;">
+        <i class="fa-solid fa-circle-check me-2 ms-0"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close p-2" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<form asp-action="Edit" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+
+    <div class="erp-card">
+        <div class="erp-card-header d-flex align-items-center justify-content-between">
+            <span><i class="fa-solid fa-sliders text-primary me-2 ms-0"></i> @Localizer["CompanyInfo"]</span>
+            <span class="badge bg-primary px-3 py-1">@Model.Code</span>
+        </div>
+        <div class="erp-card-body">
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger p-2 mb-3" style="font-size: 12px;"></div>
+
+            <div class="row g-3">
+                <!-- Code -->
+                <div class="col-md-3">
+                    <label asp-for="Code" class="erp-form-label">@Localizer["Code"] *</label>
+                    <input asp-for="Code" class="form-control erp-form-control" required />
+                    <span asp-validation-for="Code" class="text-danger" style="font-size: 11px;"></span>
+                </div>
+
+                <!-- Active Status -->
+                <div class="col-md-3 d-flex align-items-end">
+                    <div class="form-check form-switch mb-2">
+                        <input asp-for="IsActive" class="form-check-input" type="checkbox" id="IsActive" />
+                        <label class="form-check-label fw-bold" for="IsActive">@Localizer["Active"]</label>
+                    </div>
+                </div>
+
+                <!-- Tax Number -->
+                <div class="col-md-6">
+                    <label asp-for="TaxNumber" class="erp-form-label">@Localizer["TaxNumber"]</label>
+                    <input asp-for="TaxNumber" class="form-control erp-form-control" placeholder="300-XXX-XXX" />
+                </div>
+
+                <!-- Name Arabic -->
+                <div class="col-md-6">
+                    <label asp-for="NameAr" class="erp-form-label">@Localizer["NameAr"] *</label>
+                    <input asp-for="NameAr" class="form-control erp-form-control" dir="rtl" placeholder="شركة أيه بي سي" required />
+                    <span asp-validation-for="NameAr" class="text-danger" style="font-size: 11px;"></span>
+                </div>
+
+                <!-- Name English -->
+                <div class="col-md-6">
+                    <label asp-for="NameEn" class="erp-form-label">@Localizer["NameEn"] *</label>
+                    <input asp-for="NameEn" class="form-control erp-form-control" dir="ltr" placeholder="ABC Global Corporation" required />
+                    <span asp-validation-for="NameEn" class="text-danger" style="font-size: 11px;"></span>
+                </div>
+
+                <!-- Address Arabic -->
+                <div class="col-md-6">
+                    <label asp-for="AddressAr" class="erp-form-label">@Localizer["AddressAr"]</label>
+                    <input asp-for="AddressAr" class="form-control erp-form-control" dir="rtl" placeholder="القاهرة، مصر" />
+                </div>
+
+                <!-- Address English -->
+                <div class="col-md-6">
+                    <label asp-for="AddressEn" class="erp-form-label">@Localizer["AddressEn"]</label>
+                    <input asp-for="AddressEn" class="form-control erp-form-control" dir="ltr" placeholder="Cairo, Egypt" />
+                </div>
+
+                <!-- Phone -->
+                <div class="col-md-6">
+                    <label asp-for="Phone" class="erp-form-label">@Localizer["Phone"]</label>
+                    <input asp-for="Phone" class="form-control erp-form-control" placeholder="+20 2 12345678" />
+                </div>
+
+                <!-- Email -->
+                <div class="col-md-6">
+                    <label asp-for="Email" class="erp-form-label">@Localizer["Email"]</label>
+                    <input asp-for="Email" type="email" class="form-control erp-form-control" placeholder="info@company.com" />
+                </div>
+            </div>
+        </div>
+        <div class="erp-card-header bg-light justify-content-end gap-2">
+            <button type="submit" class="btn btn-erp-primary px-4">
+                <i class="fa-solid fa-floppy-disk me-1 ms-0"></i> @Localizer["Save"]
+            </button>
+        </div>
+    </div>
+</form>

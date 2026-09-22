@@ -1,0 +1,267 @@
+@model ERP.Web.Models.AuditDetailViewModel
+@{
+    ViewData["Title"] = "Audit Details – #" + Model.Id;
+    var localTime = Model.TimestampUtc.ToLocalTime();
+}
+
+<div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-shield-halved text-primary me-2 ms-0"></i> Audit Details
+            <span class="badge bg-secondary ms-2" style="font-size:13px;">#@Model.Id</span>
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">@Model.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC</span>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+        <i class="fa-solid fa-arrow-left me-1"></i> Back to List
+    </a>
+</div>
+
+<div class="row g-3">
+
+    <!-- ── General Information ──────────────────────────────────────────── -->
+    <div class="col-md-6">
+        <div class="erp-card h-100">
+            <div class="erp-card-body p-3">
+                <h6 class="fw-bold mb-3 text-primary border-bottom pb-2">
+                    <i class="fa-solid fa-circle-info me-2"></i>General Information
+                </h6>
+                <table class="table table-sm table-borderless mb-0" style="font-size:13px;">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted fw-semibold" style="width:40%;">Date / Time (UTC)</td>
+                            <td>@Model.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Employee Code</td>
+                            <td><span class="badge bg-secondary-subtle text-dark">@Model.EmployeeCode</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">User Name</td>
+                            <td>@Model.UserName</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">User ID</td>
+                            <td style="font-size:11px; font-family:monospace;">@Model.UserId</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Company</td>
+                            <td>@Model.CompanyId</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Branch</td>
+                            <td>@Model.BranchId</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Fiscal Year</td>
+                            <td>@Model.FiscalYearId</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Operation Information ────────────────────────────────────────── -->
+    <div class="col-md-6">
+        <div class="erp-card h-100">
+            <div class="erp-card-body p-3">
+                <h6 class="fw-bold mb-3 text-primary border-bottom pb-2">
+                    <i class="fa-solid fa-bolt me-2"></i>Operation Information
+                </h6>
+                <table class="table table-sm table-borderless mb-0" style="font-size:13px;">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted fw-semibold" style="width:40%;">Module</td>
+                            <td>@Model.ModuleName</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Screen Code</td>
+                            <td><span class="badge bg-primary-subtle text-primary">@Model.ScreenCode</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Screen Name</td>
+                            <td>@Model.ScreenName</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Entity</td>
+                            <td>@Model.EntityName</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Record ID</td>
+                            <td><strong>@Model.EntityId</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Action</td>
+                            <td>
+                                @{
+                                    var badgeClass = Model.Action switch
+                                    {
+                                        "Create" => "bg-success text-white",
+                                        "Update" => "bg-warning text-dark",
+                                        "Delete" => "bg-danger text-white",
+                                        "Login"  => "bg-info text-white",
+                                        _        => "bg-secondary text-white"
+                                    };
+                                }
+                                <span class="badge @badgeClass">@Model.Action</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Result</td>
+                            <td>
+                                @if (Model.Success)
+                                {
+                                    <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Success</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger"><i class="fa-solid fa-xmark me-1"></i>Failed</span>
+                                }
+                            </td>
+                        </tr>
+                        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                        {
+                            <tr>
+                                <td class="text-muted fw-semibold">Error</td>
+                                <td class="text-danger small">@Model.ErrorMessage</td>
+                            </tr>
+                        }
+                        @if (!string.IsNullOrEmpty(Model.Description))
+                        {
+                            <tr>
+                                <td class="text-muted fw-semibold">Description</td>
+                                <td>@Model.Description</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Request Context ──────────────────────────────────────────────── -->
+    <div class="col-md-6">
+        <div class="erp-card">
+            <div class="erp-card-body p-3">
+                <h6 class="fw-bold mb-3 text-primary border-bottom pb-2">
+                    <i class="fa-solid fa-network-wired me-2"></i>Request Context
+                </h6>
+                <table class="table table-sm table-borderless mb-0" style="font-size:12px;">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted fw-semibold" style="width:40%;">IP Address</td>
+                            <td style="font-family:monospace;">@Model.IpAddress</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">HTTP Method</td>
+                            <td><span class="badge bg-secondary-subtle text-dark">@Model.HttpMethod</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Request Path</td>
+                            <td style="font-family:monospace;">@Model.RequestPath</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Request ID</td>
+                            <td style="font-size:10px; font-family:monospace;">@Model.RequestId</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Correlation ID</td>
+                            <td style="font-size:10px; font-family:monospace;">@Model.CorrelationId</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">User Agent</td>
+                            <td style="font-size:10px; word-break:break-all;">@Model.UserAgent</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Changed Fields ──────────────────────────────────────────────── -->
+    @if (Model.ChangedFields.Any())
+    {
+        <div class="col-12">
+            <div class="erp-card">
+                <div class="erp-card-body p-3">
+                    <h6 class="fw-bold mb-3 text-warning border-bottom pb-2">
+                        <i class="fa-solid fa-arrows-left-right me-2"></i>Changed Fields
+                        <span class="badge bg-warning-subtle text-warning ms-2">@Model.ChangedFields.Count changed</span>
+                    </h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover erp-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width:200px;">Field</th>
+                                    <th>Old Value</th>
+                                    <th>New Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var field in Model.ChangedFields)
+                                {
+                                    <tr>
+                                        <td><strong style="font-family:monospace; font-size:12px;">@field.FieldName</strong></td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(field.OldValue))
+                                            {
+                                                <span class="text-danger bg-danger-subtle rounded px-1">@field.OldValue</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fst-italic">—</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(field.NewValue))
+                                            {
+                                                <span class="text-success bg-success-subtle rounded px-1">@field.NewValue</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fst-italic">—</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ── Old / New Values JSON ────────────────────────────────────────── -->
+    @if (!string.IsNullOrEmpty(Model.OldValuesJson) || !string.IsNullOrEmpty(Model.NewValuesJson))
+    {
+        <div class="col-md-6">
+            @if (!string.IsNullOrEmpty(Model.OldValuesJson))
+            {
+                <div class="erp-card">
+                    <div class="erp-card-body p-3">
+                        <h6 class="fw-bold mb-2 text-danger border-bottom pb-2">
+                            <i class="fa-solid fa-clock-rotate-left me-2"></i>Old Values
+                        </h6>
+                        <pre class="bg-light p-2 rounded" style="font-size:11px; max-height:300px; overflow:auto;">@Model.OldValuesJson</pre>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="col-md-6">
+            @if (!string.IsNullOrEmpty(Model.NewValuesJson))
+            {
+                <div class="erp-card">
+                    <div class="erp-card-body p-3">
+                        <h6 class="fw-bold mb-2 text-success border-bottom pb-2">
+                            <i class="fa-solid fa-floppy-disk me-2"></i>New Values
+                        </h6>
+                        <pre class="bg-light p-2 rounded" style="font-size:11px; max-height:300px; overflow:auto;">@Model.NewValuesJson</pre>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+</div>
