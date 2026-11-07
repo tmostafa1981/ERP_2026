@@ -1,0 +1,120 @@
+@model ERP.Application.DTOs.FixedAssets.DepreciationRunDetailsDto
+@{
+    Layout = null;
+    var company = ViewBag.Company as ERP.Domain.Entities.Company;
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <title>تقرير إهلاك الأصول - @Model.RunNumber</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" />
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 13px; color: #212529; }
+        .table-sm th, .table-sm td { padding: 4px 6px; }
+        @@media print {
+            .no-print { display: none !important; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="no-print text-start mb-3">
+        <button onclick="window.print()" class="btn btn-primary btn-sm">طباعة التقرير</button>
+        <button onclick="window.close()" class="btn btn-secondary btn-sm">إغلاق</button>
+    </div>
+
+    <!-- Header -->
+    <div class="row align-items-center border-bottom pb-3 mb-3">
+        <div class="col-8">
+            <h4 class="fw-bold mb-1">@(company?.LocalizedName ?? "شركة التجهيزات الصناعية")</h4>
+            <h5 class="text-primary mb-1">تقرير تشغيل إهلاك الأصول الثابتة الدوري</h5>
+            <div class="text-muted small">رقم العملية: <strong>@Model.RunNumber</strong> | تاريخ الإهلاك: <strong>@Model.RunDate.ToString("yyyy-MM-dd")</strong></div>
+        </div>
+        <div class="col-4 text-start">
+            <div>السنة المالية: <strong>@Model.FiscalYearName</strong></div>
+            <div>الشهر / الفترة: <strong>@Model.FiscalPeriodName</strong></div>
+            <div>الفرع: <strong>@Model.BranchName</strong></div>
+        </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="row g-2 mb-3 text-center">
+        <div class="col-4">
+            <div class="border p-2 rounded">
+                <div class="small text-muted">عدد الأصول المشمولة</div>
+                <h5 class="mb-0 fw-bold">@Model.AssetsCount</h5>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="border p-2 rounded">
+                <div class="small text-muted">إجمالي قسط الإهلاك</div>
+                <h5 class="mb-0 fw-bold text-success">@Model.TotalDepreciationAmount.ToString("N2")</h5>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="border p-2 rounded">
+                <div class="small text-muted">رقم القيد المحاسبي</div>
+                <h5 class="mb-0 fw-bold">@(Model.JournalEntryNumber ?? "مسودة")</h5>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <table class="table table-bordered table-sm text-center mb-4">
+        <thead class="table-light">
+            <tr>
+                <th>#</th>
+                <th>كود الأصل</th>
+                <th class="text-start">اسم الأصل</th>
+                <th>مركز التكلفة</th>
+                <th>التكلفة وقت التشغيل</th>
+                <th>مجمع الإهلاك السابق</th>
+                <th>قسط الإهلاك الحالي</th>
+                <th>مجمع الإهلاك اللاحق</th>
+                <th>القيمة الدفترية بعد</th>
+            </tr>
+        </thead>
+        <tbody>
+            @{ int idx = 1; }
+            @foreach (var line in Model.Lines)
+            {
+                <tr>
+                    <td>@(idx++)</td>
+                    <td class="fw-bold">@line.AssetCode</td>
+                    <td class="text-start">@line.AssetName</td>
+                    <td>@(line.CostCenterName ?? "—")</td>
+                    <td>@line.AssetCostAtRun.ToString("N2")</td>
+                    <td>@line.PriorAccumulatedDepreciation.ToString("N2")</td>
+                    <td class="fw-bold">@line.DepreciationAmount.ToString("N2")</td>
+                    <td>@line.PostAccumulatedDepreciation.ToString("N2")</td>
+                    <td class="fw-bold">@line.BookValueAfter.ToString("N2")</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot class="table-light fw-bold">
+            <tr>
+                <td colspan="6" class="text-end">الإجمالي العام:</td>
+                <td>@Model.TotalDepreciationAmount.ToString("N2")</td>
+                <td colspan="2"></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <!-- Signatures -->
+    <div class="row text-center mt-5 pt-4">
+        <div class="col-4">
+            <div class="fw-bold">إعداد / محاسب الأصول</div>
+            <div class="mt-4 text-muted">...........................</div>
+        </div>
+        <div class="col-4">
+            <div class="fw-bold">مراجعة الحسابات</div>
+            <div class="mt-4 text-muted">...........................</div>
+        </div>
+        <div class="col-4">
+            <div class="fw-bold">اعتماد المدير المالي</div>
+            <div class="mt-4 text-muted">...........................</div>
+        </div>
+    </div>
+</body>
+</html>

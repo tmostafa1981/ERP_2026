@@ -1,0 +1,566 @@
+@model IEnumerable<ERP.Application.DTOs.DocumentAdjustmentDto>
+@using ERP.Domain.Enums
+@using ERP.Application.DTOs
+@{
+    ViewData["Title"] = "المصاريف والخصومات الإضافية (Document Adjustments)";
+    var transactionTypes = ViewBag.TransactionTypes as IEnumerable<AdjustmentTransactionTypeLookupDto> ?? Enumerable.Empty<AdjustmentTransactionTypeLookupDto>();
+    var glAccounts = ViewBag.GLAccounts as IEnumerable<AdjustmentGLAccountLookupDto> ?? Enumerable.Empty<AdjustmentGLAccountLookupDto>();
+}
+
+<div class="container-fluid px-4 py-3">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-calculator text-primary me-2"></i> دليل المصاريف والخصومات الإضافية (Charges & Discounts)
+            </h4>
+            <span class="text-muted small">إدارة وتكوين المصاريف والخصومات وربطها التلقائي بالحسابات وأنواع الحركات بدون كود صلب.</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createAdjustmentModal">
+                <i class="fa-solid fa-plus me-1"></i> إضافة بند جديد
+            </button>
+            <a asp-controller="TransactionTypes" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-sliders me-1"></i> أنواع الحركات
+            </a>
+            <a asp-controller="Documents" asp-action="Index" class="btn btn-outline-primary btn-sm">
+                <i class="fa-solid fa-file-invoice me-1"></i> الفواتير والمستندات
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2 small" role="alert">
+            <i class="fa-solid fa-check-circle me-1"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show py-2 small" role="alert">
+            <i class="fa-solid fa-circle-exclamation me-1"></i> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Tabs: Master List & Transaction Type Linkage -->
+    <ul class="nav nav-tabs mb-3" id="adjTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold" id="master-tab" data-bs-toggle="tab" data-bs-target="#master-pane" type="button" role="tab">
+                <i class="fa-solid fa-list me-1"></i> دليل المصاريف والخصومات (@Model.Count())
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold" id="linkage-tab" data-bs-toggle="tab" data-bs-target="#linkage-pane" type="button" role="tab">
+                <i class="fa-solid fa-link me-1"></i> تهيئة المصاريف والخصومات لكل نوع حركة
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="adjTabsContent">
+        <!-- 1. Master Tab -->
+        <div class="tab-pane fade show active" id="master-pane" role="tabpanel">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered align-middle mb-0 text-center small">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th style="width: 140px;">الكود</th>
+                                    <th>الاسم بالعربي</th>
+                                    <th>الاسم بالإنجليزي</th>
+                                    <th style="width: 120px;">النوع</th>
+                                    <th style="width: 130px;">طريقة الحساب</th>
+                                    <th style="width: 110px;">القيمة الافتراضية</th>
+                                    <th>حساب الأستاذ العام المرتبط</th>
+                                    <th style="width: 90px;">خاضع للضريبة</th>
+                                    <th style="width: 90px;">الحالة</th>
+                                    <th style="width: 100px;">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{ int idx = 1; }
+                                @foreach (var item in Model)
+                                {
+                                    <tr>
+                                        <td class="text-muted fw-bold">@(idx++)</td>
+                                        <td class="font-monospace fw-bold text-primary">@item.Code</td>
+                                        <td class="text-start fw-bold">@item.NameAr</td>
+                                        <td class="text-start text-muted">@item.NameEn</td>
+                                        <td>
+                                            @if (item.AdjustmentType == AdjustmentType.Addition)
+                                            {
+                                                <span class="badge bg-success-subtle text-success border">
+                                                    <i class="fa-solid fa-plus-circle me-1"></i> مصروف / إضافة
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-danger-subtle text-danger border">
+                                                    <i class="fa-solid fa-minus-circle me-1"></i> خصم مالي
+                                                </span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (item.CalculationMethod == AdjustmentCalculationMethod.Percentage)
+                                            {
+                                                <span class="badge bg-info-subtle text-info border">
+                                                    <i class="fa-solid fa-percent me-1"></i> نسبة مئوية
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary border">
+                                                    <i class="fa-solid fa-coins me-1"></i> مبلغ ثابت
+                                                </span>
+                                            }
+                                        </td>
+                                        <td class="font-monospace fw-bold">
+                                            @if (item.CalculationMethod == AdjustmentCalculationMethod.Percentage)
+                                            {
+                                                <span>@((item.DefaultValue ?? 0).ToString("0.##")) %</span>
+                                            }
+                                            else
+                                            {
+                                                <span>@((item.DefaultValue ?? 0).ToString("N2"))</span>
+                                            }
+                                        </td>
+                                        <td class="text-start">
+                                            <span class="badge bg-light text-dark border font-monospace me-1">@item.GLAccountCode</span>
+                                            <span class="fw-semibold">@item.GLAccountName</span>
+                                        </td>
+                                        <td>
+                                            @if (item.IsTaxable)
+                                            {
+                                                <span class="badge bg-warning-subtle text-dark border">نعم</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-light text-muted border">لا</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (item.IsActive)
+                                            {
+                                                <span class="badge bg-success">نشط</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">معطل</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-edit"
+                                                    data-id="@item.Id"
+                                                    data-code="@item.Code"
+                                                    data-namear="@item.NameAr"
+                                                    data-nameen="@item.NameEn"
+                                                    data-type="@((int)item.AdjustmentType)"
+                                                    data-calcmethod="@((int)item.CalculationMethod)"
+                                                    data-defaultval="@item.DefaultValue"
+                                                    data-glaccountid="@item.GLAccountId"
+                                                    data-glaccountdisplay="@($"{item.GLAccountCode} - {item.GLAccountName}")"
+                                                    data-istaxable="@item.IsTaxable.ToString().ToLower()"
+                                                    data-isactive="@item.IsActive.ToString().ToLower()"
+                                                    title="تعديل">
+                                                <i class="fa-solid fa-pen-to-square"></i>
+                                            </button>
+                                            <form asp-action="ToggleActive" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('هل تريد تغيير حالة التفعيل؟');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-@(item.IsActive ? "warning" : "success") btn-sm py-0 px-2" title="@(item.IsActive ? "تعطيل" : "تفعيل")">
+                                                    <i class="fa-solid fa-power-off"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (!Model.Any())
+                                {
+                                    <tr>
+                                        <td colspan="11" class="text-muted py-4">لا توجد مصاريف أو خصومات مسجلة حالياً.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Transaction Type Linkage Tab -->
+        <div class="tab-pane fade" id="linkage-pane" role="tabpanel">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-body">
+                    <div class="row align-items-center g-3">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-bold">اختر نوع الحركة لضبط المصاريف والخصومات المسموحة:</label>
+                            <select class="form-select form-select-sm fw-bold" id="selTransactionType">
+                                <option value="">-- اختر نوع الحركة --</option>
+                                @foreach (var tt in transactionTypes)
+                                {
+                                    <option value="@tt.Id">[@tt.Code] @tt.NameAr (@tt.ModuleName)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-7 text-end pt-3">
+                            <button type="button" class="btn btn-success btn-sm px-4 fw-bold" id="btnSaveConfig" disabled>
+                                <i class="fa-solid fa-save me-1"></i> حفظ الإعدادات لنوع الحركة
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Grid Card -->
+            <div class="card shadow-sm border-0" id="configGridCard" style="display: none;">
+                <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-dark">
+                        <i class="fa-solid fa-list-check text-primary me-2"></i> المصاريف والخصومات المتاحة لنوع الحركة: <span id="lblTargetTypeName" class="text-primary font-monospace"></span>
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered align-middle mb-0 text-center small" id="tblConfig">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width: 70px;">مسموح؟</th>
+                                    <th style="width: 140px;">الكود</th>
+                                    <th>اسم المصروف / الخصم</th>
+                                    <th style="width: 120px;">النوع</th>
+                                    <th style="width: 130px;">طريقة الحساب</th>
+                                    <th>الحساب المرتبط</th>
+                                    <th style="width: 100px;">إلزامي؟</th>
+                                    <th style="width: 140px;">القيمة الافتراضية</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tblConfigBody">
+                                <!-- Populated dynamically via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Create Adjustment -->
+<div class="modal fade" id="createAdjustmentModal" tabindex="-1" data-bs-focus="false">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-primary text-white py-2">
+                    <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus me-1"></i> إضافة بند مصاريف / خصم جديد</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">الكود التعريفي <span class="text-danger">*</span>:</label>
+                            <input type="text" name="Code" class="form-control form-control-sm font-monospace text-uppercase" placeholder="e.g. DISC_COMM, SHIPPING" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">الاسم بالعربي <span class="text-danger">*</span>:</label>
+                            <input type="text" name="NameAr" class="form-control form-control-sm" placeholder="e.g. خصم تجاري إضافي" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">الاسم بالإنجليزي:</label>
+                            <input type="text" name="NameEn" class="form-control form-control-sm" placeholder="e.g. Commercial Discount" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">نوع البند <span class="text-danger">*</span>:</label>
+                            <select name="AdjustmentType" class="form-select form-select-sm" required>
+                                <option value="1">➕ مصروف / إضافة (Addition)</option>
+                                <option value="2">➖ خصم مالي (Discount)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">طريقة الحساب <span class="text-danger">*</span>:</label>
+                            <select name="CalculationMethod" class="form-select form-select-sm" required>
+                                <option value="1">💵 مبلغ مالي ثابت (Amount)</option>
+                                <option value="2">٪ نسبة مئوية (Percentage)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">القيمة الافتراضية:</label>
+                            <input type="number" step="0.01" min="0" name="DefaultValue" class="form-control form-control-sm font-monospace" value="0.00" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">حساب الأستاذ العام المرتبط <span class="text-danger">*</span>:</label>
+                            <div class="erp-lookup-picker"
+                                 data-type="account"
+                                 data-input-name="GLAccountId"
+                                 data-placeholder="-- اختر الحساب من الدليل (بحث برقم أو اسم الحساب) --"
+                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                            </div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-center pt-4">
+                            <div class="form-check form-switch me-3">
+                                <input class="form-check-input" type="checkbox" name="IsTaxable" value="true" id="chkTaxableCreate">
+                                <label class="form-check-label small fw-bold" for="chkTaxableCreate">خاضع للضريبة</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="IsActive" value="true" id="chkActiveCreate" checked>
+                                <label class="form-check-label small fw-bold" for="chkActiveCreate">نشط</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">حفظ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Edit Adjustment -->
+<div class="modal fade" id="editAdjustmentModal" tabindex="-1" data-bs-focus="false">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <form asp-action="Edit" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="Id" id="editId" />
+                <div class="modal-header bg-dark text-white py-2">
+                    <h6 class="modal-title fw-bold"><i class="fa-solid fa-pen-to-square me-1"></i> تعديل بيانات المصروف / الخصم</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">الكود التعريفي <span class="text-danger">*</span>:</label>
+                            <input type="text" name="Code" id="editCode" class="form-control form-control-sm font-monospace text-uppercase" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">الاسم بالعربي <span class="text-danger">*</span>:</label>
+                            <input type="text" name="NameAr" id="editNameAr" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">الاسم بالإنجليزي:</label>
+                            <input type="text" name="NameEn" id="editNameEn" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">نوع البند <span class="text-danger">*</span>:</label>
+                            <select name="AdjustmentType" id="editType" class="form-select form-select-sm" required>
+                                <option value="1">➕ مصروف / إضافة (Addition)</option>
+                                <option value="2">➖ خصم مالي (Discount)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">طريقة الحساب <span class="text-danger">*</span>:</label>
+                            <select name="CalculationMethod" id="editCalcMethod" class="form-select form-select-sm" required>
+                                <option value="1">💵 مبلغ مالي ثابت (Amount)</option>
+                                <option value="2">٪ نسبة مئوية (Percentage)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">القيمة الافتراضية:</label>
+                            <input type="number" step="0.01" min="0" name="DefaultValue" id="editDefaultVal" class="form-control form-control-sm font-monospace" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">حساب الأستاذ العام المرتبط <span class="text-danger">*</span>:</label>
+                            <div class="erp-lookup-picker"
+                                 id="editGLAccountPicker"
+                                 data-type="account"
+                                 data-input-name="GLAccountId"
+                                 data-input-id="editGLAccountId"
+                                 data-placeholder="-- اختر الحساب من الدليل (بحث برقم أو اسم الحساب) --"
+                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                            </div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-center pt-4">
+                            <div class="form-check form-switch me-3">
+                                <input class="form-check-input" type="checkbox" name="IsTaxable" value="true" id="editIsTaxable">
+                                <label class="form-check-label small fw-bold" for="editIsTaxable">خاضع للضريبة</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="IsActive" value="true" id="editIsActive">
+                                <label class="form-check-label small fw-bold" for="editIsActive">نشط</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">تحديث البيانات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            // Edit Modal Handlers
+            document.querySelectorAll('.btn-edit').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.getElementById('editId').value = btn.dataset.id;
+                    document.getElementById('editCode').value = btn.dataset.code;
+                    document.getElementById('editNameAr').value = btn.dataset.namear;
+                    document.getElementById('editNameEn').value = btn.dataset.nameen;
+                    document.getElementById('editType').value = btn.dataset.type;
+                    document.getElementById('editCalcMethod').value = btn.dataset.calcmethod;
+                    document.getElementById('editDefaultVal').value = btn.dataset.defaultval;
+                    if (window.ErpLookup && window.ErpLookup.setPickerValue) {
+                        window.ErpLookup.setPickerValue('#editGLAccountPicker', btn.dataset.glaccountid, btn.dataset.glaccountdisplay);
+                    } else {
+                        const accEl = document.getElementById('editGLAccountId');
+                        if (accEl) accEl.value = btn.dataset.glaccountid;
+                    }
+                    document.getElementById('editIsTaxable').checked = (btn.dataset.istaxable === 'true');
+                    document.getElementById('editIsActive').checked = (btn.dataset.isactive === 'true');
+
+                    new bootstrap.Modal(document.getElementById('editAdjustmentModal')).show();
+                });
+            });
+
+            // Transaction Type Configuration Handlers
+            const selType = document.getElementById('selTransactionType');
+            const configCard = document.getElementById('configGridCard');
+            const lblTypeName = document.getElementById('lblTargetTypeName');
+            const tblBody = document.getElementById('tblConfigBody');
+            const btnSave = document.getElementById('btnSaveConfig');
+
+            let currentConfig = null;
+
+            selType.addEventListener('change', async () => {
+                const typeId = selType.value;
+                if (!typeId) {
+                    configCard.style.display = 'none';
+                    btnSave.disabled = true;
+                    return;
+                }
+
+                btnSave.disabled = true;
+                tblBody.innerHTML = '<tr><td colspan="8" class="py-3 text-center text-muted"><span class="spinner-border spinner-border-sm me-1"></span> جاري تحميل الإعدادات...</td></tr>';
+                configCard.style.display = 'block';
+                lblTypeName.textContent = selType.options[selType.selectedIndex].text;
+
+                try {
+                    const res = await fetch(`/DocumentAdjustments/GetConfig?transactionTypeId=${typeId}`);
+                    const json = await res.json();
+                    if (json.success && json.data) {
+                        currentConfig = json.data;
+                        renderConfigGrid(currentConfig.adjustments);
+                        btnSave.disabled = false;
+                    } else {
+                        tblBody.innerHTML = '<tr><td colspan="8" class="py-3 text-center text-danger">فشل تحميل الإعدادات.</td></tr>';
+                    }
+                } catch (e) {
+                    tblBody.innerHTML = '<tr><td colspan="8" class="py-3 text-center text-danger">خطأ بالاتصال بالسيرفر.</td></tr>';
+                }
+            });
+
+            function renderConfigGrid(items) {
+                if (!items || items.length === 0) {
+                    tblBody.innerHTML = '<tr><td colspan="8" class="py-3 text-center text-muted">لا توجد بنود مصاريف أو خصومات معرفة في النظام بعد. اضغط "إضافة بند جديد" بالأعلى لتعريف البنود أولاً.</td></tr>';
+                    return;
+                }
+
+                let html = '';
+                items.forEach((item, i) => {
+                    const typeBadge = item.adjustmentType === 1 
+                        ? '<span class="badge bg-success-subtle text-success border">مصروف / إضافة</span>'
+                        : '<span class="badge bg-danger-subtle text-danger border">خصم مالي</span>';
+                    
+                    const methodBadge = item.calculationMethod === 2
+                        ? '<span class="badge bg-info-subtle text-info border">نسبة مئوية %</span>'
+                        : '<span class="badge bg-secondary-subtle text-secondary border">مبلغ ثابت</span>';
+
+                    html += `
+                        <tr class="${item.isAllowed ? 'table-light' : ''}">
+                            <td>
+                                <input type="checkbox" class="form-check-input chk-allowed" data-idx="${i}" ${item.isAllowed ? 'checked' : ''} />
+                            </td>
+                            <td class="font-monospace fw-bold text-primary">${item.code}</td>
+                            <td class="text-start fw-bold">${item.name || item.nameAr || ''}</td>
+                            <td>${typeBadge}</td>
+                            <td>${methodBadge}</td>
+                            <td class="text-start">
+                                <span>${item.glAccountName || '-'}</span>
+                            </td>
+                            <td>
+                                <input type="checkbox" class="form-check-input chk-required" data-idx="${i}" ${item.isMandatory ? 'checked' : ''} ${!item.isAllowed ? 'disabled' : ''} />
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm text-end font-monospace txt-defval" data-idx="${i}" value="${item.defaultValue != null ? item.defaultValue : 0}" ${!item.isAllowed ? 'disabled' : ''} />
+                            </td>
+                        </tr>
+                    `;
+                });
+                tblBody.innerHTML = html;
+
+                // Bind checkbox events to enable/disable inputs
+                document.querySelectorAll('.chk-allowed').forEach(chk => {
+                    chk.addEventListener('change', (e) => {
+                        const idx = parseInt(e.target.dataset.idx);
+                        currentConfig.adjustments[idx].isAllowed = e.target.checked;
+                        const row = e.target.closest('tr');
+                        const reqChk = row.querySelector('.chk-required');
+                        const defInput = row.querySelector('.txt-defval');
+                        reqChk.disabled = !e.target.checked;
+                        defInput.disabled = !e.target.checked;
+                        if (e.target.checked) {
+                            row.classList.add('table-light');
+                        } else {
+                            row.classList.remove('table-light');
+                            reqChk.checked = false;
+                            currentConfig.adjustments[idx].isMandatory = false;
+                        }
+                    });
+                });
+
+                document.querySelectorAll('.chk-required').forEach(chk => {
+                    chk.addEventListener('change', (e) => {
+                        const idx = parseInt(e.target.dataset.idx);
+                        currentConfig.adjustments[idx].isMandatory = e.target.checked;
+                    });
+                });
+
+                document.querySelectorAll('.txt-defval').forEach(input => {
+                    input.addEventListener('input', (e) => {
+                        const idx = parseInt(e.target.dataset.idx);
+                        currentConfig.adjustments[idx].defaultValue = parseFloat(e.target.value) || 0;
+                    });
+                });
+            }
+
+            // Save Configuration
+            btnSave.addEventListener('click', async () => {
+                if (!currentConfig || !currentConfig.transactionTypeId) return;
+
+                btnSave.disabled = true;
+                btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جاري الحفظ...';
+
+                try {
+                    const res = await fetch('/DocumentAdjustments/SaveConfig', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': token
+                        },
+                        body: JSON.stringify(currentConfig)
+                    });
+                    const json = await res.json();
+                    if (json.success) {
+                        alert(json.message || 'تم حفظ الإعدادات بنجاح!');
+                    } else {
+                        alert('خطأ: ' + json.message);
+                    }
+                } catch (e) {
+                    alert('خطأ بالاتصال بالسيرفر: ' + e.message);
+                } finally {
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = '<i class="fa-solid fa-save me-1"></i> حفظ الإعدادات لنوع الحركة';
+                }
+            });
+        });
+    </script>
+}

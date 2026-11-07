@@ -1,0 +1,502 @@
+@model ERP.Application.DTOs.UserPaymentMethodMatrixDto
+@using ERP.Domain.Enums
+
+@{
+    ViewData["Title"] = "صلاحيات وسائل الدفع (Payment Method Permissions)";
+    var users = ViewBag.Users as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var selectedUserId = ViewBag.SelectedUserId as string;
+    var selectedVoucherType = ViewBag.SelectedVoucherType as int?;
+
+    var serializerOptions = new System.Text.Json.JsonSerializerOptions
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+    };
+    var initialModelJson = System.Text.Json.JsonSerializer.Serialize(Model, serializerOptions);
+    var usersJson = System.Text.Json.JsonSerializer.Serialize(users, serializerOptions);
+}
+
+<style>
+    [v-cloak] { display: none !important; }
+    .pm-matrix-table th, .pm-matrix-table td {
+        vertical-align: middle;
+    }
+    .pm-user-item {
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+    }
+    .pm-user-item:hover {
+        background-color: #f1f5f9;
+    }
+    .pm-user-item.active-user {
+        background-color: var(--bs-primary) !important;
+        color: #fff !important;
+    }
+    .pm-user-item.active-user .text-muted {
+        color: rgba(255, 255, 255, 0.8) !important;
+    }
+</style>
+
+<div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 19px;">
+            <i class="fa-solid fa-money-check-dollar text-primary me-2"></i> صلاحيات وسائل الدفع (Payment Method Permissions)
+        </h4>
+        <span class="text-muted" style="font-size: 13px;">
+            التحكم في صلاحيات المستخدمين لكل وسيلة دفع (نقداً، شيكات، تحويلات بنكية، أخرى) على مستوى بنود سندات القبض والصرف
+        </span>
+    </div>
+</div>
+
+<div class="row g-3" id="pmPermApp" v-cloak>
+    <!-- 1. User List Sidebar (Right side in RTL) -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center border-bottom">
+                <span class="fw-bold text-dark"><i class="fa-solid fa-users text-primary me-2"></i> المستخدمين</span>
+                <span class="badge bg-light text-dark border">{{ filteredUsers.length }} مستخدم</span>
+            </div>
+            <div class="p-2 border-bottom">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                    <input type="text" class="form-control border-start-0" placeholder="بحث عن مستخدم..." v-model="userFilter" />
+                </div>
+            </div>
+            <div class="list-group list-group-flush p-2" style="max-height: 600px; overflow-y: auto;">
+                <div v-for="u in filteredUsers" :key="u.id"
+                     class="list-group-item d-flex align-items-center justify-content-between rounded mb-1 p-2 border-0 pm-user-item"
+                     :class="{ 'active-user': currentUserId === u.id }"
+                     @@click="selectUser(u.id)">
+                    <div class="text-truncate">
+                        <div class="fw-bold text-truncate" style="font-size: 13px;">
+                            <i class="fa-solid fa-user me-1 small opacity-75"></i> {{ u.userName }}
+                        </div>
+                        <div class="small text-muted text-truncate" style="font-size: 11px;">
+                            {{ u.fullName || u.userName }}
+                        </div>
+                    </div>
+                    <span v-if="!u.isActive" class="badge bg-danger ms-1" style="font-size: 10px;">معطل</span>
+                </div>
+                <div v-if="filteredUsers.length === 0" class="text-center text-muted py-4 small">
+                    لا يوجد مستخدم مطابق للبحث
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Permissions Matrix Panel (Main content) -->
+    <div class="col-md-8 col-lg-9">
+        <div class="card shadow-sm border-0">
+            <!-- Header & Filter Bar -->
+            <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+                <div>
+                    <h6 class="mb-0 fw-bold text-primary">
+                        <i class="fa-solid fa-user-shield me-1"></i>
+                        صلاحيات المستخدم: <span class="text-dark bg-light px-2 py-1 rounded border">{{ currentUserName }}</span>
+                    </h6>
+                    <small class="text-muted d-block mt-1">اختر نوع السند لتخصيص صلاحيات محددة، أو اتركها عامة لجميع السندات</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label class="form-label mb-0 small fw-bold text-nowrap">نطاق السند:</label>
+                    <select class="form-select form-select-sm fw-semibold" v-model="currentVoucherType" @@change="reloadMatrix" style="min-width: 175px;">
+                        <option :value="null">عام (جميع السندات)</option>
+                        <option :value="1">سندات القبض فقط</option>
+                        <option :value="2">سندات الصرف فقط</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Quick Presets Toolbar -->
+            <div class="card-body bg-light border-bottom py-2">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div class="d-flex flex-wrap align-items-center gap-1">
+                        <span class="small fw-bold text-secondary me-1"><i class="fa-solid fa-wand-magic-sparkles me-1"></i> قوالب سريعة:</span>
+                        <button type="button" class="btn btn-sm btn-outline-success py-1" @@click="applyPreset('cashier')">
+                            <i class="fa-solid fa-money-bill-wave me-1"></i> موظف خزينة
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning text-dark py-1" @@click="applyPreset('cheque')">
+                            <i class="fa-solid fa-money-check me-1"></i> موظف شيكات
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info text-dark py-1" @@click="applyPreset('bank')">
+                            <i class="fa-solid fa-building-columns me-1"></i> موظف بنوك
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary py-1" @@click="applyPreset('full')">
+                            <i class="fa-solid fa-check-double me-1"></i> صلاحية كاملة
+                        </button>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-1" @@click="applyPreset('clear')">
+                            <i class="fa-solid fa-ban me-1"></i> إلغاء تحديد الكل
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Matrix Table Area -->
+            <div class="card-body p-0">
+                <div v-if="isLoading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="mt-2 text-muted fw-semibold small">جاري تحميل الصلاحيات...</div>
+                </div>
+                <div v-else class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle mb-0 text-center pm-matrix-table" style="font-size: 13.5px;">
+                        <thead class="table-dark small">
+                            <tr>
+                                <th style="min-width: 190px; text-align: right;" class="pe-3">وسيلة الدفع</th>
+                                <th style="width: 85px;">عرض<br/><small class="text-white-50">View</small></th>
+                                <th style="width: 85px;">إضافة<br/><small class="text-white-50">Create</small></th>
+                                <th style="width: 85px;">تعديل<br/><small class="text-white-50">Edit</small></th>
+                                <th style="width: 95px;">حذف / إلغاء<br/><small class="text-white-50">Delete</small></th>
+                                <th style="width: 85px;">ترحيل<br/><small class="text-white-50">Post</small></th>
+                                <th style="width: 95px;">إلغاء ترحيل<br/><small class="text-white-50">Unpost</small></th>
+                                <th style="width: 100px;">تحديد السطر</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="item in permissions" :key="item.paymentMethod">
+                                <!-- Payment Method Label & Icon -->
+                                <td class="text-end fw-bold pe-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="p-2 rounded bg-light border me-2 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+                                            <i :class="getMethodIcon(item.paymentMethod)" class="fa-lg"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold">{{ getMethodNameAr(item.paymentMethod) }}</div>
+                                            <small class="text-muted fw-normal font-monospace">{{ getMethodCode(item.paymentMethod) }}</small>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- CanView -->
+                                <td>
+                                    <div class="form-check d-flex justify-content-center m-0">
+                                        <input class="form-check-input" type="checkbox" v-model="item.canView" style="transform: scale(1.25); cursor: pointer;" />
+                                    </div>
+                                </td>
+
+                                <!-- CanCreate -->
+                                <td>
+                                    <div class="form-check d-flex justify-content-center m-0">
+                                        <input class="form-check-input" type="checkbox" v-model="item.canCreate" style="transform: scale(1.25); cursor: pointer;" />
+                                    </div>
+                                </td>
+
+                                <!-- CanEdit -->
+                                <td>
+                                    <div class="form-check d-flex justify-content-center m-0">
+                                        <input class="form-check-input" type="checkbox" v-model="item.canEdit" style="transform: scale(1.25); cursor: pointer;" />
+                                    </div>
+                                </td>
+
+                                <!-- CanDelete -->
+                                <td>
+                                    <div class="form-check d-flex justify-content-center m-0">
+                                        <input class="form-check-input" type="checkbox" v-model="item.canDelete" style="transform: scale(1.25); cursor: pointer;" />
+                                    </div>
+                                </td>
+
+                                <!-- CanPost -->
+                                <td>
+                                    <div class="form-check d-flex justify-content-center m-0">
+                                        <input class="form-check-input" type="checkbox" v-model="item.canPost" style="transform: scale(1.25); cursor: pointer;" />
+                                    </div>
+                                </td>
+
+                                <!-- CanUnpost -->
+                                <td>
+                                    <div class="form-check d-flex justify-content-center m-0">
+                                        <input class="form-check-input" type="checkbox" v-model="item.canUnpost" style="transform: scale(1.25); cursor: pointer;" />
+                                    </div>
+                                </td>
+
+                                <!-- Select Row Toggle -->
+                                <td>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" @@click="toggleRow(item)" style="font-size: 11.5px;">
+                                        {{ isRowAllChecked(item) ? 'إلغاء' : 'تحديد الكل' }}
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Footer Save Bar -->
+            <div class="card-footer bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-top">
+                <div class="text-muted small">
+                    <i class="fa-solid fa-circle-info text-info me-1"></i>
+                    المستخدم الذي ليس له سجل صلاحيات وسائل دفع يمتلك صلاحية كاملة افتراضياً حتى يتم تخصيص صلاحياته هنا.
+                </div>
+                <button type="button" class="btn btn-primary px-4 fw-bold" @@click="savePermissions" :disabled="isSaving || isLoading">
+                    <span v-if="isSaving" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="fa-solid fa-floppy-disk me-1"></i>
+                    حفظ التغييرات
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Vue 3 Library -->
+    <script src="~/lib/vue/vue.global.prod.js"></script>
+    <script>
+        if (typeof Vue === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"><\/script>');
+        }
+    </script>
+
+    <!-- SweetAlert2 -->
+    <script src="~/lib/sweetalert2/sweetalert2.all.min.js"></script>
+    <script>
+        if (typeof Swal === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"><\/script>');
+        }
+    </script>
+
+    <script>
+        const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const rawUsers = @Html.Raw(usersJson);
+                const usersList = (rawUsers || []).map(u => ({
+                    id: u.id || u.Id,
+                    userName: u.userName || u.UserName,
+                    fullName: u.fullName || u.FullName || u.userName || u.UserName,
+                    isActive: (u.isActive !== undefined) ? u.isActive : ((u.IsActive !== undefined) ? u.IsActive : true)
+                }));
+
+                const currentUserId = ref('@selectedUserId' || (usersList.length > 0 ? usersList[0].id : ''));
+                const currentVoucherType = ref(@(selectedVoucherType.HasValue ? selectedVoucherType.Value.ToString() : "null"));
+                const userFilter = ref('');
+                const isLoading = ref(false);
+                const isSaving = ref(false);
+
+                function normalizePerms(list) {
+                    const defaultMethods = [
+                        { paymentMethod: 1, methodCode: 'Cash', canView: true, canCreate: true, canEdit: true, canDelete: true, canPost: true, canUnpost: true },
+                        { paymentMethod: 2, methodCode: 'Cheque', canView: true, canCreate: true, canEdit: true, canDelete: true, canPost: true, canUnpost: true },
+                        { paymentMethod: 3, methodCode: 'BankTransfer', canView: true, canCreate: true, canEdit: true, canDelete: true, canPost: true, canUnpost: true },
+                        { paymentMethod: 4, methodCode: 'Other', canView: true, canCreate: true, canEdit: true, canDelete: true, canPost: true, canUnpost: true }
+                    ];
+
+                    if (!list || list.length === 0) return defaultMethods;
+
+                    return defaultMethods.map(def => {
+                        const found = list.find(p => {
+                            const m = p.paymentMethod ?? p.PaymentMethod;
+                            return m === def.paymentMethod || m === def.methodCode;
+                        });
+                        if (found) {
+                            return {
+                                paymentMethod: def.paymentMethod,
+                                methodCode: def.methodCode,
+                                canView: Boolean(found.canView ?? found.CanView ?? false),
+                                canCreate: Boolean(found.canCreate ?? found.CanCreate ?? false),
+                                canEdit: Boolean(found.canEdit ?? found.CanEdit ?? false),
+                                canDelete: Boolean(found.canDelete ?? found.CanDelete ?? false),
+                                canPost: Boolean(found.canPost ?? found.CanPost ?? false),
+                                canUnpost: Boolean(found.canUnpost ?? found.CanUnpost ?? false)
+                            };
+                        }
+                        return def;
+                    });
+                }
+
+                const initialModel = @Html.Raw(initialModelJson);
+                const rawPerms = (initialModel && (initialModel.permissions || initialModel.Permissions)) || [];
+                const permissions = ref(normalizePerms(rawPerms));
+
+                const filteredUsers = computed(() => {
+                    const q = userFilter.value.trim().toLowerCase();
+                    if (!q) return usersList;
+                    return usersList.filter(u => 
+                        (u.userName && u.userName.toLowerCase().includes(q)) ||
+                        (u.fullName && u.fullName.toLowerCase().includes(q))
+                    );
+                });
+
+                const currentUserName = computed(() => {
+                    const u = usersList.find(x => x.id === currentUserId.value);
+                    return u ? `${u.userName} (${u.fullName || u.userName})` : 'لم يتم التحديد';
+                });
+
+                function getMethodNameAr(pm) {
+                    if (pm === 1 || pm === 'Cash') return '💵 نقداً (Cash)';
+                    if (pm === 2 || pm === 'Cheque') return '📝 شيكات (Cheque)';
+                    if (pm === 3 || pm === 'BankTransfer') return '🏦 تحويلات بنكية (Bank Transfer)';
+                    if (pm === 4 || pm === 'Other') return '🔄 أخرى (Other)';
+                    return String(pm);
+                }
+
+                function getMethodCode(pm) {
+                    if (pm === 1 || pm === 'Cash') return 'Cash';
+                    if (pm === 2 || pm === 'Cheque') return 'Cheque';
+                    if (pm === 3 || pm === 'BankTransfer') return 'BankTransfer';
+                    if (pm === 4 || pm === 'Other') return 'Other';
+                    return String(pm);
+                }
+
+                function getMethodIcon(pm) {
+                    if (pm === 1 || pm === 'Cash') return 'fa-solid fa-money-bill-wave text-success';
+                    if (pm === 2 || pm === 'Cheque') return 'fa-solid fa-money-check text-warning';
+                    if (pm === 3 || pm === 'BankTransfer') return 'fa-solid fa-building-columns text-info';
+                    if (pm === 4 || pm === 'Other') return 'fa-solid fa-circle-question text-secondary';
+                    return 'fa-solid fa-coins text-primary';
+                }
+
+                function isRowAllChecked(item) {
+                    return item.canView && item.canCreate && item.canEdit && item.canDelete && item.canPost && item.canUnpost;
+                }
+
+                function toggleRow(item) {
+                    const all = isRowAllChecked(item);
+                    item.canView = !all;
+                    item.canCreate = !all;
+                    item.canEdit = !all;
+                    item.canDelete = !all;
+                    item.canPost = !all;
+                    item.canUnpost = !all;
+                }
+
+                function applyPreset(preset) {
+                    permissions.value.forEach(p => {
+                        if (preset === 'cashier') {
+                            const isCash = (p.paymentMethod === 1 || p.methodCode === 'Cash');
+                            p.canView = isCash;
+                            p.canCreate = isCash;
+                            p.canEdit = isCash;
+                            p.canDelete = isCash;
+                            p.canPost = isCash;
+                            p.canUnpost = isCash;
+                        } else if (preset === 'cheque') {
+                            const isCheque = (p.paymentMethod === 2 || p.methodCode === 'Cheque');
+                            p.canView = isCheque;
+                            p.canCreate = isCheque;
+                            p.canEdit = isCheque;
+                            p.canDelete = isCheque;
+                            p.canPost = isCheque;
+                            p.canUnpost = isCheque;
+                        } else if (preset === 'bank') {
+                            const isBank = (p.paymentMethod === 3 || p.methodCode === 'BankTransfer');
+                            p.canView = isBank;
+                            p.canCreate = isBank;
+                            p.canEdit = isBank;
+                            p.canDelete = isBank;
+                            p.canPost = isBank;
+                            p.canUnpost = isBank;
+                        } else if (preset === 'full') {
+                            p.canView = true;
+                            p.canCreate = true;
+                            p.canEdit = true;
+                            p.canDelete = true;
+                            p.canPost = true;
+                            p.canUnpost = true;
+                        } else if (preset === 'clear') {
+                            p.canView = false;
+                            p.canCreate = false;
+                            p.canEdit = false;
+                            p.canDelete = false;
+                            p.canPost = false;
+                            p.canUnpost = false;
+                        }
+                    });
+                }
+
+                function selectUser(id) {
+                    if (currentUserId.value === id) return;
+                    currentUserId.value = id;
+                    reloadMatrix();
+                }
+
+                function reloadMatrix() {
+                    if (!currentUserId.value) return;
+                    isLoading.value = true;
+                    const vtParam = (currentVoucherType.value !== null && currentVoucherType.value !== undefined) ? currentVoucherType.value : '';
+                    const url = `@Url.Action("GetMatrix", "PaymentMethodPermissions")?userId=${currentUserId.value}&voucherType=${vtParam}`;
+                    $.get(url, function(res) {
+                        isLoading.value = false;
+                        if (res.success && res.data) {
+                            permissions.value = normalizePerms(res.data.permissions || res.data.Permissions);
+                        } else {
+                            Swal.fire('خطأ', res.message || 'تعذر تحميل الصلاحيات.', 'error');
+                        }
+                    }).fail(function() {
+                        isLoading.value = false;
+                        Swal.fire('خطأ', 'فشل الاتصال بالخادم.', 'error');
+                    });
+                }
+
+                function savePermissions() {
+                    if (!currentUserId.value) {
+                        Swal.fire('تنبيه', 'يرجى اختيار مستخدم أولاً.', 'warning');
+                        return;
+                    }
+
+                    isSaving.value = true;
+                    const payload = {
+                        userId: currentUserId.value,
+                        voucherType: currentVoucherType.value,
+                        permissions: permissions.value.map(p => ({
+                            paymentMethod: p.paymentMethod,
+                            canView: Boolean(p.canView),
+                            canCreate: Boolean(p.canCreate),
+                            canEdit: Boolean(p.canEdit),
+                            canDelete: Boolean(p.canDelete),
+                            canPost: Boolean(p.canPost),
+                            canUnpost: Boolean(p.canUnpost)
+                        }))
+                    };
+
+                    $.ajax({
+                        url: `@Url.Action("Save", "PaymentMethodPermissions")`,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        data: JSON.stringify(payload),
+                        success: function(res) {
+                            isSaving.value = false;
+                            if (res.success) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'تم الحفظ بنجاح!',
+                                    text: res.message,
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                });
+                            } else {
+                                Swal.fire('فشل الحفظ', res.message, 'error');
+                            }
+                        },
+                        error: function() {
+                            isSaving.value = false;
+                            Swal.fire('خطأ', 'فشل الاتصال بالخادم أثناء الحفظ.', 'error');
+                        }
+                    });
+                }
+
+                return {
+                    currentUserId,
+                    currentVoucherType,
+                    userFilter,
+                    filteredUsers,
+                    currentUserName,
+                    isLoading,
+                    isSaving,
+                    permissions,
+                    getMethodNameAr,
+                    getMethodCode,
+                    getMethodIcon,
+                    isRowAllChecked,
+                    toggleRow,
+                    applyPreset,
+                    selectUser,
+                    reloadMatrix,
+                    savePermissions
+                };
+            }
+        }).mount('#pmPermApp');
+    </script>
+}

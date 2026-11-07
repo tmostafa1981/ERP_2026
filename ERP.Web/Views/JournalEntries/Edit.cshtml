@@ -1,0 +1,1401 @@
+@model ERP.Domain.Entities.JournalEntryHeader
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = $"تعديل قيد يومية: {Model.EntryNumber}";
+    var fiscalYear = ViewBag.CurrentFiscalYear as ERP.Domain.Entities.FiscalYear;
+    var currencies = ViewBag.Currencies as List<ERP.Domain.Entities.Currency> ?? new List<ERP.Domain.Entities.Currency>();
+}
+
+<!-- Vue 3 CDN -->
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+
+<style>
+    /* Paste Container Styles */
+    .paste-container {
+        outline: none;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .paste-container:focus-within {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    }
+    .row-has-error {
+        background-color: #fff5f5 !important;
+    }
+    .is-invalid-cell {
+        border-color: #dc3545 !important;
+        background-color: #fff8f8;
+    }
+    .invalid-cell-feedback {
+        font-size: 0.72rem;
+        color: #dc3545;
+        margin-top: 2px;
+        display: block;
+    }
+    .grid-input-sm {
+        font-size: 0.82rem;
+        padding: 0.25rem 0.4rem;
+    }
+</style>
+
+<div id="journalEntryApp" class="container-fluid py-3">
+    <!-- Header Title & Breadcrumb -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0 text-primary">
+                <i class="fa-solid fa-pen-to-square me-2"></i> تعديل قيد يومية عامة مسودة: <span class="badge bg-secondary">@Model.EntryNumber</span>
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item"><a asp-action="Index">قيود اليومية</a></li>
+                    <li class="breadcrumb-item"><a asp-action="Details" asp-route-id="@Model.Id">تفاصيل القيد</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">تعديل قيد @Model.EntryNumber</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة للتفاصيل
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert / Notifications -->
+    <div v-if="notification.show" :class="['alert', 'alert-' + notification.type, 'alert-dismissible fade show shadow-sm']" role="alert">
+        <i class="fa-solid fa-circle-info me-2"></i>
+        <span>{{ notification.message }}</span>
+        <button type="button" class="btn-close" @@click="notification.show = false"></button>
+    </div>
+
+    <!-- 1. Header Information Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="fa-solid fa-id-card me-1 text-primary"></i> بيانات رأس القيد (Journal Header)
+            </h6>
+            <div>
+                <span class="badge bg-light text-dark border me-2">
+                    <i class="fa-solid fa-building me-1 text-secondary"></i> @ViewBag.CurrentBranchName
+                </span>
+                <span class="badge bg-light text-dark border">
+                    <i class="fa-solid fa-calendar me-1 text-secondary"></i> @(fiscalYear?.LocalizedName ?? "السنة المالية الحالية")
+                </span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <!-- Entry Number Preview -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">رقم القيد:</label>
+                    <input type="text" class="form-control form-control-sm font-monospace bg-light fw-bold" 
+                           v-model="header.entryNumber" readonly>
+                </div>
+
+                <!-- Entry Date -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">تاريخ القيد <span class="text-danger">*</span>:</label>
+                    <input type="date" class="form-control form-control-sm" v-model="header.entryDate" @@change="onHeaderDateChange" required>
+                </div>
+
+                <!-- Reference Number -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">الرقم المرجعي (يدوي/خارجي):</label>
+                    <input type="text" class="form-control form-control-sm font-monospace" 
+                           v-model="header.referenceNumber" placeholder="مثال: REF-1092">
+                </div>
+
+                <!-- Currency & Default Exchange Rate -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">العملة ومعامل الصرف الافتراضي:</label>
+                    <div class="input-group input-group-sm">
+                        <select class="form-select form-select-sm" v-model="header.currencyId" @@change="onHeaderCurrencyChange">
+                            @foreach (var c in currencies)
+                            {
+                                <option value="@c.Id" data-rate="@c.ExchangeRate">@c.Code - @c.LocalizedName</option>
+                            }
+                        </select>
+                        <input type="number" step="0.000001" min="0.000001" class="form-control form-control-sm text-end font-monospace" 
+                               style="max-width: 100px;" v-model.number="header.exchangeRate" @@input="onHeaderExchangeRateChange" title="سعر الصرف">
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div class="col-md-8">
+                    <label class="form-label small fw-bold">البيان المختصر للقيد <span class="text-danger">*</span>:</label>
+                    <input type="text" class="form-control form-control-sm" v-model="header.description" 
+                           placeholder="مثال: قيد تسوية رواتب شهر سبتمبر 2026" required>
+                </div>
+
+                <!-- Notes -->
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">ملاحظات إضافية:</label>
+                    <input type="text" class="form-control form-control-sm" v-model="header.notes" 
+                           placeholder="ملاحظات توثيقية إضافية...">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Details Grid Card (Vue.js & Excel Copy-Paste) -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+            <h6 class="mb-0 fw-bold">
+                <i class="fa-solid fa-table-list me-1"></i> أسطر القيد المحاسبي (Multi-Currency & Sub-Ledger Grid)
+            </h6>
+            <div class="badge bg-light text-dark py-1 px-2">
+                <i class="fa-solid fa-file-excel text-success me-1"></i>
+                يدعم اللصق المباشر من Excel (Ctrl + V)
+            </div>
+        </div>
+
+        <div class="card-body p-2">
+            <!-- Excel Paste Guide Banner -->
+            <div class="alert alert-light border py-1 px-3 mb-2 d-flex justify-content-between align-items-center small">
+                <span class="text-muted">
+                    <i class="fa-solid fa-file-excel text-success me-1"></i>
+                    <strong>ترتيب أعمدة النسخ من Excel:</strong> 
+                    <template v-if="features.enableCostCenter">
+                        [1] كود الحساب &bull; [2] مدين &bull; [3] دائن &bull; [4] العملة (اختياري: USD, EUR...) &bull; [5] سعر الصرف (اختياري) &bull; [6] كود مركز التكلفة &bull; [7] البيان
+                    </template>
+                    <template v-else>
+                        [1] كود الحساب &bull; [2] مدين &bull; [3] دائن &bull; [4] العملة (اختياري: USD, EUR...) &bull; [5] سعر الصرف (اختياري) &bull; [6] البيان
+                    </template>
+                </span>
+                <span class="text-secondary small">اضغط داخل الجدول أو في الصفحة واضغط <strong>Ctrl + V</strong> للصق البيانات</span>
+            </div>
+
+            <!-- Details Table -->
+            <div class="table-responsive paste-container" tabindex="0">
+                <table class="table table-bordered table-sm align-middle mb-0" id="journalLinesTable">
+                    <thead class="table-dark text-center small">
+                        <tr>
+                            <th style="width: 35px;">#</th>
+                            <th style="min-width: 130px;">نوع الحركة</th>
+                            <th style="min-width: 210px;">الطرف / الحساب المساعد</th>
+                            <th style="min-width: 270px;">الحساب المالي (GL)</th>
+                            <th style="width: 120px;">مدين</th>
+                            <th style="width: 120px;">دائن</th>
+                            <th style="width: 160px;">العملة والمعامل</th>
+                            <th style="width: 105px;" class="d-none d-md-table-cell">معادل محلي</th>
+                            <th v-if="features.enableCostCenter" style="min-width: 140px;">مركز التكلفة</th>
+                            <th>البيان</th>
+                            <th style="width: 45px;">إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(line, index) in lines" :key="line.id" :class="{ 'row-has-error': line.errors.hasError }">
+                            <!-- Line Number -->
+                            <td class="text-center fw-bold text-muted small">{{ line.lineNumber }}</td>
+
+                            <!-- Line Type Dropdown -->
+                            <td>
+                                <select class="form-select grid-input-sm fw-bold" 
+                                        v-model.number="line.subLedgerType" 
+                                        @@change="onLineTypeChange(line)">
+                                    <option :value="0">حساب عام (Account)</option>
+                                    <option :value="1">عميل (Customer)</option>
+                                    <option :value="2">مورد (Vendor)</option>
+                                    <option :value="3">بنك (Bank)</option>
+                                    <option :value="4">موظف (Employee)</option>
+                                </select>
+                            </td>
+
+                            <!-- Sub-Ledger (Dual-Mode Searchable Lookup) -->
+                            <td>
+                                <!-- If Customer or Vendor: Searchable Lookup -->
+                                <div v-if="line.subLedgerType === 1 || line.subLedgerType === 2">
+                                    <!-- Selected State -->
+                                    <div v-if="line.subLedgerId" class="d-flex align-items-center justify-content-between p-1 px-2 bg-light border rounded small">
+                                        <span class="fw-bold text-dark text-truncate" :title="line.subLedgerDisplayName">
+                                            <i :class="line.subLedgerType === 1 ? 'fa-solid fa-user text-primary' : 'fa-solid fa-truck text-secondary'" class="me-1"></i>
+                                            {{ line.subLedgerDisplayName }}
+                                        </span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-danger ms-1" @@click="clearSubLedger(line)" title="مسح">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                    <!-- Unselected State: Quick Search + Modal Button -->
+                                    <div v-else class="input-group input-group-sm position-relative">
+                                        <input type="text" class="form-control grid-input-sm" 
+                                               :placeholder="line.subLedgerType === 1 ? 'كود / اسم / ضريبي العميل...' : 'كود / اسم / ضريبي المورد...'"
+                                               v-model="line.subLedgerSearchQuery" 
+                                               @@input="onSubLedgerQuickSearch(line)"
+                                               @@keydown="onSearchKeydown($event, line, 'subledger')"
+                                               @@focus="onSubLedgerQuickSearch(line)"
+                                               :class="{ 'is-invalid-cell': !line.subLedgerId }">
+                                        <button class="btn btn-outline-secondary btn-sm px-2" type="button" 
+                                                @@click="openSubLedgerModal(line)" title="بحث متقدم [...]">
+                                            <i class="fa-solid fa-ellipsis"></i>
+                                        </button>
+                                        <!-- Quick Search Results Dropdown -->
+                                        <div v-if="activeDropdown.show && activeDropdown.lineId === line.id && activeDropdown.field === 'subledger'" 
+                                             class="dropdown-menu show p-0 shadow-lg border-primary" 
+                                             style="position: absolute; top: 100%; right: 0; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                            <div v-if="activeDropdown.loading" class="text-center py-2 small text-muted">
+                                                <span class="spinner-border spinner-border-sm me-1"></span> جاري البحث...
+                                            </div>
+                                            <div v-else-if="activeDropdown.items.length === 0" class="text-center py-2 small text-muted">
+                                                لا توجد نتائج مطابقة
+                                            </div>
+                                            <div v-else>
+                                                <a v-for="(item, idx) in activeDropdown.items" :key="item.id" 
+                                                   href="#" class="dropdown-item py-1 px-2 border-bottom small"
+                                                   :class="{ 'active': activeDropdown.selectedIndex === idx }"
+                                                   @@click.prevent="selectSubLedgerItem(line, item)">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <span class="font-monospace fw-bold">{{ item.code }}</span>
+                                                        <span v-if="item.subTitle" class="badge bg-light text-dark border">{{ item.subTitle }}</span>
+                                                    </div>
+                                                    <div class="text-truncate fw-semibold">{{ item.nameAr || item.nameEn }}</div>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span v-if="!line.subLedgerId" class="invalid-cell-feedback">يرجى تحديد الطرف</span>
+                                </div>
+                                <!-- Bank -->
+                                <div v-else-if="line.subLedgerType === 3" class="text-center">
+                                    <span class="badge bg-secondary-subtle text-secondary border">من شجرة الحسابات</span>
+                                </div>
+                                <!-- Employee -->
+                                <div v-else-if="line.subLedgerType === 4" class="text-center">
+                                    <span class="badge bg-secondary-subtle text-secondary border">من شجرة الحسابات</span>
+                                </div>
+                                <!-- General Account -->
+                                <div v-else class="text-center text-muted small">-</div>
+                            </td>
+
+                            <!-- Financial Account (GL / Control Account) -->
+                            <td>
+                                <!-- ReadOnly for Customer or Vendor -->
+                                <div v-if="line.subLedgerType === 1 || line.subLedgerType === 2">
+                                    <div v-if="line.accountId" class="d-flex align-items-center justify-content-between p-1 px-2 bg-light border rounded small">
+                                        <span class="fw-bold text-dark font-monospace text-truncate" :title="line.accountDisplayName">
+                                            <i class="fa-solid fa-lock text-muted me-1"></i> {{ line.accountDisplayName }}
+                                        </span>
+                                        <span class="badge bg-primary-subtle text-primary border ms-1" style="font-size: 0.65rem; white-space: nowrap;">حساب رقابة</span>
+                                    </div>
+                                    <div v-else class="text-danger small py-1 px-1 bg-light border rounded">
+                                        <i class="fa-solid fa-triangle-exclamation text-danger me-1"></i>
+                                        <span v-if="line.subLedgerId">لا يوجد حساب رقابة مرتبط بالطرف!</span>
+                                        <span v-else class="text-muted">اختر الطرف أولاً...</span>
+                                    </div>
+                                </div>
+                                <!-- Dual-Mode Searchable Lookup for Account / Bank / Employee -->
+                                <div v-else>
+                                    <!-- Selected State -->
+                                    <div v-if="line.accountId" class="d-flex align-items-center justify-content-between p-1 px-2 bg-light border rounded small">
+                                        <span class="fw-bold text-dark font-monospace text-truncate" :title="line.accountDisplayName">
+                                            <i class="fa-solid fa-book-bookmark text-primary me-1"></i> {{ line.accountDisplayName }}
+                                        </span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-danger ms-1" @@click="clearAccount(line)" title="مسح">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                    <!-- Unselected State: Quick Search + Modal Button -->
+                                    <div v-else class="input-group input-group-sm position-relative">
+                                        <input type="text" class="form-control grid-input-sm" 
+                                               placeholder="ابحث برقم أو اسم الحساب..."
+                                               v-model="line.accountSearchQuery" 
+                                               @@input="onAccountQuickSearch(line)"
+                                               @@keydown="onSearchKeydown($event, line, 'account')"
+                                               @@focus="onAccountQuickSearch(line)"
+                                               :class="{ 'is-invalid-cell': !line.accountId }">
+                                        <button class="btn btn-outline-secondary btn-sm px-2" type="button" 
+                                                @@click="openAccountModal(line)" title="بحث متقدم [...]">
+                                            <i class="fa-solid fa-ellipsis"></i>
+                                        </button>
+                                        <!-- Quick Search Results Dropdown -->
+                                        <div v-if="activeDropdown.show && activeDropdown.lineId === line.id && activeDropdown.field === 'account'" 
+                                             class="dropdown-menu show p-0 shadow-lg border-primary" 
+                                             style="position: absolute; top: 100%; right: 0; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                            <div v-if="activeDropdown.loading" class="text-center py-2 small text-muted">
+                                                <span class="spinner-border spinner-border-sm me-1"></span> جاري البحث...
+                                            </div>
+                                            <div v-else-if="activeDropdown.items.length === 0" class="text-center py-2 small text-muted">
+                                                لا توجد نتائج مطابقة
+                                            </div>
+                                            <div v-else>
+                                                <a v-for="(item, idx) in activeDropdown.items" :key="item.id" 
+                                                   href="#" class="dropdown-item py-1 px-2 border-bottom small"
+                                                   :class="{ 'active': activeDropdown.selectedIndex === idx }"
+                                                   @@click.prevent="selectAccountItem(line, item)">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <span class="font-monospace fw-bold text-primary">{{ item.code }}</span>
+                                                        <span v-if="item.badgeText" class="badge bg-info-subtle text-info border" style="font-size:0.65rem;">{{ item.badgeText }}</span>
+                                                    </div>
+                                                    <div class="text-truncate fw-semibold">{{ item.nameAr || item.nameEn }}</div>
+                                                    <div v-if="item.subTitle" class="text-muted" style="font-size:0.7rem;">{{ item.subTitle }}</div>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span v-if="!line.accountId" class="invalid-cell-feedback">يرجى تحديد الحساب</span>
+                                </div>
+                            </td>
+
+                            <!-- Debit Foreign -->
+                            <td>
+                                <input type="number" step="0.0001" min="0" class="form-control grid-input-sm text-end font-monospace"
+                                       v-model.number="line.debitForeign" @@input="onAmountInput(line, 'debit')"
+                                       :class="{ 'is-invalid-cell': line.errors.invalidAmount }">
+                            </td>
+
+                            <!-- Credit Foreign -->
+                            <td>
+                                <input type="number" step="0.0001" min="0" class="form-control grid-input-sm text-end font-monospace"
+                                       v-model.number="line.creditForeign" @@input="onAmountInput(line, 'credit')"
+                                       :class="{ 'is-invalid-cell': line.errors.invalidAmount }">
+                            </td>
+
+                            <!-- Currency & Exchange Rate at Line Level -->
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <select class="form-select grid-input-sm fw-bold" 
+                                            v-model="line.currencyId" 
+                                            :disabled="line.isCurrencyLocked"
+                                            @@change="onLineCurrencyChange(line)"
+                                            title="عملة السطر (تُقفل تلقائياً إذا كان الحساب أو الطرف مقيداً بعملة محددة)">
+                                        <option v-for="c in currenciesList" :key="c.id" :value="c.id">
+                                            {{ c.code }}
+                                        </option>
+                                    </select>
+                                    <input type="number" step="0.000001" min="0.000001" 
+                                           class="form-control grid-input-sm text-end font-monospace" 
+                                           style="max-width: 80px;" 
+                                           v-model.number="line.exchangeRate" 
+                                           @@input="calculateTotals" 
+                                           title="سعر صرف السطر">
+                                </div>
+                            </td>
+
+                            <!-- Local Equivalent (Computed) -->
+                            <td class="text-end small d-none d-md-table-cell bg-light font-monospace">
+                                <div v-if="line.debitLocal > 0" class="text-primary fw-bold">+{{ formatMoney(line.debitLocal) }}</div>
+                                <div v-else-if="line.creditLocal > 0" class="text-danger fw-bold">-{{ formatMoney(line.creditLocal) }}</div>
+                                <div v-else class="text-muted">0.00</div>
+                            </td>
+
+                            <!-- Cost Center (Dual-Mode Searchable Lookup) -->
+                            <td v-if="features.enableCostCenter">
+                                <!-- Selected State -->
+                                <div v-if="line.costCenterId" class="d-flex align-items-center justify-content-between p-1 px-2 bg-light border rounded small">
+                                    <span class="fw-bold text-dark text-truncate" :title="line.costCenterDisplayName">
+                                        <i class="fa-solid fa-sitemap text-secondary me-1"></i>
+                                        {{ line.costCenterDisplayName }}
+                                    </span>
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-danger ms-1" @@click="clearCostCenter(line)" title="مسح">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                                <!-- Unselected State: Quick Search + Modal Button -->
+                                <div v-else class="input-group input-group-sm position-relative">
+                                    <input type="text" class="form-control grid-input-sm" 
+                                           placeholder="كود أو اسم المركز..."
+                                           v-model="line.costCenterSearchQuery" 
+                                           @@input="onCostCenterQuickSearch(line)"
+                                           @@keydown="onSearchKeydown($event, line, 'costcenter')"
+                                           @@focus="onCostCenterQuickSearch(line)"
+                                           :class="{ 'is-invalid-cell': line.errors.requiresCostCenterMissing }">
+                                    <button class="btn btn-outline-secondary btn-sm px-2" type="button" 
+                                            @@click="openCostCenterModal(line)" title="بحث متقدم [...]">
+                                        <i class="fa-solid fa-ellipsis"></i>
+                                    </button>
+                                    <!-- Quick Search Results Dropdown -->
+                                    <div v-if="activeDropdown.show && activeDropdown.lineId === line.id && activeDropdown.field === 'costcenter'" 
+                                         class="dropdown-menu show p-0 shadow-lg border-primary" 
+                                         style="position: absolute; top: 100%; right: 0; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                        <div v-if="activeDropdown.loading" class="text-center py-2 small text-muted">
+                                            <span class="spinner-border spinner-border-sm me-1"></span> جاري البحث...
+                                        </div>
+                                        <div v-else-if="activeDropdown.items.length === 0" class="text-center py-2 small text-muted">
+                                            لا توجد نتائج مطابقة
+                                        </div>
+                                        <div v-else>
+                                            <a v-for="(item, idx) in activeDropdown.items" :key="item.id" 
+                                               href="#" class="dropdown-item py-1 px-2 border-bottom small"
+                                               :class="{ 'active': activeDropdown.selectedIndex === idx }"
+                                               @@click.prevent="selectCostCenterItem(line, item)">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="font-monospace fw-bold text-secondary">{{ item.code }}</span>
+                                                </div>
+                                                <div class="text-truncate fw-semibold">{{ item.nameAr || item.nameEn }}</div>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span v-if="line.errors.requiresCostCenterMissing" class="invalid-cell-feedback">
+                                    هذا الحساب يتطلب مركز تكلفة!
+                                </span>
+                            </td>
+
+                            <!-- Line Description -->
+                            <td>
+                                <input type="text" class="form-control grid-input-sm" v-model="line.description" placeholder="بيان السطر...">
+                            </td>
+
+                            <!-- Delete Action -->
+                            <td class="text-center">
+                                <button type="button" class="btn btn-outline-danger btn-sm p-1" @@click="removeLine(index)" title="حذف السطر">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Add/Clear Row Buttons -->
+            <div class="d-flex justify-content-between align-items-center mt-2 px-1">
+                <button type="button" class="btn btn-sm btn-outline-primary" @@click="addNewLine">
+                    <i class="fa-solid fa-plus me-1"></i> إضافة سطر محاسبي
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @@click="clearAllLines">
+                    <i class="fa-solid fa-broom me-1"></i> تفريغ الجدول
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. Totals and Balance Bar (Real-Time) -->
+        <div class="card-footer bg-light border-top py-3">
+            <div class="row align-items-center text-center text-md-start">
+                <div class="col-md-3">
+                    <span class="text-muted d-block small">إجمالي المدين (محلي):</span>
+                    <h5 class="mb-0 text-primary fw-bold font-monospace">{{ formatMoney(totals.totalDebitLocal) }}</h5>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted d-block small">إجمالي الدائن (محلي):</span>
+                    <h5 class="mb-0 text-primary fw-bold font-monospace">{{ formatMoney(totals.totalCreditLocal) }}</h5>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted d-block small">فرق التوازن (Difference):</span>
+                    <h5 class="mb-0 fw-bold font-monospace" :class="totals.differenceLocal === 0 ? 'text-success' : 'text-danger'">
+                        {{ formatMoney(totals.differenceLocal) }}
+                    </h5>
+                </div>
+                <div class="col-md-3 text-center text-md-end mt-2 mt-md-0">
+                    <span v-if="totals.isBalanced" class="badge bg-success p-2 fs-6">
+                        <i class="fa-solid fa-check-circle me-1"></i> القيد متوازن
+                    </span>
+                    <span v-else class="badge bg-danger p-2 fs-6">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i> غير متوازن
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submit Action Buttons -->
+    <div class="d-flex justify-content-end gap-2 pt-2">
+        <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-secondary px-3">إلغاء</a>
+        <button type="button" class="btn btn-primary px-5 py-2 fw-bold" 
+                @@click="submitJournalEntry" 
+                :disabled="!totals.isBalanced || isSubmitting || hasAnyBlockingErrors">
+            <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else class="fa-solid fa-floppy-disk me-1"></i> حفظ التعديلات
+        </button>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+    <script>
+        window.journalEntryData = {
+            currencies: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(currencies.Select(c => new { id = c.Id, code = c.Code, name = c.LocalizedName, rate = c.ExchangeRate }))),
+            currentBranchId: @Model.BranchId,
+            currentFiscalYearId: @Model.FiscalYearId,
+            enableCostCenter: @(ViewBag.EnableCostCenter == true ? "true" : "false"),
+            existingHeader: {
+                id: @Model.Id,
+                rowVersion: '@Convert.ToBase64String(Model.RowVersion)',
+                entryNumber: '@Model.EntryNumber',
+                entryDate: '@Model.EntryDate.ToString("yyyy-MM-dd")',
+                branchId: @Model.BranchId,
+                fiscalYearId: @Model.FiscalYearId,
+                currencyId: @(currencies.FirstOrDefault()?.Id ?? 1),
+                exchangeRate: @(currencies.FirstOrDefault()?.ExchangeRate ?? 1.0m),
+                referenceNumber: '@(Model.ReferenceNumber?.Replace("'", "\\'") ?? "")',
+                description: '@(Model.Description?.Replace("'", "\\'") ?? "")',
+                notes: '@(Model.Notes?.Replace("'", "\\'") ?? "")'
+            },
+            existingLines: @Html.Raw(ViewBag.ExistingLinesJson ?? "[]")
+        };
+    </script>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                const currencies = window.journalEntryData.currencies || [];
+                const defaultCurrency = currencies.length > 0 ? currencies[0] : { id: 1, rate: 1.0 };
+                const existingHeader = window.journalEntryData.existingHeader || {};
+                const existingLines = window.journalEntryData.existingLines || [];
+
+                return {
+                    features: {
+                        enableCostCenter: window.journalEntryData.enableCostCenter === true
+                    },
+
+                    header: {
+                        id: existingHeader.id || 0,
+                        rowVersion: existingHeader.rowVersion || '',
+                        entryNumber: existingHeader.entryNumber || '',
+                        entryDate: existingHeader.entryDate || new Date().toISOString().split('T')[0],
+                        branchId: existingHeader.branchId || window.journalEntryData.currentBranchId,
+                        fiscalYearId: existingHeader.fiscalYearId || window.journalEntryData.currentFiscalYearId,
+                        currencyId: existingHeader.currencyId || defaultCurrency.id,
+                        exchangeRate: parseFloat(existingHeader.exchangeRate) || 1.000000,
+                        referenceNumber: existingHeader.referenceNumber || '',
+                        description: existingHeader.description || '',
+                        notes: existingHeader.notes || ''
+                    },
+
+                    currenciesList: currencies,
+
+                    lines: existingLines.length > 0 ? existingLines.map(l => ({
+                        ...l,
+                        currencyManuallySet: true,
+                        isCurrencyLocked: !!(l.subLedgerId || l.isCurrencyLocked),
+                        errors: {
+                            accountNotFound: false,
+                            controlAccountMissing: false,
+                            costCenterInvalid: false,
+                            requiresCostCenterMissing: false,
+                            invalidAmount: false,
+                            rateMissing: false,
+                            hasError: false
+                        }
+                    })) : [],
+
+                    activeDropdown: {
+                        show: false,
+                        lineId: null,
+                        field: null, // 'subledger', 'account', or 'costcenter'
+                        items: [],
+                        loading: false,
+                        selectedIndex: -1
+                    },
+                    quickSearchTimer: null,
+
+                    totals: {
+                        totalDebitLocal: 0,
+                        totalCreditLocal: 0,
+                        differenceLocal: 0,
+                        isBalanced: false
+                    },
+
+                    isSubmitting: false,
+                    _lastPasteTimestamp: 0,
+                    notification: { show: false, message: '', type: 'info' }
+                };
+            },
+
+            computed: {
+                hasAnyBlockingErrors() {
+                    if (this.lines.length < 2) return true;
+                    return this.lines.some(l => 
+                        !l.accountId || 
+                        ((l.subLedgerType === 1 || l.subLedgerType === 2) && !l.subLedgerId) ||
+                        l.errors.accountNotFound || 
+                        l.errors.controlAccountMissing ||
+                        l.errors.rateMissing ||
+                        !l.exchangeRate || l.exchangeRate <= 0 ||
+                        (this.features.enableCostCenter && l.errors.requiresCostCenterMissing) ||
+                        (l.debitForeign <= 0 && l.creditForeign <= 0) ||
+                        (l.debitForeign > 0 && l.creditForeign > 0)
+                    );
+                }
+            },
+
+            mounted() {
+                if (this.lines.length === 0) {
+                    this.addNewLine();
+                    this.addNewLine();
+                } else {
+                    this.calculateTotals();
+                }
+
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.position-relative')) {
+                        this.activeDropdown.show = false;
+                    }
+                });
+
+                document.addEventListener('paste', (e) => {
+                    this.handleExcelPaste(e);
+                });
+            },
+
+            methods: {
+                // ============================================================
+                // Dual-Mode Searchable Lookups (Quick Search & Modal Popup)
+                // ============================================================
+                onSubLedgerQuickSearch(line) {
+                    const q = (line.subLedgerSearchQuery || '').trim();
+                    const type = line.subLedgerType === 1 ? 'customer' : 'vendor';
+                    this.activeDropdown = {
+                        show: true,
+                        lineId: line.id,
+                        field: 'subledger',
+                        items: [],
+                        loading: true,
+                        selectedIndex: -1
+                    };
+
+                    clearTimeout(this.quickSearchTimer);
+                    this.quickSearchTimer = setTimeout(() => {
+                        window.ErpLookup.search(type, q, 1, 10).done(res => {
+                            if (this.activeDropdown.lineId === line.id && this.activeDropdown.field === 'subledger') {
+                                this.activeDropdown.items = res.items || [];
+                                this.activeDropdown.loading = false;
+                            }
+                        }).fail(() => {
+                            if (this.activeDropdown.lineId === line.id) {
+                                this.activeDropdown.loading = false;
+                            }
+                        });
+                    }, 250);
+                },
+
+                onAccountQuickSearch(line) {
+                    const q = (line.accountSearchQuery || '').trim();
+                    this.activeDropdown = {
+                        show: true,
+                        lineId: line.id,
+                        field: 'account',
+                        items: [],
+                        loading: true,
+                        selectedIndex: -1
+                    };
+
+                    clearTimeout(this.quickSearchTimer);
+                    this.quickSearchTimer = setTimeout(() => {
+                        window.ErpLookup.search('account', q, 1, 10, { transactionalOnly: 'true' }).done(res => {
+                            if (this.activeDropdown.lineId === line.id && this.activeDropdown.field === 'account') {
+                                this.activeDropdown.items = res.items || [];
+                                this.activeDropdown.loading = false;
+                            }
+                        }).fail(() => {
+                            if (this.activeDropdown.lineId === line.id) {
+                                this.activeDropdown.loading = false;
+                            }
+                        });
+                    }, 250);
+                },
+
+                onCostCenterQuickSearch(line) {
+                    const q = (line.costCenterSearchQuery || '').trim();
+                    this.activeDropdown = {
+                        show: true,
+                        lineId: line.id,
+                        field: 'costcenter',
+                        items: [],
+                        loading: true,
+                        selectedIndex: -1
+                    };
+
+                    clearTimeout(this.quickSearchTimer);
+                    this.quickSearchTimer = setTimeout(() => {
+                        window.ErpLookup.search('costcenter', q, 1, 10).done(res => {
+                            if (this.activeDropdown.lineId === line.id && this.activeDropdown.field === 'costcenter') {
+                                this.activeDropdown.items = res.items || [];
+                                this.activeDropdown.loading = false;
+                            }
+                        }).fail(() => {
+                            if (this.activeDropdown.lineId === line.id) {
+                                this.activeDropdown.loading = false;
+                            }
+                        });
+                    }, 250);
+                },
+
+                onSearchKeydown(event, line, field) {
+                    if (!this.activeDropdown.show || this.activeDropdown.lineId !== line.id || this.activeDropdown.field !== field) return;
+
+                    if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        if (this.activeDropdown.selectedIndex < this.activeDropdown.items.length - 1) {
+                            this.activeDropdown.selectedIndex++;
+                        }
+                    } else if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        if (this.activeDropdown.selectedIndex > 0) {
+                            this.activeDropdown.selectedIndex--;
+                        }
+                    } else if (event.key === 'Enter') {
+                        event.preventDefault();
+                        if (this.activeDropdown.selectedIndex >= 0 && this.activeDropdown.items[this.activeDropdown.selectedIndex]) {
+                            const item = this.activeDropdown.items[this.activeDropdown.selectedIndex];
+                            if (field === 'subledger') this.selectSubLedgerItem(line, item);
+                            else if (field === 'costcenter') this.selectCostCenterItem(line, item);
+                            else this.selectAccountItem(line, item);
+                        } else {
+                            const q = (field === 'subledger' ? line.subLedgerSearchQuery : (field === 'costcenter' ? line.costCenterSearchQuery : line.accountSearchQuery)) || '';
+                            const type = field === 'subledger' ? (line.subLedgerType === 1 ? 'customer' : 'vendor') : (field === 'costcenter' ? 'costcenter' : 'account');
+                            if (q.trim()) {
+                                window.ErpLookup.getByCode(type, q.trim()).done(res => {
+                                    if (res) {
+                                        if (field === 'subledger') this.selectSubLedgerItem(line, res);
+                                        else if (field === 'costcenter') this.selectCostCenterItem(line, res);
+                                        else this.selectAccountItem(line, res);
+                                    }
+                                });
+                            }
+                        }
+                    } else if (event.key === 'Escape') {
+                        this.activeDropdown.show = false;
+                    }
+                },
+
+                openSubLedgerModal(line) {
+                    const type = line.subLedgerType === 1 ? 'customer' : 'vendor';
+                    window.ErpLookup.openModal({
+                        type: type,
+                        initialQuery: line.subLedgerSearchQuery || '',
+                        onSelect: (item) => {
+                            this.selectSubLedgerItem(line, item);
+                        }
+                    });
+                },
+
+                openAccountModal(line) {
+                    window.ErpLookup.openModal({
+                        type: 'account',
+                        initialQuery: line.accountSearchQuery || '',
+                        filters: { transactionalOnly: 'true' },
+                        onSelect: (item) => {
+                            this.selectAccountItem(line, item);
+                        }
+                    });
+                },
+
+                openCostCenterModal(line) {
+                    window.ErpLookup.openModal({
+                        type: 'costcenter',
+                        initialQuery: line.costCenterSearchQuery || '',
+                        onSelect: (item) => {
+                            this.selectCostCenterItem(line, item);
+                        }
+                    });
+                },
+
+                selectSubLedgerItem(line, item) {
+                    line.subLedgerId = item.id;
+                    line.subLedgerDisplayName = `${item.code} - ${item.nameAr || item.nameEn}`;
+                    line.subLedgerSearchQuery = '';
+                    this.activeDropdown.show = false;
+                    line.errors.controlAccountMissing = false;
+
+                    if (item.extraData && item.extraData.controlAccountId) {
+                        line.accountId = item.extraData.controlAccountId;
+                        window.ErpLookup.getById('account', item.extraData.controlAccountId).done(acc => {
+                            if (acc) {
+                                line.accountDisplayName = `${acc.code} - ${acc.nameAr || acc.nameEn}`;
+                                line.rawAccountCode = acc.code;
+                                line.errors.requiresCostCenterMissing = this.features.enableCostCenter && acc.extraData && acc.extraData.requiresCostCenter && !line.costCenterId;
+                            }
+                            this.updateLineErrorState(line);
+                            this.calculateTotals();
+                        });
+
+                        if (item.extraData && item.extraData.currencyId) {
+                            line.currencyId = item.extraData.currencyId;
+                            line.isCurrencyLocked = true;
+                            this.resolveLineRate(line);
+                        } else if (item.id) {
+                            const pType = line.subLedgerType === 1 ? 'Customer' : (line.subLedgerType === 2 ? 'Vendor' : null);
+                            if (pType) {
+                                fetch(`@Url.Action("GetPartyCurrency", "CurrencyRates")?partyType=${pType}&partyId=${item.id}`)
+                                    .then(r => r.json())
+                                    .then(res => {
+                                        if (res.success && res.currencyId) {
+                                            line.currencyId = res.currencyId;
+                                            line.isCurrencyLocked = true;
+                                            this.resolveLineRate(line);
+                                        }
+                                    });
+                            }
+                        }
+                    } else {
+                        line.accountId = null;
+                        line.accountDisplayName = '';
+                        line.errors.controlAccountMissing = true;
+                    }
+
+                    this.updateLineErrorState(line);
+                    this.calculateTotals();
+                },
+
+                selectAccountItem(line, item) {
+                    line.accountId = item.id;
+                    line.accountDisplayName = `${item.code} - ${item.nameAr || item.nameEn}`;
+                    line.rawAccountCode = item.code;
+                    line.accountSearchQuery = '';
+                    this.activeDropdown.show = false;
+                    line.errors.accountNotFound = false;
+
+                    if (item.extraData) {
+                        line.errors.requiresCostCenterMissing = this.features.enableCostCenter && item.extraData.requiresCostCenter && !line.costCenterId;
+                        if (item.extraData.currencyId) {
+                            line.currencyId = item.extraData.currencyId;
+                            line.isCurrencyLocked = true;
+                            this.resolveLineRate(line);
+                        }
+                    }
+
+                    this.updateLineErrorState(line);
+                    this.calculateTotals();
+                },
+
+                clearSubLedger(line) {
+                    line.subLedgerId = null;
+                    line.subLedgerDisplayName = '';
+                    line.subLedgerSearchQuery = '';
+                    line.accountId = null;
+                    line.accountDisplayName = '';
+                    line.isCurrencyLocked = false;
+                    line.errors.controlAccountMissing = false;
+                    this.updateLineErrorState(line);
+                    this.calculateTotals();
+                },
+
+                clearAccount(line) {
+                    line.accountId = null;
+                    line.accountDisplayName = '';
+                    line.accountSearchQuery = '';
+                    line.rawAccountCode = '';
+                    line.isCurrencyLocked = false;
+                    line.errors.accountNotFound = false;
+                    line.errors.requiresCostCenterMissing = false;
+                    this.updateLineErrorState(line);
+                    this.calculateTotals();
+                },
+
+                selectCostCenterItem(line, item) {
+                    line.costCenterId = item.id;
+                    line.costCenterDisplayName = `${item.code} - ${item.nameAr || item.nameEn}`;
+                    line.costCenterSearchQuery = '';
+                    this.activeDropdown.show = false;
+                    line.errors.requiresCostCenterMissing = false;
+                    this.updateLineErrorState(line);
+                },
+
+                clearCostCenter(line) {
+                    line.costCenterId = null;
+                    line.costCenterDisplayName = '';
+                    line.costCenterSearchQuery = '';
+                    if (this.features.enableCostCenter && line.accountId) {
+                        window.ErpLookup.getById('account', line.accountId).done(acc => {
+                            if (acc && acc.extraData && acc.extraData.requiresCostCenter) {
+                                line.errors.requiresCostCenterMissing = true;
+                            }
+                            this.updateLineErrorState(line);
+                        });
+                    } else {
+                        line.errors.requiresCostCenterMissing = false;
+                        this.updateLineErrorState(line);
+                    }
+                },
+
+                onLineTypeChange(line) {
+                    this.clearSubLedger(line);
+                    this.clearAccount(line);
+                    line.subLedgerType = parseInt(line.subLedgerType || 0);
+                    this.updateLineErrorState(line);
+                    this.calculateTotals();
+                },
+
+                // ============================================================
+                // Excel Copy-Paste Handler & Currency Detection
+                // ============================================================
+                findCurrency(str) {
+                    if (!str || typeof str !== 'string') return null;
+                    const clean = str.trim().toUpperCase();
+                    if (!clean) return null;
+                    return this.currenciesList.find(c => 
+                        (c.code && c.code.trim().toUpperCase() === clean) || 
+                        (c.name && c.name.trim().toUpperCase() === clean)
+                    ) || null;
+                },
+
+                handleExcelPaste(event) {
+                    const clipboardData = event.clipboardData || window.clipboardData;
+                    if (!clipboardData) return;
+
+                    const text = clipboardData.getData('text');
+                    if (!text || text.trim() === '') return;
+                    if (!text.includes('\t') && !text.includes('\n')) return;
+
+                    // If user is focused on a header input (document number, remarks, etc.), do not hijack normal typing/paste
+                    const activeEl = document.activeElement;
+                    if (activeEl && (activeEl.id === 'headerDocNumber' || activeEl.id === 'headerDescription' || activeEl.id === 'headerEntryDate')) {
+                        if (!text.includes('\t') && !text.includes('\n')) return;
+                    }
+
+                    // Debounce guard to prevent duplicate invocation within 600ms
+                    const now = Date.now();
+                    if (this._lastPasteTimestamp && (now - this._lastPasteTimestamp < 600)) {
+                        return;
+                    }
+                    this._lastPasteTimestamp = now;
+
+                    event.preventDefault();
+                    if (event.stopPropagation) event.stopPropagation();
+                    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+                    const rawRows = text.split(/\r?\n/).filter(r => r.trim().length > 0);
+                    if (rawRows.length === 0) return;
+
+                    // Filter out header row if user copied column titles
+                    const rows = rawRows.filter(r => {
+                        const firstCols = r.split('\t').map(c => c.trim().toLowerCase());
+                        const c0 = firstCols[0] || '';
+                        const c1 = firstCols[1] || '';
+                        const isHeader = c0.includes('حساب') || c0.includes('account') || 
+                                         c0.includes('كود') || c0.includes('code') || 
+                                         c1.includes('مدين') || c1.includes('debit');
+                        return !isHeader;
+                    });
+
+                    if (rows.length === 0) return;
+
+                    // Clear empty placeholder rows if any
+                    this.lines = this.lines.filter(l => l.accountId || l.debitForeign > 0 || l.creditForeign > 0 || l.description);
+
+                    let currenciesMatchedCount = 0;
+
+                    rows.forEach(row => {
+                        const cols = row.split('\t').map(c => c ? c.trim() : '');
+                        const rawCode = cols[0] || '';
+                        const debit = this.parseCleanNumber(cols[1] || '0');
+                        const credit = this.parseCleanNumber(cols[2] || '0');
+
+                        let matchedCurrency = null;
+                        let customRate = null;
+                        let rawCostCenter = '';
+                        let rawDesc = '';
+
+                        let nextIdx = 3;
+                        // 1. Check if cols[nextIdx] is Currency code or name (e.g. USD, EUR, EGP, ريال...)
+                        if (nextIdx < cols.length) {
+                            const cur = this.findCurrency(cols[nextIdx]);
+                            if (cur) {
+                                matchedCurrency = cur;
+                                currenciesMatchedCount++;
+                                nextIdx++;
+                                // Check if next col is a custom Exchange Rate (numeric > 0)
+                                if (nextIdx < cols.length) {
+                                    const rawVal = cols[nextIdx];
+                                    const parsedNum = this.parseCleanNumber(rawVal);
+                                    const isNumeric = /^[\d.,٠-٩]+$/.test(rawVal) && parsedNum > 0;
+                                    if (isNumeric) {
+                                        customRate = parsedNum;
+                                        nextIdx++;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. Check if next col is Cost Center (if feature enabled)
+                        if (this.features.enableCostCenter && nextIdx < cols.length) {
+                            if (nextIdx + 1 < cols.length) {
+                                rawCostCenter = cols[nextIdx];
+                                nextIdx++;
+                            }
+                        }
+
+                        // 3. Remaining columns form the Description
+                        if (nextIdx < cols.length) {
+                            rawDesc = cols.slice(nextIdx).join(' ').trim();
+                        }
+                        if (!rawDesc) {
+                            rawDesc = this.header.description || '';
+                        }
+
+                        // Line Currency & Exchange Rate assignment
+                        let lineCurId = this.header.currencyId;
+                        let lineRate = parseFloat(this.header.exchangeRate) || 1.0;
+                        let isCurManual = false;
+
+                        if (matchedCurrency) {
+                            lineCurId = matchedCurrency.id;
+                            lineRate = customRate ? customRate : (parseFloat(matchedCurrency.rate) || 1.0);
+                            isCurManual = true;
+                        }
+
+                        const newLine = {
+                            id: Date.now() + Math.random(),
+                            lineNumber: this.lines.length + 1,
+                            subLedgerType: 0,
+                            subLedgerId: null,
+                            subLedgerDisplayName: '',
+                            subLedgerSearchQuery: '',
+                            accountId: null,
+                            accountDisplayName: '',
+                            accountSearchQuery: '',
+                            rawAccountCode: rawCode,
+                            currencyId: lineCurId,
+                            exchangeRate: lineRate,
+                            currencyManuallySet: isCurManual,
+                            debitForeign: debit,
+                            creditForeign: credit,
+                            debitLocal: Number((debit * lineRate).toFixed(4)),
+                            creditLocal: Number((credit * lineRate).toFixed(4)),
+                            costCenterId: null,
+                            costCenterDisplayName: '',
+                            costCenterSearchQuery: '',
+                            description: rawDesc,
+                            notes: '',
+                            errors: {
+                                accountNotFound: false,
+                                controlAccountMissing: false,
+                                costCenterInvalid: false,
+                                requiresCostCenterMissing: false,
+                                invalidAmount: false,
+                                hasError: false
+                            }
+                        };
+
+                        this.lines.push(newLine);
+
+                        if (this.features.enableCostCenter && rawCostCenter) {
+                            window.ErpLookup.getByCode('costcenter', rawCostCenter).done(cc => {
+                                if (cc) {
+                                    this.selectCostCenterItem(newLine, cc);
+                                }
+                            });
+                        }
+
+                        if (rawCode) {
+                            window.ErpLookup.getByCode('account', rawCode).done(acc => {
+                                if (acc) {
+                                    this.selectAccountItem(newLine, acc);
+                                } else {
+                                    window.ErpLookup.getByCode('customer', rawCode).done(cust => {
+                                        if (cust) {
+                                            newLine.subLedgerType = 1;
+                                            this.selectSubLedgerItem(newLine, cust);
+                                        } else {
+                                            window.ErpLookup.getByCode('vendor', rawCode).done(vend => {
+                                                if (vend) {
+                                                    newLine.subLedgerType = 2;
+                                                    this.selectSubLedgerItem(newLine, vend);
+                                                } else {
+                                                    newLine.errors.accountNotFound = true;
+                                                    this.updateLineErrorState(newLine);
+                                                }
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    });
+
+                    this.reindexLines();
+                    this.calculateTotals();
+
+                    const curInfo = currenciesMatchedCount > 0 ? ` (تم تمييز العملة وأسعار الصرف لـ ${currenciesMatchedCount} سطر)` : '';
+                    this.showNotice(`تم استيراد ولصق ${rows.length} سطر بنجاح${curInfo}.`, 'success');
+                },
+
+                // ============================================================
+                // Row Management & Calculations
+                // ============================================================
+                addNewLine() {
+                    const defaultCurId = this.header.currencyId || (this.currenciesList.length > 0 ? this.currenciesList[0].id : 1);
+                    const curObj = this.currenciesList.find(c => c.id === defaultCurId);
+                    const rate = curObj ? parseFloat(curObj.rate) : (parseFloat(this.header.exchangeRate) || 1.0);
+
+                    this.lines.push({
+                        id: Date.now() + Math.random(),
+                        lineNumber: this.lines.length + 1,
+                        subLedgerType: 0,
+                        subLedgerId: null,
+                        subLedgerDisplayName: '',
+                        subLedgerSearchQuery: '',
+                        accountId: null,
+                        accountDisplayName: '',
+                        accountSearchQuery: '',
+                        rawAccountCode: '',
+                        currencyId: defaultCurId,
+                        exchangeRate: rate,
+                        currencyManuallySet: false,
+                        debitForeign: 0,
+                        creditForeign: 0,
+                        debitLocal: 0,
+                        creditLocal: 0,
+                        costCenterId: null,
+                        costCenterDisplayName: '',
+                        costCenterSearchQuery: '',
+                        isCurrencyLocked: false,
+                        description: this.header.description || '',
+                        notes: '',
+                        errors: {
+                            accountNotFound: false,
+                            controlAccountMissing: false,
+                            costCenterInvalid: false,
+                            requiresCostCenterMissing: false,
+                            invalidAmount: false,
+                            rateMissing: false,
+                            hasError: false
+                        }
+                    });
+                    this.calculateTotals();
+                },
+
+                removeLine(index) {
+                    if (this.lines.length <= 2) {
+                        alert('قيد اليومية يجب أن يحتوي على سطرين على الأقل.');
+                        return;
+                    }
+                    this.lines.splice(index, 1);
+                    this.reindexLines();
+                    this.calculateTotals();
+                },
+
+                clearAllLines() {
+                    if (!confirm('هل أنت متأكد من مسح جميع أسطر القيد؟')) return;
+                    this.lines = [];
+                    this.addNewLine();
+                    this.addNewLine();
+                    this.calculateTotals();
+                },
+
+                reindexLines() {
+                    this.lines.forEach((line, i) => line.lineNumber = i + 1);
+                },
+
+                resolveLineRate(line) {
+                    if (!line.currencyId || !this.header.entryDate) return;
+                    fetch(`@Url.Action("GetRate", "CurrencyRates")?currencyId=${line.currencyId}&documentDate=${this.header.entryDate}`)
+                        .then(r => r.json())
+                        .then(res => {
+                            if (res.success) {
+                                line.exchangeRate = res.rate;
+                                line.errors.rateMissing = false;
+                            } else {
+                                line.exchangeRate = 0;
+                                line.errors.rateMissing = true;
+                            }
+                            this.calculateTotals();
+                        })
+                        .catch(() => {
+                            this.calculateTotals();
+                        });
+                },
+
+                onHeaderDateChange() {
+                    this.lines.forEach(l => {
+                        this.resolveLineRate(l);
+                    });
+                },
+
+                onLineCurrencyChange(line) {
+                    line.currencyManuallySet = true;
+                    this.resolveLineRate(line);
+                },
+
+                onCostCenterChange(line) {
+                    if (this.features.enableCostCenter && line.accountId) {
+                        window.ErpLookup.getById('account', line.accountId).done(acc => {
+                            if (acc && acc.extraData && acc.extraData.requiresCostCenter) {
+                                line.errors.requiresCostCenterMissing = !line.costCenterId;
+                            } else {
+                                line.errors.requiresCostCenterMissing = false;
+                            }
+                            this.updateLineErrorState(line);
+                        });
+                    } else {
+                        line.errors.requiresCostCenterMissing = false;
+                        this.updateLineErrorState(line);
+                    }
+                },
+
+                onAmountInput(line, type) {
+                    if (type === 'debit' && line.debitForeign > 0) {
+                        line.creditForeign = 0;
+                    } else if (type === 'credit' && line.creditForeign > 0) {
+                        line.debitForeign = 0;
+                    }
+                    this.calculateTotals();
+                },
+
+                calculateTotals() {
+                    let totalDebitLocal = 0;
+                    let totalCreditLocal = 0;
+
+                    this.lines.forEach(line => {
+                        const df = parseFloat(line.debitForeign) || 0;
+                        const cf = parseFloat(line.creditForeign) || 0;
+                        const rate = parseFloat(line.exchangeRate) || 1.0;
+
+                        line.debitLocal = Number((df * rate).toFixed(4));
+                        line.creditLocal = Number((cf * rate).toFixed(4));
+
+                        totalDebitLocal += line.debitLocal;
+                        totalCreditLocal += line.creditLocal;
+
+                        this.updateLineErrorState(line);
+                    });
+
+                    this.totals.totalDebitLocal = Number(totalDebitLocal.toFixed(4));
+                    this.totals.totalCreditLocal = Number(totalCreditLocal.toFixed(4));
+
+                    const diff = Number(Math.abs(this.totals.totalDebitLocal - this.totals.totalCreditLocal).toFixed(4));
+                    this.totals.differenceLocal = diff;
+                    this.totals.isBalanced = (diff === 0) && (this.totals.totalDebitLocal > 0);
+                },
+
+                updateLineErrorState(line) {
+                    const subLedgerMissing = (line.subLedgerType === 1 || line.subLedgerType === 2) && !line.subLedgerId;
+                    const accountMissing = !line.accountId;
+                    line.errors.hasError = 
+                        accountMissing ||
+                        subLedgerMissing ||
+                        line.errors.accountNotFound || 
+                        line.errors.controlAccountMissing ||
+                        (this.features.enableCostCenter && (line.errors.requiresCostCenterMissing || line.errors.costCenterInvalid)) ||
+                        (line.debitForeign > 0 && line.creditForeign > 0) ||
+                        (line.debitForeign <= 0 && line.creditForeign <= 0 && (line.subLedgerId || line.accountId));
+                },
+
+                onHeaderCurrencyChange(e) {
+                    const selected = e.target.options[e.target.selectedIndex];
+                    const rate = parseFloat(selected.getAttribute('data-rate')) || 1.0;
+                    this.header.exchangeRate = rate;
+                    this.lines.forEach(l => {
+                        if (!l.currencyManuallySet) {
+                            l.currencyId = this.header.currencyId;
+                            l.exchangeRate = rate;
+                        }
+                    });
+                    this.calculateTotals();
+                },
+
+                onHeaderExchangeRateChange() {
+                    const rate = parseFloat(this.header.exchangeRate) || 1.0;
+                    this.lines.forEach(l => {
+                        if (!l.currencyManuallySet) {
+                            l.exchangeRate = rate;
+                        }
+                    });
+                    this.calculateTotals();
+                },
+
+                parseCleanNumber(val) {
+                    if (!val) return 0;
+                    const arabicNumbers = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
+                    let cleanStr = val.toString().trim();
+                    for (let i = 0; i < 10; i++) cleanStr = cleanStr.replace(arabicNumbers[i], i);
+                    cleanStr = cleanStr.replace(/,/g, '').replace(/[^\d.-]/g, '');
+                    const parsed = parseFloat(cleanStr);
+                    return isNaN(parsed) ? 0 : parsed;
+                },
+
+                formatMoney(val) {
+                    if (!val) return '0.00';
+                    return parseFloat(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                },
+
+                showNotice(msg, type = 'info') {
+                    this.notification = { show: true, message: msg, type: type };
+                    setTimeout(() => { this.notification.show = false; }, 8000);
+                },
+
+                // ============================================================
+                // Submit Journal Entry to Server
+                // ============================================================
+                submitJournalEntry() {
+                    if (!this.header.description || this.header.description.trim() === '') {
+                        alert('يرجى إدخال البيان المختصر لرأس القيد.');
+                        return;
+                    }
+
+                    if (!this.totals.isBalanced) {
+                        alert('لا يمكن حفظ القيد: القيد غير متوازن محلياً!');
+                        return;
+                    }
+
+                    if (this.hasAnyBlockingErrors) {
+                        alert('يرجى تصحيح الخلايا المميزة بالأحمر قبل الحفظ.');
+                        return;
+                    }
+
+                    if (this.lines.some(l => !l.exchangeRate || l.exchangeRate <= 0 || l.errors.rateMissing)) {
+                        alert('لا يمكن حفظ القيد: يوجد سطر أو أكثر بدون سعر صرف مسجل حتى تاريخ القيد. يرجى مراجعة سجل أسعار الصرف.');
+                        return;
+                    }
+
+                    this.isSubmitting = true;
+
+                    const payload = {
+                        Id: parseInt(this.header.id),
+                        BranchId: parseInt(this.header.branchId),
+                        FiscalYearId: parseInt(this.header.fiscalYearId),
+                        RowVersion: this.header.rowVersion ? this.header.rowVersion : null,
+                        EntryNumber: this.header.entryNumber,
+                        EntryDate: this.header.entryDate,
+                        Description: this.header.description.trim(),
+                        ReferenceNumber: this.header.referenceNumber ? this.header.referenceNumber.trim() : null,
+                        Notes: this.header.notes ? this.header.notes.trim() : null,
+                        SourceDocumentType: 1, // ManualJV
+                        Lines: this.lines.map((l, idx) => ({
+                            LineNumber: idx + 1,
+                            AccountId: parseInt(l.accountId),
+                            SubLedgerType: parseInt(l.subLedgerType || 0),
+                            SubLedgerId: l.subLedgerId ? parseInt(l.subLedgerId) : null,
+                            CurrencyId: parseInt(l.currencyId || this.header.currencyId),
+                            ExchangeRate: parseFloat(l.exchangeRate) || 1.0,
+                            DebitForeign: parseFloat(l.debitForeign) || 0,
+                            CreditForeign: parseFloat(l.creditForeign) || 0,
+                            DebitLocal: parseFloat(l.debitLocal) || 0,
+                            CreditLocal: parseFloat(l.creditLocal) || 0,
+                            CostCenterId: l.costCenterId ? parseInt(l.costCenterId) : null,
+                            Description: l.description ? l.description.trim() : this.header.description.trim(),
+                            Notes: l.notes ? l.notes.trim() : null
+                        }))
+                    };
+
+                    const token = $('input[name="__RequestVerificationToken"]').val();
+
+                    fetch('@Url.Action("Edit", "JournalEntries")', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': token
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(async res => {
+                        const text = await res.text();
+                        let data;
+                        try {
+                            data = JSON.parse(text);
+                        } catch (e) {
+                            throw new Error('استجابة غير متوقعة من الخادم (كود ' + res.status + ')');
+                        }
+                        return data;
+                    })
+                    .then(data => {
+                        this.isSubmitting = false;
+                        if (data && data.success) {
+                            window.location.href = '@Url.Action("Details", "JournalEntries")/' + data.id;
+                        } else {
+                            alert(data && data.message ? data.message : 'حدث خطأ أثناء حفظ التعديلات.');
+                        }
+                    })
+                    .catch(err => {
+                        this.isSubmitting = false;
+                        alert('حدث خطأ أثناء إرسال البيانات: ' + (err.message || err));
+                    });
+                }
+            }
+        }).mount('#journalEntryApp');
+    </script>
+}

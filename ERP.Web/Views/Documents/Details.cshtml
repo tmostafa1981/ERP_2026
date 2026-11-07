@@ -1,0 +1,574 @@
+@model ERP.Application.DTOs.DocumentHeaderDto
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = $"{Model.TransactionTypeName} - {Model.DocumentNumber}";
+}
+
+<div class="container-fluid py-3">
+    <!-- Action Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="mb-1 text-primary fw-bold">
+                <i class="fa-solid fa-file-invoice me-2"></i>
+                @Model.TransactionTypeName - <span class="font-monospace">@Model.DocumentNumber</span>
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item"><a asp-action="Index">المستندات والفواتير</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">تفاصيل @Model.DocumentNumber</li>
+                </ol>
+            </nav>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <!-- Print -->
+            <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+                <i class="fa-solid fa-print me-1"></i> طباعة
+            </button>
+
+            <!-- Conversion Action -->
+            @if (Model.Status == DocumentStatus.Posted && Model.ConversionStatus != DocumentConversionStatus.FullyConverted)
+            {
+                <a asp-action="Convert" asp-route-sourceId="@Model.Id" class="btn btn-primary">
+                    <i class="fa-solid fa-shuffle me-1"></i> تحويل المستند...
+                </a>
+            }
+
+            <!-- Edit / Delete Actions -->
+            @if (Model.Status == DocumentStatus.Posted)
+            {
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-primary">
+                    <i class="fa-solid fa-pen me-1"></i> تعديل المستند
+                </a>
+                <button type="button" class="btn btn-outline-danger" id="btnDelete" data-id="@Model.Id" data-number="@Model.DocumentNumber" data-status="@Model.Status">
+                    <i class="fa-solid fa-trash-can me-1"></i> حذف المستند
+                </button>
+            }
+
+            <a asp-action="Index" class="btn btn-outline-dark">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Alerts -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-4 @(Model.Status == DocumentStatus.Posted ? "border-success" : (Model.Status == DocumentStatus.Cancelled ? "border-danger" : "border-secondary"))">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small text-muted">حالة المستند</div>
+                        <div class="fw-bold fs-6 mt-1">
+                            @if (Model.Status == DocumentStatus.Posted)
+                            {
+                                <span class="badge bg-success"><i class="fa-solid fa-check-circle me-1"></i>معتمد / نافذ</span>
+                            }
+                            else if (Model.Status == DocumentStatus.Cancelled)
+                            {
+                                <span class="badge bg-danger"><i class="fa-solid fa-ban me-1"></i>ملغى</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary"><i class="fa-solid fa-circle-info me-1"></i>@Model.Status</span>
+                            }
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-circle-check fs-2 text-muted opacity-50"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-4 @(Model.ConversionStatus == DocumentConversionStatus.FullyConverted ? "border-info" : (Model.ConversionStatus == DocumentConversionStatus.PartiallyConverted ? "border-primary" : "border-secondary"))">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small text-muted">حالة التحويل</div>
+                        <div class="fw-bold fs-6 mt-1">
+                            @if (Model.ConversionStatus == DocumentConversionStatus.FullyConverted)
+                            {
+                                <span class="badge bg-info text-dark"><i class="fa-solid fa-check-double me-1"></i>محول كلياً</span>
+                            }
+                            else if (Model.ConversionStatus == DocumentConversionStatus.PartiallyConverted)
+                            {
+                                <span class="badge bg-primary"><i class="fa-solid fa-pie-chart me-1"></i>محول جزئياً</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">غير محول</span>
+                            }
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-shuffle fs-2 text-muted opacity-50"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-4 border-info">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small text-muted">أثر المخزون</div>
+                        <div class="fw-bold fs-6 mt-1">
+                            @switch (Model.InventoryEffect)
+                            {
+                                case InventoryEffect.IssueStock:
+                                    <span class="badge bg-danger"><i class="fa-solid fa-arrow-trend-down me-1"></i>صرف بضاعة</span>
+                                    break;
+                                case InventoryEffect.ReceiveStock:
+                                    <span class="badge bg-success"><i class="fa-solid fa-arrow-trend-up me-1"></i>إضافة بضاعة</span>
+                                    break;
+                                case InventoryEffect.ReserveStock:
+                                    <span class="badge bg-warning text-dark"><i class="fa-solid fa-lock me-1"></i>حجز مخزون</span>
+                                    break;
+                                default:
+                                    <span class="badge bg-light text-muted border">بدون أثر مخزني</span>
+                                    break;
+                            }
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-warehouse fs-2 text-muted opacity-50"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-4 @(Model.JournalEntryHeaderId.HasValue ? "border-success" : "border-secondary")">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small text-muted">القيد المحاسبي</div>
+                        <div class="fw-bold fs-6 mt-1">
+                            @if (Model.JournalEntryHeaderId.HasValue)
+                            {
+                                <a asp-controller="JournalEntries" asp-action="Details" asp-route-id="@Model.JournalEntryHeaderId.Value" class="badge bg-success text-decoration-none" target="_blank">
+                                    <i class="fa-solid fa-link me-1"></i>قيد رقم @Model.JournalEntryNumber
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-muted border">لا يوجد قيد</span>
+                            }
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-book-journal-whills fs-2 text-muted opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Master Info Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-light py-2">
+            <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-circle-info text-primary me-2"></i>بيانات المستند الأساسية</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">كود ونوع الحركة:</span>
+                    <span class="fw-bold">@Model.TransactionTypeName (<span class="badge bg-secondary">@Model.TransactionTypeCode</span>)</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">الفرع:</span>
+                    <span class="fw-bold">@Model.BranchName</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">تاريخ المستند:</span>
+                    <span class="fw-bold font-monospace">@Model.DocumentDate.ToString("yyyy-MM-dd")</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">تاريخ الاستحقاق:</span>
+                    <span class="fw-bold font-monospace">@(Model.DueDate?.ToString("yyyy-MM-dd") ?? "—")</span>
+                </div>
+
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">الطرف التجاري:</span>
+                    <span class="fw-bold">@(string.IsNullOrWhiteSpace(Model.PartyName) ? "—" : Model.PartyName)</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">طريقة السداد:</span>
+                    <span class="fw-bold">
+                        @(Model.PaymentMethod == VoucherPaymentMethod.Cash ? "نقدي (Cash)" : (Model.PaymentMethod == VoucherPaymentMethod.Cheque ? "شيك (Cheque)" : (Model.PaymentMethod == VoucherPaymentMethod.BankTransfer ? "تحويل بنكي (Bank Transfer)" : "آجل / أخرى")))
+                    </span>
+                </div>
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">حساب الخزينة / البنك:</span>
+                    <span class="fw-bold">@(string.IsNullOrWhiteSpace(Model.CashBankAccountName) ? "—" : Model.CashBankAccountName)</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">المستودع الرئيسي:</span>
+                    <span class="fw-bold">@(string.IsNullOrWhiteSpace(Model.WarehouseName) ? "—" : Model.WarehouseName)</span>
+                </div>
+
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">العملة وسعر الصرف:</span>
+                    <span class="fw-bold">@Model.CurrencyCode (1 = @Model.ExchangeRate.ToString("N4"))</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="small text-muted d-block">الرقم المرجعي:</span>
+                    <span class="fw-bold font-monospace">@(string.IsNullOrWhiteSpace(Model.ReferenceNumber) ? "—" : Model.ReferenceNumber)</span>
+                </div>
+                <div class="col-md-6">
+                    <span class="small text-muted d-block">ملاحظات:</span>
+                    <span class="fw-bold">@(string.IsNullOrWhiteSpace(Model.Notes) ? "—" : Model.Notes)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lines Details -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-list-check text-primary me-2"></i>الأصناف والبنود (@Model.Lines.Count)</h6>
+        </div>
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-hover table-bordered mb-0 align-middle">
+                <thead class="table-light text-nowrap">
+                    <tr>
+                        <th style="width: 40px;" class="text-center">#</th>
+                        <th>كود الصنف</th>
+                        <th>اسم الصنف</th>
+                        <th>التتبع</th>
+                        <th>الوحدة</th>
+                        <th class="text-end">الكمية</th>
+                        <th class="text-end">محول</th>
+                        <th class="text-end">متبقي</th>
+                        <th class="text-end">سعر الوحدة</th>
+                        <th class="text-end">الخصم</th>
+                        <th class="text-end">ض.ق.م (%)</th>
+                        <th class="text-end">قيمة الضريبة</th>
+                        <th class="text-end">الإجمالي الصافي</th>
+                        <th>المستودع</th>
+                        <th>مركز التكلفة</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in Model.Lines)
+                    {
+                        <tr>
+                            <td class="text-center fw-bold">@line.LineNumber</td>
+                            <td class="font-monospace fw-semibold text-primary">@line.ItemCode</td>
+                            <td class="fw-bold">
+                                @line.ItemName
+                                @if (line.SerialNumbers.Any())
+                                {
+                                    <div class="mt-1 d-flex flex-wrap gap-1">
+                                        @foreach (var sn in line.SerialNumbers)
+                                        {
+                                            <span class="badge bg-dark font-monospace" style="font-size: 0.75rem;"><i class="fa-solid fa-barcode me-1"></i>@sn</span>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                @if (line.TrackingType == ItemTrackingType.SerialNumber)
+                                {
+                                    <span class="badge bg-primary">سيريال</span>
+                                }
+                                else if (line.TrackingType == ItemTrackingType.BatchNumber)
+                                {
+                                    <span class="badge bg-warning text-dark">تشغيلة</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-muted border">عادي</span>
+                                }
+                            </td>
+                            <td>@line.UnitName</td>
+                            <td class="text-end font-monospace fw-bold">@line.Quantity.ToString("N2")</td>
+                            <td class="text-end font-monospace text-muted">@line.ConvertedQuantity.ToString("N2")</td>
+                            <td class="text-end font-monospace text-primary fw-bold">@line.RemainingQuantity.ToString("N2")</td>
+                            <td class="text-end font-monospace">@line.UnitPrice.ToString("N2")</td>
+                            <td class="text-end font-monospace text-danger">@line.DiscountAmount.ToString("N2")</td>
+                            <td class="text-end font-monospace">@line.TaxRate.ToString("N0")%</td>
+                            <td class="text-end font-monospace">@line.TaxAmount.ToString("N2")</td>
+                            <td class="text-end font-monospace fw-bold text-success">@line.LineTotal.ToString("N2")</td>
+                            <td>@(string.IsNullOrWhiteSpace(line.WarehouseName) ? "—" : line.WarehouseName)</td>
+                            <td>@(string.IsNullOrWhiteSpace(line.CostCenterName) ? "—" : line.CostCenterName)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Additional Charges & Discounts Details (If any) -->
+    @if (Model.Adjustments != null && Model.Adjustments.Any())
+    {
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold text-dark">
+                    <i class="fa-solid fa-calculator text-primary me-2"></i> المصاريف والخصومات الإضافية (@Model.Adjustments.Count)
+                </h6>
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-hover table-bordered mb-0 align-middle text-center small">
+                    <thead class="table-light text-nowrap">
+                        <tr>
+                            <th style="width: 40px;">#</th>
+                            <th style="width: 140px;">النوع</th>
+                            <th>اسم البند والكود</th>
+                            <th class="text-start">حساب الأستاذ العام المرتبط</th>
+                            <th style="width: 110px;">النسبة</th>
+                            <th class="text-end" style="width: 140px;">المبلغ (بالعملة)</th>
+                            <th class="text-end" style="width: 140px;">المبلغ (محلي)</th>
+                            <th class="text-start">ملاحظات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var adj in Model.Adjustments)
+                        {
+                            <tr>
+                                <td class="text-muted fw-bold">@adj.LineNumber</td>
+                                <td>
+                                    @if (adj.AdjustmentType == AdjustmentType.Addition)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border">
+                                            <i class="fa-solid fa-plus-circle me-1"></i> مصروف / إضافة
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border">
+                                            <i class="fa-solid fa-minus-circle me-1"></i> خصم مالي
+                                        </span>
+                                    }
+                                </td>
+                                <td class="fw-bold">
+                                    <span class="badge bg-light text-primary border font-monospace me-1">@adj.AdjustmentCode</span>
+                                    @adj.AdjustmentName
+                                </td>
+                                <td class="text-start">
+                                    <span class="badge bg-light text-dark border font-monospace me-1">@adj.GLAccountCode</span>
+                                    <span class="fw-semibold">@adj.GLAccountName</span>
+                                </td>
+                                <td class="font-monospace">
+                                    @(adj.Percentage.HasValue && adj.Percentage.Value > 0 ? $"{adj.Percentage.Value:0.##} %" : "—")
+                                </td>
+                                <td class="text-end font-monospace fw-bold @(adj.AdjustmentType == AdjustmentType.Addition ? "text-primary" : "text-danger")">
+                                    @(adj.AdjustmentType == AdjustmentType.Addition ? "+" : "-") @adj.Amount.ToString("N2")
+                                </td>
+                                <td class="text-end font-monospace fw-bold text-muted">
+                                    @adj.AmountLocal.ToString("N2")
+                                </td>
+                                <td class="text-start text-muted">
+                                    @(string.IsNullOrWhiteSpace(adj.Notes) ? "—" : adj.Notes)
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- Financial Totals Summary -->
+    <div class="row justify-content-end mb-4">
+        <div class="col-md-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">الإجمالي قبل الخصم والضريبة:</span>
+                        <span class="fw-bold font-monospace">@Model.TotalAmountBeforeTax.ToString("N2")</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 text-danger">
+                        <span>إجمالي الخصومات:</span>
+                        <span class="fw-bold font-monospace">- @Model.DiscountAmount.ToString("N2")</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 text-primary">
+                        <span>المصاريف والإضافات:</span>
+                        <span class="fw-bold font-monospace">+ @Model.TotalAdditions.ToString("N2")</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">ضريبة القيمة المضافة:</span>
+                        <span class="fw-bold font-monospace">+ @Model.TaxAmount.ToString("N2")</span>
+                    </div>
+                    <hr class="my-2" />
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-bold fs-5 text-dark">الصافي النهائي المطلوب:</span>
+                        <span class="fw-bold fs-4 text-success font-monospace">@Model.TotalAmountNet.ToString("N2") @Model.CurrencyCode</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Journal Entry Details Card (If Posted and Generated) -->
+    @if (Model.JournalEntryHeaderId.HasValue && Model.JournalEntryLines.Any())
+    {
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-dark text-white py-2 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">
+                    <i class="fa-solid fa-book-journal-whills text-warning me-2"></i> القيد المحاسبي لليومية العامة (@Model.JournalEntryNumber)
+                </h6>
+                <a asp-controller="JournalEntries" asp-action="Details" asp-route-id="@Model.JournalEntryHeaderId.Value" class="btn btn-outline-light btn-sm py-0 px-2" style="font-size: 0.8rem;" target="_blank">
+                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> فتح صفحة القيد كاملة
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm align-middle mb-0 text-center small" style="font-size: 0.85rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 45px;">#</th>
+                                <th style="width: 140px;">كود الحساب</th>
+                                <th>اسم الحساب</th>
+                                <th style="width: 140px;" class="text-end">مدين (محلي)</th>
+                                <th style="width: 140px;" class="text-end">دائن (محلي)</th>
+                                <th style="width: 90px;">العملة</th>
+                                <th>البيان</th>
+                                <th>مركز التكلفة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var jl in Model.JournalEntryLines)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold">@jl.LineNumber</td>
+                                    <td class="font-monospace fw-bold text-primary">@jl.AccountCode</td>
+                                    <td class="text-start fw-semibold">@jl.AccountName</td>
+                                    <td class="text-end font-monospace fw-bold @(jl.DebitLocal > 0 ? "text-success" : "text-muted")">
+                                        @(jl.DebitLocal > 0 ? jl.DebitLocal.ToString("N2") : "-")
+                                    </td>
+                                    <td class="text-end font-monospace fw-bold @(jl.CreditLocal > 0 ? "text-danger" : "text-muted")">
+                                        @(jl.CreditLocal > 0 ? jl.CreditLocal.ToString("N2") : "-")
+                                    </td>
+                                    <td><span class="badge bg-light text-dark border">@jl.CurrencyCode</span></td>
+                                    <td class="text-start text-muted">@jl.Description</td>
+                                    <td>@(string.IsNullOrWhiteSpace(jl.CostCenterName) ? "-" : jl.CostCenterName)</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="3" class="text-start ps-3">الإجمالي المتوازن للقيد:</td>
+                                <td class="text-end font-monospace text-success fs-6">@Model.JournalEntryLines.Sum(l => l.DebitLocal).ToString("N2")</td>
+                                <td class="text-end font-monospace text-danger fs-6">@Model.JournalEntryLines.Sum(l => l.CreditLocal).ToString("N2")</td>
+                                <td colspan="3"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            // Handle Post
+            const btnPost = document.getElementById('btnPost');
+            if (btnPost) {
+                btnPost.addEventListener('click', async () => {
+                    const docId = btnPost.getAttribute('data-id');
+                    if (!confirm('هل أنت متأكد من رغبتك في ترحيل هذا المستند وتحديث الأرصدة والقيود المحاسبية؟')) return;
+
+                    btnPost.disabled = true;
+                    btnPost.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جاري الترحيل...';
+
+                    try {
+                        const res = await fetch(`/Documents/Post/${docId}`, {
+                            method: 'POST',
+                            headers: {
+                                'RequestVerificationToken': token
+                            }
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert(data.message || 'تم ترحيل المستند بنجاح!');
+                            window.location.reload();
+                        } else {
+                            alert('خطأ أثناء الترحيل: ' + data.message);
+                            btnPost.disabled = false;
+                            btnPost.innerHTML = '<i class="fa-solid fa-check-double me-1"></i> ترحيل الآن';
+                        }
+                    } catch (e) {
+                        alert('حدث خطأ بالاتصال بالسيرفر: ' + e.message);
+                        btnPost.disabled = false;
+                        btnPost.innerHTML = '<i class="fa-solid fa-check-double me-1"></i> ترحيل الآن';
+                    }
+                });
+            }
+
+            // Handle Unpost
+            const btnUnpost = document.getElementById('btnUnpost');
+            if (btnUnpost) {
+                btnUnpost.addEventListener('click', async () => {
+                    const docId = btnUnpost.getAttribute('data-id');
+                    if (!confirm('تحذير: هل أنت متأكد من إلغاء ترحيل هذا المستند؟ سيتم عكس قيود اليومية وحركات المخزون والسيريالات!')) return;
+
+                    btnUnpost.disabled = true;
+                    btnUnpost.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جاري إلغاء الترحيل...';
+
+                    try {
+                        const res = await fetch(`/Documents/Unpost/${docId}`, {
+                            method: 'POST',
+                            headers: {
+                                'RequestVerificationToken': token
+                            }
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert(data.message || 'تم إلغاء ترحيل المستند بنجاح!');
+                            window.location.reload();
+                        } else {
+                            alert('خطأ أثناء إلغاء الترحيل: ' + data.message);
+                            btnUnpost.disabled = false;
+                            btnUnpost.innerHTML = '<i class="fa-solid fa-undo me-1"></i> إلغاء الترحيل';
+                        }
+                    } catch (e) {
+                        alert('حدث خطأ بالاتصال بالسيرفر: ' + e.message);
+                        btnUnpost.disabled = false;
+                        btnUnpost.innerHTML = '<i class="fa-solid fa-undo me-1"></i> إلغاء الترحيل';
+                    }
+                });
+            }
+
+            // Handle Delete
+            const btnDelete = document.getElementById('btnDelete');
+            if (btnDelete) {
+                btnDelete.addEventListener('click', async () => {
+                    const docId = btnDelete.getAttribute('data-id');
+                    const docNum = btnDelete.getAttribute('data-number');
+                    const status = btnDelete.getAttribute('data-status');
+
+                    let confirmMsg = `هل أنت متأكد من حذف المسودة (${docNum})؟ لن يمكن التراجع عن هذه العملية!`;
+                    if (status === 'Posted') {
+                        confirmMsg = `⚠️ تحذير محاسبي ومخزني هام:\nالمستند رقم (${docNum}) مرحل بالفعل!\nحذف هذا المستند سيؤدي إلى إلغاء وحذف القيد المحاسبي المتولد، وإرجاع حركات السيريالات والمخزون وحذف المستند نهائياً.\nهل أنت متأكد من المتابعة والحذف؟`;
+                    }
+
+                    if (!confirm(confirmMsg)) return;
+
+                    btnDelete.disabled = true;
+                    btnDelete.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جاري الحذف...';
+
+                    try {
+                        const res = await fetch(`/Documents/Delete/${docId}`, {
+                            method: 'POST',
+                            headers: {
+                                'RequestVerificationToken': token
+                            }
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert(data.message || 'تم حذف المستند بنجاح!');
+                            window.location.href = '/Documents';
+                        } else {
+                            alert('تعذر الحذف: ' + data.message);
+                            btnDelete.disabled = false;
+                            btnDelete.innerHTML = '<i class="fa-solid fa-trash-can me-1"></i> حذف المستند';
+                        }
+                    } catch (e) {
+                        alert('حدث خطأ بالاتصال بالسيرفر: ' + e.message);
+                        btnDelete.disabled = false;
+                        btnDelete.innerHTML = '<i class="fa-solid fa-trash-can me-1"></i> حذف المستند';
+                    }
+                });
+            }
+        });
+    </script>
+}

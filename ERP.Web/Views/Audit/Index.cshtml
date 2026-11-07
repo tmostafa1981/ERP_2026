@@ -124,31 +124,43 @@
                     <!-- Org Context -->
                     <div class="col-md-3">
                         <label class="form-label erp-label">الشركة (Company)</label>
-                        <select name="CompanyId" class="form-select form-select-sm erp-form-control">
+                        <select name="CompanyId" class="form-select form-select-sm erp-form-control erp-select2" data-lookup-entity="company" data-placeholder="-- كل الشركات --">
                             <option value="">-- كل الشركات --</option>
-                            @foreach (var c in companies)
+                            @if (filter.CompanyId.HasValue)
                             {
-                                <option value="@c.Id" selected="@(filter.CompanyId == c.Id ? "selected" : null)">@c.Code – @c.LocalizedName</option>
+                                var selC = companies.FirstOrDefault(c => c.Id == filter.CompanyId.Value);
+                                if (selC != null)
+                                {
+                                    <option value="@selC.Id" selected="selected">@selC.Code – @selC.LocalizedName</option>
+                                }
                             }
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label erp-label">الفرع (Branch)</label>
-                        <select name="BranchId" class="form-select form-select-sm erp-form-control">
+                        <select name="BranchId" class="form-select form-select-sm erp-form-control erp-select2" data-lookup-entity="branch" data-placeholder="-- كل الفروع --">
                             <option value="">-- كل الفروع --</option>
-                            @foreach (var b in branches)
+                            @if (filter.BranchId.HasValue)
                             {
-                                <option value="@b.Id" selected="@(filter.BranchId == b.Id ? "selected" : null)">@b.Code – @b.LocalizedName</option>
+                                var selB = branches.FirstOrDefault(b => b.Id == filter.BranchId.Value);
+                                if (selB != null)
+                                {
+                                    <option value="@selB.Id" selected="selected">@selB.Code – @selB.LocalizedName</option>
+                                }
                             }
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label erp-label">سنة الجلسة (Session Fiscal Year)</label>
-                        <select name="FiscalYearId" class="form-select form-select-sm erp-form-control">
+                        <select name="FiscalYearId" class="form-select form-select-sm erp-form-control erp-select2" data-lookup-entity="fiscalYear" data-placeholder="-- كل السنوات --">
                             <option value="">-- كل السنوات --</option>
-                            @foreach (var fy in fiscalYears)
+                            @if (filter.FiscalYearId.HasValue)
                             {
-                                <option value="@fy.Id" selected="@(filter.FiscalYearId == fy.Id ? "selected" : null)">@fy.Year – @fy.LocalizedName</option>
+                                var selFY = fiscalYears.FirstOrDefault(fy => fy.Id == filter.FiscalYearId.Value);
+                                if (selFY != null)
+                                {
+                                    <option value="@selFY.Id" selected="selected">@selFY.Year – @selFY.LocalizedName</option>
+                                }
                             }
                         </select>
                     </div>

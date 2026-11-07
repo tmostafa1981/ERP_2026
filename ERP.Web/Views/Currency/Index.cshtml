@@ -14,9 +14,14 @@
         <span class="text-muted" style="font-size: 12.5px;">@Localizer["ManageCurrencies"] (@ViewBag.TotalCount)</span>
     </div>
 
-    <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#createCurrencyModal">
-        <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewCurrency"]
-    </button>
+    <div class="d-flex gap-2">
+        <a asp-controller="CurrencyRates" asp-action="Index" class="btn btn-erp-outline">
+            <i class="fa-solid fa-chart-line me-1 ms-0"></i> سجل أسعار الصرف اليومية
+        </a>
+        <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#createCurrencyModal">
+            <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewCurrency"]
+        </button>
+    </div>
 </div>
 
 @if (TempData["SuccessMessage"] != null)
@@ -61,11 +66,11 @@
     <table class="erp-table">
         <thead>
             <tr>
-                <th style="width: 100px;">@Localizer["Code"]</th>
+                <th style="width: 120px;">@Localizer["Code"]</th>
                 <th>@Localizer["NameAr"]</th>
                 <th>@Localizer["NameEn"]</th>
-                <th style="width: 100px;">@Localizer["Symbol"]</th>
-                <th style="width: 140px;">@Localizer["ExchangeRate"]</th>
+                <th style="width: 100px;" class="text-center">@Localizer["Symbol"]</th>
+                <th style="width: 130px;" class="text-end">@Localizer["ExchangeRate"]</th>
                 <th style="width: 100px;" class="text-center">@Localizer["Status"]</th>
                 <th style="width: 140px;" class="text-center">@Localizer["Actions"]</th>
             </tr>
@@ -79,8 +84,17 @@
                         <td class="fw-bold text-primary">@item.Code</td>
                         <td>@item.NameAr</td>
                         <td>@item.NameEn</td>
-                        <td><span class="badge bg-light text-dark border px-2 py-1">@(item.Symbol ?? "—")</span></td>
-                        <td class="fw-bold">@item.ExchangeRate.ToString("N4")</td>
+                        <td class="text-center">
+                            @if (!string.IsNullOrEmpty(item.Symbol))
+                            {
+                                <span class="badge bg-light text-dark border">@item.Symbol</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </td>
+                        <td class="text-end font-monospace">@item.ExchangeRate.ToString("N4")</td>
                         <td class="text-center">
                             @if (item.IsActive)
                             {
@@ -114,7 +128,7 @@
                             <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content border-0 shadow">
-                                        <form asp-action="Edit" method="post">
+                                        <form asp-action="Edit" method="post" class="erp-modal-form">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="Id" value="@item.Id" />
                                             <div class="modal-header bg-light py-2">
@@ -141,7 +155,7 @@
                                                     </div>
                                                     <div class="col-6">
                                                         <label class="form-label small fw-bold">@Localizer["ExchangeRate"] <span class="text-danger">*</span></label>
-                                                        <input type="number" step="0.0001" name="ExchangeRate" value="@item.ExchangeRate" class="form-control form-control-sm" required min="0.0001" />
+                                                        <input type="number" step="0.0001" min="0.0001" name="ExchangeRate" value="@item.ExchangeRate" class="form-control form-control-sm" required />
                                                     </div>
                                                 </div>
                                                 <div class="form-check form-switch mt-2">
@@ -190,7 +204,7 @@
 <div class="modal fade" id="createCurrencyModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-light py-2">
                     <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2"></i> @Localizer["AddNewCurrency"]</h6>
@@ -199,7 +213,19 @@
                 <div class="modal-body p-3">
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                        <input type="text" name="Code" class="form-control form-control-sm" required maxlength="10" placeholder="EGP" />
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="Code" id="createCurrencyCode" value="@ViewBag.NextCode" class="form-control form-control-sm" required maxlength="10" @(ViewBag.IsAutoCode == true ? "readonly" : "") />
+                            @if (ViewBag.IsManualAllowed == true && ViewBag.IsAutoCode == true)
+                            {
+                                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('createCurrencyCode').removeAttribute('readonly'); this.style.display='none';" title="@Localizer["ManualEntry"]">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            }
+                        </div>
+                        @if (ViewBag.IsAutoCode == true)
+                        {
+                            <span class="text-muted small" style="font-size: 11px;">@Localizer["AutoGeneratedCode"]</span>
+                        }
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
@@ -212,11 +238,11 @@
                     <div class="row g-2 mb-2">
                         <div class="col-6">
                             <label class="form-label small fw-bold">@Localizer["Symbol"]</label>
-                            <input type="text" name="Symbol" class="form-control form-control-sm" maxlength="10" placeholder="ج.م" />
+                            <input type="text" name="Symbol" class="form-control form-control-sm" maxlength="10" placeholder="EGP" />
                         </div>
                         <div class="col-6">
                             <label class="form-label small fw-bold">@Localizer["ExchangeRate"] <span class="text-danger">*</span></label>
-                            <input type="number" step="0.0001" name="ExchangeRate" value="1.0000" class="form-control form-control-sm" required min="0.0001" />
+                            <input type="number" step="0.0001" min="0.0001" name="ExchangeRate" value="1.0000" class="form-control form-control-sm" required />
                         </div>
                     </div>
                     <div class="form-check form-switch mt-2">

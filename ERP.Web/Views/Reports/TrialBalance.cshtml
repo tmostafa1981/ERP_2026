@@ -1,0 +1,349 @@
+@model ERP.Application.DTOs.Reports.TrialBalanceDto
+@using ERP.Application.DTOs.Reports
+@{
+    ViewData["Title"] = "ميزان المراجعة";
+    Layout = "_Layout";
+    var filter = ViewBag.Filter as ReportFilterDto ?? new ReportFilterDto();
+    bool isRequested = ViewBag.IsRequested == true;
+    bool isForeignMode = filter.Mode == ReportDisplayMode.ForeignOnly;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-info text-dark">
+                <i class="fa-solid fa-scale-balanced me-2 text-info"></i>ميزان المراجعة (Trial Balance)
+            </h4>
+            <span class="text-muted small">ميزان المراجعة بالأرصدة والمجاميع بالعملة المحلية والأجنبية عند الطلب</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.TrialBalance.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة (Print)
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.TrialBalance.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('trialBalanceTable', 'TrialBalance')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-list me-1"></i> فهرس التقارير
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="TrialBalance" id="filterForm">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <!-- Fiscal Year -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">السنة المالية</label>
+                        <select name="FiscalYearId" class="form-select form-select-sm" asp-items="ViewBag.FiscalYears">
+                            <option value="">-- اختر السنة --</option>
+                        </select>
+                    </div>
+
+                    <!-- Branch -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">كافة الفروع المتاحة</option>
+                        </select>
+                    </div>
+
+                    <!-- Mode (Local vs Foreign) -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1 text-primary">وضع الميزان (Mode)</label>
+                        <select name="Mode" class="form-select form-select-sm fw-bold">
+                            <option value="1" selected="@(filter.Mode == ReportDisplayMode.LocalOnly)">العملة المحلية (Local Currency)</option>
+                            <option value="2" selected="@(filter.Mode == ReportDisplayMode.ForeignOnly)">العملة الأجنبية (Foreign Currency)</option>
+                        </select>
+                    </div>
+
+                    <!-- Currency Filter -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">تصفية حسب العملة</label>
+                        <select name="CurrencyId" class="form-select form-select-sm" asp-items="ViewBag.Currencies">
+                            <option value="">كافة العملات</option>
+                        </select>
+                    </div>
+
+                    <!-- Date From -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="DateFrom" class="form-control form-control-sm" 
+                               value="@(filter.DateFrom?.ToString("yyyy-MM-dd"))" />
+                    </div>
+
+                    <!-- Date To -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="DateTo" class="form-control form-control-sm" 
+                               value="@(filter.DateTo?.ToString("yyyy-MM-dd"))" />
+                    </div>
+
+                    <!-- Account Level -->
+                    <div class="col-md-2 mt-2">
+                        <label class="form-label small fw-bold mb-1">المستوى الشجري</label>
+                        <select name="AccountLevel" class="form-select form-select-sm">
+                            <option value="">كافة المستويات</option>
+                            <option value="1" selected="@(filter.AccountLevel == 1)">المستوى 1 (رئيسي)</option>
+                            <option value="2" selected="@(filter.AccountLevel == 2)">المستوى 2</option>
+                            <option value="3" selected="@(filter.AccountLevel == 3)">المستوى 3</option>
+                            <option value="4" selected="@(filter.AccountLevel == 4)">المستوى 4</option>
+                            <option value="5" selected="@(filter.AccountLevel == 5)">المستوى 5</option>
+                        </select>
+                    </div>
+
+                    <!-- Only With Transactions Checkbox -->
+                    <div class="col-md-3 mt-2">
+                        <div class="form-check pt-4">
+                            <input class="form-check-input" type="checkbox" name="OnlyWithTransactions" value="true" id="chkOnlyTrans" 
+                                   @(filter.OnlyWithTransactions ? "checked" : "") />
+                            <label class="form-check-label small" for="chkOnlyTrans">
+                                إخفاء الحسابات الصفرية (ذات الرصيد صفر)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Include Drafts Checkbox -->
+                    <div class="col-md-3 mt-2">
+                        <div class="form-check pt-4">
+                            <input class="form-check-input" type="checkbox" name="IncludeDrafts" value="true" id="chkDrafts" 
+                                   @(filter.IncludeDrafts ? "checked" : "") />
+                            <label class="form-check-label small" for="chkDrafts">
+                                تضمين قيود المسودة (Drafts)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="col-md-4 mt-2 text-end">
+                        <button type="submit" class="btn btn-info btn-sm px-4 fw-bold text-white">
+                            <i class="fa-solid fa-filter me-1"></i> استعراض الميزان
+                        </button>
+                        <a asp-action="TrialBalance" class="btn btn-light btn-sm border px-3">
+                            إعادة تعيين
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <!-- Prompt Box when report is not yet requested -->
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-info mb-3">
+                <i class="fa-solid fa-scale-balanced fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث ثم الضغط على "استعراض الميزان"</h5>
+            <p class="text-muted small mb-0">اختر الفرع والسنة المالية ونوع الميزان (محلي أو أجنبي) لعرض الأرصدة ومجاميع ميزان المراجعة والتحقق من التوازن.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Print Report Header -->
+        <div class="report-print-header mb-3 border p-3 rounded bg-white">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="fw-bold mb-1">
+                    ميزان المراجعة: <span class="text-info text-dark">@(isForeignMode ? "بالعملة الأجنبية (Foreign Currency)" : "بالعملة المحلية (Local Currency)")</span>
+                </h5>
+                <div class="small text-muted">
+                    <span>الفرع: <strong>@Model.BranchName</strong></span> | 
+                    <span>السنة المالية: <strong>@Model.FiscalYearName</strong></span> |
+                    @if (!string.IsNullOrEmpty(Model.CurrencyCode)) { <span>العملة المحددة: <strong>@Model.CurrencyCode</strong> | </span> }
+                    <span>الفترة من: <strong>@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? "البداية")</strong> إلى: <strong>@(Model.DateTo?.ToString("yyyy-MM-dd") ?? "الآن")</strong></span>
+                </div>
+            </div>
+            <div class="text-end">
+                @if (Model.IsBalanced)
+                {
+                    <span class="badge bg-success p-2">
+                        <i class="fa-solid fa-check-circle me-1"></i> الميزان متزن (Balanced)
+                    </span>
+                }
+                else
+                {
+                    <span class="badge bg-danger p-2">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i> يوجد فارق توازن: @(Math.Abs(Model.TotalPeriodDebitLocal - Model.TotalPeriodCreditLocal).ToString("N2"))
+                    </span>
+                }
+                <div class="small text-muted mt-1">تاريخ الاستخراج: @DateTime.Now.ToString("yyyy-MM-dd HH:mm")</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trial Balance Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover table-sm align-middle mb-0" id="trialBalanceTable">
+                <thead class="table-dark text-center small align-middle">
+                    <tr>
+                        <th rowspan="2" style="width: 100px;">كود الحساب</th>
+                        <th rowspan="2" style="min-width: 220px;">اسم الحساب</th>
+                        @if (isForeignMode)
+                        {
+                            <th rowspan="2" style="width: 70px;">العملة</th>
+                            <th colspan="2" class="bg-primary bg-opacity-50">رصيد أول المدة (Foreign)</th>
+                            <th colspan="2" class="bg-info bg-opacity-50">حركات الفترة (Foreign)</th>
+                            <th colspan="2" class="bg-success bg-opacity-50">رصيد آخر المدة (Foreign)</th>
+                        }
+                        else
+                        {
+                            <th rowspan="2" style="width: 65px;">الطبيعة</th>
+                            <th colspan="2" class="bg-primary bg-opacity-50">رصيد أول المدة (محلي)</th>
+                            <th colspan="2" class="bg-info bg-opacity-50">حركات الفترة (محلي)</th>
+                            <th colspan="2" class="bg-success bg-opacity-50">رصيد آخر المدة (محلي)</th>
+                        }
+                    </tr>
+                    <tr>
+                        <th style="width: 105px;">مدين</th>
+                        <th style="width: 105px;">دائن</th>
+                        <th style="width: 105px;">مدين</th>
+                        <th style="width: 105px;">دائن</th>
+                        <th style="width: 110px;">مدين</th>
+                        <th style="width: 110px;">دائن</th>
+                    </tr>
+                </thead>
+                <tbody class="small">
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center py-4 text-muted">
+                                لا توجد حسابات أو حركات مطابقة لمعايير البحث.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var row in Model.Items)
+                        {
+                            string rowClass = row.IsGroup ? "table-secondary fw-bold" : "";
+                            <tr class="@rowClass">
+                                <td class="text-center fw-bold">
+                                    @if (!row.IsGroup)
+                                    {
+                                        <a asp-action="AccountStatement" 
+                                           asp-route-submitted="true"
+                                           asp-route-AccountId="@row.AccountId"
+                                           asp-route-DateFrom="@(filter.DateFrom?.ToString("yyyy-MM-dd"))"
+                                           asp-route-DateTo="@(filter.DateTo?.ToString("yyyy-MM-dd"))"
+                                           asp-route-FiscalYearId="@filter.FiscalYearId"
+                                           asp-route-BranchId="@filter.BranchId"
+                                           asp-route-Mode="@((int)filter.Mode)"
+                                           target="_blank" class="text-decoration-none">
+                                            @row.AccountCode
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        @row.AccountCode
+                                    }
+                                </td>
+                                <td>
+                                    <span style="padding-inline-start: @((row.Level - 1) * 16)px;">
+                                        @if (row.IsGroup) { <i class="fa-solid fa-folder text-warning me-1"></i> }
+                                        else { <i class="fa-regular fa-file-lines text-muted me-1"></i> }
+                                        @row.LocalizedAccountName
+                                    </span>
+                                </td>
+
+                                @if (isForeignMode)
+                                {
+                                    <td class="text-center fw-bold">@(row.CurrencyCode ?? "-")</td>
+                                    <!-- Opening Foreign -->
+                                    <td class="text-end dir-ltr">@(row.OpeningDebitForeign > 0 ? row.OpeningDebitForeign.ToString("N2") : "-")</td>
+                                    <td class="text-end dir-ltr">@(row.OpeningCreditForeign > 0 ? row.OpeningCreditForeign.ToString("N2") : "-")</td>
+                                    <!-- Period Foreign -->
+                                    <td class="text-end dir-ltr text-success">@(row.PeriodDebitForeign > 0 ? row.PeriodDebitForeign.ToString("N2") : "-")</td>
+                                    <td class="text-end dir-ltr text-danger">@(row.PeriodCreditForeign > 0 ? row.PeriodCreditForeign.ToString("N2") : "-")</td>
+                                    <!-- Closing Foreign -->
+                                    <td class="text-end dir-ltr fw-bold">@(row.ClosingDebitForeign > 0 ? row.ClosingDebitForeign.ToString("N2") : "-")</td>
+                                    <td class="text-end dir-ltr fw-bold">@(row.ClosingCreditForeign > 0 ? row.ClosingCreditForeign.ToString("N2") : "-")</td>
+                                }
+                                else
+                                {
+                                    <td class="text-center text-muted small">@row.AccountNature</td>
+                                    <!-- Opening Local -->
+                                    <td class="text-end dir-ltr">@(row.OpeningDebitLocal > 0 ? row.OpeningDebitLocal.ToString("N2") : "-")</td>
+                                    <td class="text-end dir-ltr">@(row.OpeningCreditLocal > 0 ? row.OpeningCreditLocal.ToString("N2") : "-")</td>
+                                    <!-- Period Local -->
+                                    <td class="text-end dir-ltr text-success">@(row.PeriodDebitLocal > 0 ? row.PeriodDebitLocal.ToString("N2") : "-")</td>
+                                    <td class="text-end dir-ltr text-danger">@(row.PeriodCreditLocal > 0 ? row.PeriodCreditLocal.ToString("N2") : "-")</td>
+                                    <!-- Closing Local -->
+                                    <td class="text-end dir-ltr fw-bold text-primary">@(row.ClosingDebitLocal > 0 ? row.ClosingDebitLocal.ToString("N2") : "-")</td>
+                                    <td class="text-end dir-ltr fw-bold text-danger">@(row.ClosingCreditLocal > 0 ? row.ClosingCreditLocal.ToString("N2") : "-")</td>
+                                }
+                            </tr>
+                        }
+                    }
+                </tbody>
+                <tfoot class="table-dark small fw-bold">
+                    <tr>
+                        <td colspan="@(isForeignMode ? 3 : 3)" class="text-center">الإجمالي العام (Grand Totals)</td>
+                        @if (isForeignMode)
+                        {
+                            <td class="text-end dir-ltr">@Model.TotalOpeningDebitForeign.ToString("N2")</td>
+                            <td class="text-end dir-ltr">@Model.TotalOpeningCreditForeign.ToString("N2")</td>
+                            <td class="text-end dir-ltr text-success">@Model.TotalPeriodDebitForeign.ToString("N2")</td>
+                            <td class="text-end dir-ltr text-danger">@Model.TotalPeriodCreditForeign.ToString("N2")</td>
+                            <td class="text-end dir-ltr">@Model.TotalClosingDebitForeign.ToString("N2")</td>
+                            <td class="text-end dir-ltr">@Model.TotalClosingCreditForeign.ToString("N2")</td>
+                        }
+                        else
+                        {
+                            <td class="text-end dir-ltr">@Model.TotalOpeningDebitLocal.ToString("N2")</td>
+                            <td class="text-end dir-ltr">@Model.TotalOpeningCreditLocal.ToString("N2")</td>
+                            <td class="text-end dir-ltr text-success">@Model.TotalPeriodDebitLocal.ToString("N2")</td>
+                            <td class="text-end dir-ltr text-danger">@Model.TotalPeriodCreditLocal.ToString("N2")</td>
+                            <td class="text-end dir-ltr text-primary">@Model.TotalClosingDebitLocal.ToString("N2")</td>
+                            <td class="text-end dir-ltr text-danger">@Model.TotalClosingCreditLocal.ToString("N2")</td>
+                        }
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+</script>
+
+<style>
+    .dir-ltr { direction: ltr; }
+    @@media print {
+        .d-print-none { display: none !important; }
+        .erp-sidebar, .erp-topbar, .erp-footer { display: none !important; }
+        .erp-main { margin: 0 !important; padding: 0 !important; }
+        body { font-size: 11px !important; background: #fff !important; }
+        .table { width: 100% !important; border: 1px solid #000 !important; }
+        .table th, .table td { border: 1px solid #ddd !important; padding: 4px !important; }
+    }
+</style>

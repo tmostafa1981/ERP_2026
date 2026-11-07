@@ -1,0 +1,118 @@
+@model List<ERP.Application.DTOs.FixedAssets.AssetDepreciationHistoryItemDto>
+@{
+    ViewData["Title"] = "تقرير سجل الإهلاكات الدورية";
+    var filter = ViewBag.Filter as ERP.Application.DTOs.FixedAssets.AssetReportFilterDto ?? new();
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="mb-1 text-primary"><i class="fas fa-calculator me-2"></i>تقرير سجل الإهلاكات الدورية للأصول</h3>
+            <p class="text-muted small mb-0">تتبع أقساط الإهلاك المحسوبة ومجمعات الإهلاك وحسابات المصروف والمجمع</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-outline-secondary">
+                <i class="fas fa-print me-1"></i>طباعة
+            </button>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs Between Reports -->
+    <div class="btn-group mb-3 d-flex flex-wrap" role="group">
+        <a asp-action="Index" asp-route-reportType="Register" class="btn btn-outline-primary">سجل الأصول الشامل</a>
+        <a asp-action="Index" asp-route-reportType="DepreciationHistory" class="btn btn-primary">سجل الإهلاكات الدورية</a>
+        <a asp-action="Index" asp-route-reportType="Movements" class="btn btn-outline-primary">حركات ونقل الأصول</a>
+        <a asp-action="Index" asp-route-reportType="Disposed" class="btn btn-outline-primary">الأصول المستبعدة</a>
+        <a asp-action="Index" asp-route-reportType="CIP" class="btn btn-outline-primary">الأصول تحت الإنشاء (CIP)</a>
+        <a asp-action="Index" asp-route-reportType="PendingDepreciation" class="btn btn-outline-primary">أصول متأخرة الإهلاك</a>
+    </div>
+
+    <!-- Filters -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-3">
+            <form method="get" asp-action="Index" class="row g-2 align-items-end">
+                <input type="hidden" name="reportType" value="DepreciationHistory" />
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">الفرع</label>
+                    <select name="BranchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                        <option value="">-- كافة الفروع --</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">من تاريخ</label>
+                    <input type="date" name="FromDate" value="@(filter.FromDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">إلى تاريخ</label>
+                    <input type="date" name="ToDate" value="@(filter.ToDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary flex-fill">تصفية</button>
+                    <a asp-action="Index" asp-route-reportType="DepreciationHistory" class="btn btn-sm btn-outline-secondary">إلغاء</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>رقم العملية</th>
+                            <th>كود الأصل</th>
+                            <th class="text-start">اسم الأصل</th>
+                            <th>الفرع</th>
+                            <th>مركز التكلفة</th>
+                            <th>التكلفة وقت التشغيل</th>
+                            <th>مجمع الإهلاك السابق</th>
+                            <th class="table-success fw-bold">قسط الإهلاك</th>
+                            <th>مجمع الإهلاك اللاحق</th>
+                            <th>القيمة الدفترية بعد</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model == null || !Model.Any())
+                        {
+                            <tr>
+                                <td colspan="11" class="text-muted py-5">لا توجد سجلات إهلاك مطابقة للفلتر.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var h in Model)
+                            {
+                                <tr>
+                                    <td>@h.DepreciationDate.ToString("yyyy-MM-dd")</td>
+                                    <td><span class="badge bg-secondary">@h.RunNumber</span></td>
+                                    <td class="fw-bold">@h.AssetCode</td>
+                                    <td class="text-start">@h.AssetName</td>
+                                    <td>@h.BranchName</td>
+                                    <td class="small text-muted">@(h.CostCenterName ?? "—")</td>
+                                    <td>@h.AssetCostAtRun.ToString("N2")</td>
+                                    <td class="text-muted">@h.PriorAccumulatedDepreciation.ToString("N2")</td>
+                                    <td class="table-success fw-bold text-success">@h.DepreciationAmount.ToString("N2")</td>
+                                    <td class="text-warning">@h.PostAccumulatedDepreciation.ToString("N2")</td>
+                                    <td class="fw-bold text-primary">@h.BookValueAfter.ToString("N2")</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="8" class="text-end">إجمالي أقساط الإهلاك:</td>
+                                <td class="table-success text-success fs-6">@Model.Sum(x => x.DepreciationAmount).ToString("N2")</td>
+                                <td colspan="2"></td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

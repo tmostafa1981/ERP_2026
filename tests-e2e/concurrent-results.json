@@ -1,0 +1,116 @@
+{
+  "totalRunTime": "338.47",
+  "concurrentDuration": "64.90",
+  "results": [
+    {
+      "sessionId": 1,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00026",
+      "entryId": 36,
+      "durationMs": 64019,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/36",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00026) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 2,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00018",
+      "entryId": 28,
+      "durationMs": 33759,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/28",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00018) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 3,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00019",
+      "entryId": 29,
+      "durationMs": 36394,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/29",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00019) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 4,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00022",
+      "entryId": 32,
+      "durationMs": 52707,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/32",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00022) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 5,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00023",
+      "entryId": 33,
+      "durationMs": 59926,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/33",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00023) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 6,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00024",
+      "entryId": 34,
+      "durationMs": 62812,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/34",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00024) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 7,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00021",
+      "entryId": 31,
+      "durationMs": 46689,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/31",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00021) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 8,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00025",
+      "entryId": 35,
+      "durationMs": 64105,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/35",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00025) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 9,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00027",
+      "entryId": 37,
+      "durationMs": 64895,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/37",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00027) بنجاح كمسودة."
+    },
+    {
+      "sessionId": 10,
+      "status": "SUCCESS",
+      "httpStatus": 200,
+      "entryNumber": "JV-3-2026-00020",
+      "entryId": 30,
+      "durationMs": 41326,
+      "finalUrl": "http://127.0.0.1:5239/JournalEntries/Details/30",
+      "errors": [],
+      "message": "تم إنشاء قيد اليومية (JV-3-2026-00020) بنجاح كمسودة."
+    }
+  ]
+}

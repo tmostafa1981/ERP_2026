@@ -1,0 +1,173 @@
+@model ERP.Application.DTOs.Reports.ReorderLevelAlertReportDto
+@{
+    ViewData["Title"] = "الأصناف تحت حد إعادة الطلب";
+    Layout = "_Layout";
+    bool isRequested = ViewBag.IsRequested == true;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-bell me-2"></i>الأصناف تحت حد إعادة الطلب (Reorder Level Alert)
+            </h4>
+            <span class="text-muted small">تنبيهات فورية بالأصناف التي وصل رصيدها إلى الحد الأدنى لتفادي نفاد المخزون</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.InventoryReports.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.InventoryReports.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('reorderAlertTable', 'ReorderLevelAlert')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> فهرس تقارير المخازن
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="ReorderLevelAlert">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" id="branchSelect" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">المستودع</label>
+                        <select name="WarehouseId" id="warehouseSelect" class="form-select form-select-sm" asp-items="ViewBag.Warehouses">
+                            <option value="">-- كل المستودعات --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">المجموعة</label>
+                        <select name="ItemGroupId" class="form-select form-select-sm" asp-items="ViewBag.ItemGroups">
+                            <option value="">-- كل المجموعات --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> فحص النواقص
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-bell fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث والضغط على "فحص النواقص"</h5>
+            <p class="text-muted small mb-0">اختر الفرع أو المستودع لفحص الأصناف التي قل رصيدها عن حد إعادة الطلب.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Data Table -->
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table id="reorderAlertTable" class="table table-bordered table-hover table-striped align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>كود الصنف</th>
+                                <th class="text-start">اسم الصنف</th>
+                                <th>المجموعة</th>
+                                <th>المستودع</th>
+                                <th>الرصيد الفعلي الحالي</th>
+                                <th>حد إعادة الطلب</th>
+                                <th>كمية العجز عن الحد</th>
+                                <th>مستوى الخطورة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Items.Any())
+                            {
+                                <tr>
+                                    <td colspan="8" class="py-4 text-success fw-bold">
+                                        <i class="fa-solid fa-circle-check me-2 fs-5"></i> جميع الأصناف رصيدها آمن وأعلى من حد إعادة الطلب.
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in Model.Items)
+                                {
+                                    <tr>
+                                        <td class="font-monospace text-primary fw-bold">@row.ItemCode</td>
+                                        <td class="text-start fw-bold">@row.ItemName</td>
+                                        <td>@row.GroupName</td>
+                                        <td>@row.WarehouseName</td>
+                                        <td class="font-monospace fw-bold @(row.CurrentStock <= 0 ? "text-danger" : "text-warning") fs-6">
+                                            @row.CurrentStock.ToString("G29")
+                                        </td>
+                                        <td class="font-monospace">@row.ReorderPoint.ToString("G29")</td>
+                                        <td class="font-monospace text-danger fw-bold">@row.Deficit.ToString("G29")</td>
+                                        <td>
+                                            <span class="badge @(row.CurrentStock <= 0 ? "bg-danger" : "bg-warning text-dark")">
+                                                @row.Severity
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    document.getElementById('branchSelect')?.addEventListener('change', function() {
+        var branchId = this.value;
+        var whSelect = document.getElementById('warehouseSelect');
+        if (whSelect) {
+            fetch('@Url.Action("GetWarehousesByBranch", "InventoryReports")?branchId=' + branchId)
+                .then(r => r.json())
+                .then(data => {
+                    whSelect.innerHTML = '<option value="">-- كل المستودعات --</option>';
+                    data.forEach(item => {
+                        var opt = document.createElement('option');
+                        opt.value = item.id;
+                        opt.textContent = item.text;
+                        whSelect.appendChild(opt);
+                    });
+                });
+        }
+    });
+</script>

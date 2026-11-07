@@ -1,0 +1,649 @@
+@model IEnumerable<ERP.Application.DTOs.TransactionTypeDto>
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = "أنواع الحركات والمستندات (Transaction Types)";
+    var selectedModule = ViewBag.SelectedModule as TransactionModule?;
+    var warehouses = ViewBag.Warehouses as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var glAccounts = ViewBag.GLAccounts as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var customers = ViewBag.Customers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var vendors = ViewBag.Vendors as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var cashAccounts = ViewBag.CashAccounts as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+
+    var whDict = warehouses.ToDictionary(w => (int)w.Id, w => $"{w.Code} - {w.LocalizedName}");
+    var glDict = glAccounts.ToDictionary(a => (int)a.Id, a => $"{a.Code} - {a.LocalizedName}");
+    var custDict = customers.ToDictionary(c => (int)c.Id, c => $"{c.Code} - {c.LocalizedName}");
+    var vendDict = vendors.ToDictionary(v => (int)v.Id, v => $"{v.Code} - {v.LocalizedName}");
+    var cashDict = cashAccounts.ToDictionary(ca => (int)ca.Id, ca => $"{ca.Code} - {ca.LocalizedName}");
+}
+
+<div class="container-fluid px-4 py-3">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-sliders text-primary me-2"></i> تهيئة أنواع الحركات والمستندات (Transaction Types)
+            </h4>
+            <span class="text-muted small">إدارة وتكوين أنواع حركات المبيعات، المشتريات، المخازن، والتحويلات بدون كود صلب.</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createTypeModal">
+                <i class="fa-solid fa-plus me-1"></i> إضافة نوع حركة جديد
+            </button>
+            <a asp-controller="DocumentAdjustments" asp-action="Index" class="btn btn-outline-success btn-sm">
+                <i class="fa-solid fa-calculator me-1"></i> المصاريف والخصومات
+            </a>
+            <a asp-action="Permissions" class="btn btn-outline-primary btn-sm">
+                <i class="fa-solid fa-user-shield me-1"></i> مصفوفة صلاحيات المستخدمين
+            </a>
+            <a asp-controller="Documents" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-file-invoice me-1"></i> المستندات والفواتير
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2 small" role="alert">
+            <i class="fa-solid fa-check-circle me-1"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show py-2 small" role="alert">
+            <i class="fa-solid fa-circle-exclamation me-1"></i> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Module Filter Tabs -->
+    <ul class="nav nav-pills mb-3 border-bottom pb-2">
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(!selectedModule.HasValue ? "active" : "")" asp-action="Index">الكل</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(selectedModule == TransactionModule.Sales ? "active" : "")" asp-action="Index" asp-route-module="Sales">المبيعات</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(selectedModule == TransactionModule.Purchase ? "active" : "")" asp-action="Index" asp-route-module="Purchase">المشتريات</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(selectedModule == TransactionModule.Inventory ? "active" : "")" asp-action="Index" asp-route-module="Inventory">المخازن</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(selectedModule == TransactionModule.Transfer ? "active" : "")" asp-action="Index" asp-route-module="Transfer">التحويلات</a>
+        </li>
+    </ul>
+
+    <!-- Types Table -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-dark small">
+                        <tr>
+                            <th style="width: 110px;">الكود</th>
+                            <th>اسم الحركة</th>
+                            <th>الموديول</th>
+                            <th>الأثر المخزني</th>
+                            <th>الأثر المحاسبي</th>
+                            <th class="text-center">نقدي؟</th>
+                            <th class="text-center">آجل؟</th>
+                            <th class="text-center">ترحيل فوري؟</th>
+                            <th class="text-center">ملاحظات البنود</th>
+                            <th>البادئة</th>
+                            <th class="text-center">الحالة</th>
+                            <th style="width: 80px;" class="text-center">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in Model)
+                        {
+                            <tr>
+                                <td class="font-monospace fw-bold text-primary">@t.Code</td>
+                                <td class="fw-semibold">
+                                    @t.LocalizedName
+                                    @if (t.DefaultCustomerId.HasValue || t.DefaultVendorId.HasValue || t.DefaultCashBankAccountId.HasValue)
+                                    {
+                                        <div class="mt-1 d-flex flex-wrap gap-1" style="font-size: 0.72rem;">
+                                            @if (t.DefaultCustomerId.HasValue)
+                                            {
+                                                <span class="badge bg-primary-subtle text-primary border" title="عميل افتراضي"><i class="fa-solid fa-user me-1"></i>@t.DefaultCustomerName</span>
+                                            }
+                                            @if (t.DefaultVendorId.HasValue)
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary border" title="مورد افتراضي"><i class="fa-solid fa-truck me-1"></i>@t.DefaultVendorName</span>
+                                            }
+                                            @if (t.DefaultCashBankAccountId.HasValue)
+                                            {
+                                                <span class="badge bg-success-subtle text-success border" title="حساب الخزينة/البنك الافتراضي"><i class="fa-solid fa-cash-register me-1"></i>@t.DefaultCashBankAccountName</span>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">@t.Module</span>
+                                </td>
+                                <td>
+                                    @if (t.InventoryEffect == InventoryEffect.IssueStock)
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border">صرف من المخزون</span>
+                                    }
+                                    else if (t.InventoryEffect == InventoryEffect.ReceiveStock)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border">إضافة للمخزون</span>
+                                    }
+                                    else if (t.InventoryEffect == InventoryEffect.ReserveStock)
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning border">حجز مخزون</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-muted border">لا أثر مخزني</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (t.AccountingEffect == AccountingEffect.FullInvoiceAndCOGS)
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border">قيد تام (فاتورة + تكلفة)</span>
+                                    }
+                                    else if (t.AccountingEffect == AccountingEffect.COGSAndInventoryOnly)
+                                    {
+                                        <span class="badge bg-info-subtle text-info border">قيد تكلفة المخزون فقط</span>
+                                    }
+                                    else if (t.AccountingEffect == AccountingEffect.InvoiceARAPOnly)
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning border">قيد حسابات وضريبة فقط</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-muted border">لا ينتج قيد محاسبي</span>
+                                    }
+                                    @if (t.DefaultDebitAccountId.HasValue || t.DefaultCreditAccountId.HasValue || t.DefaultTaxAccountId.HasValue)
+                                    {
+                                        <div class="mt-1" style="font-size: 0.72rem;">
+                                            @if (t.DefaultDebitAccountId.HasValue)
+                                            {
+                                                <div class="text-truncate text-success" title="مدين: @t.DefaultDebitAccountName"><i class="fa-solid fa-arrow-down-left me-1"></i>مدين: @t.DefaultDebitAccountName</div>
+                                            }
+                                            @if (t.DefaultCreditAccountId.HasValue)
+                                            {
+                                                <div class="text-truncate text-danger" title="دائن: @t.DefaultCreditAccountName"><i class="fa-solid fa-arrow-up-right me-1"></i>دائن: @t.DefaultCreditAccountName</div>
+                                            }
+                                            @if (t.DefaultTaxAccountId.HasValue)
+                                            {
+                                                <div class="text-truncate text-info" title="ضريبة: @t.DefaultTaxAccountName"><i class="fa-solid fa-percent me-1"></i>ضريبة: @t.DefaultTaxAccountName</div>
+                                            }
+                                            @if (t.DefaultDiscountAccountId.HasValue)
+                                            {
+                                                <div class="text-truncate text-secondary" title="خصم: @t.DefaultDiscountAccountName"><i class="fa-solid fa-tag me-1"></i>خصم: @t.DefaultDiscountAccountName</div>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <i class="fa-solid @(t.IsCashAllowed ? "fa-check text-success" : "fa-xmark text-muted")"></i>
+                                </td>
+                                <td class="text-center">
+                                    <i class="fa-solid @(t.IsCreditAllowed ? "fa-check text-success" : "fa-xmark text-muted")"></i>
+                                </td>
+                                <td class="text-center">
+                                    <i class="fa-solid @(t.AutoPost ? "fa-bolt text-warning" : "fa-minus text-muted")"></i>
+                                </td>
+                                <td class="text-center">
+                                    <i class="fa-solid @(t.ShowLineNotes ? "fa-comment-dots text-info" : "fa-minus text-muted")" title="@(t.ShowLineNotes ? "ملاحظات السطور مفعلة" : "غير مفعلة")"></i>
+                                </td>
+                                <td class="font-monospace text-muted small">@t.CodeSequencePrefix</td>
+                                <td class="text-center">
+                                    @if (t.IsActive)
+                                    {
+                                        <span class="badge bg-success">نشط</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">معطل</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" data-bs-toggle="modal" data-bs-target="#editModal_@t.Id" title="تعديل">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modals for Transaction Types (rendered outside table for valid HTML form structure) -->
+@foreach (var t in Model)
+{
+    <div class="modal fade" id="editModal_@t.Id" tabindex="-1" aria-hidden="true" data-bs-focus="false">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <form asp-action="Edit" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="Id" value="@t.Id" />
+                    <div class="modal-header bg-light py-2">
+                        <h6 class="modal-title fw-bold text-dark">
+                            <i class="fa-solid fa-sliders text-primary me-2"></i> تعديل نوع الحركة: @t.Code
+                        </h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-3">
+                        <div class="row g-2">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small fw-bold">الاسم العربي <span class="text-danger">*</span></label>
+                                <input type="text" name="NameAr" value="@t.NameAr" class="form-control form-control-sm" required />
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label small fw-bold">الاسم اللاتيني</label>
+                                <input type="text" name="NameEn" value="@t.NameEn" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label small fw-bold">الموديول</label>
+                                <select name="Module" class="form-select form-select-sm">
+                                    <option value="1" selected="@(t.Module == TransactionModule.Sales ? "selected" : null)">مبيعات (Sales)</option>
+                                    <option value="2" selected="@(t.Module == TransactionModule.Purchase ? "selected" : null)">مشتريات (Purchase)</option>
+                                    <option value="3" selected="@(t.Module == TransactionModule.Inventory ? "selected" : null)">مخازن (Inventory)</option>
+                                    <option value="4" selected="@(t.Module == TransactionModule.Transfer ? "selected" : null)">تحويلات (Transfer)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label small fw-bold">أثر المخزون</label>
+                                <select name="InventoryEffect" class="form-select form-select-sm">
+                                    <option value="@((int)InventoryEffect.None)" selected="@(t.InventoryEffect == InventoryEffect.None ? "selected" : null)">لا أثر مخزني (None)</option>
+                                    <option value="@((int)InventoryEffect.IssueStock)" selected="@(t.InventoryEffect == InventoryEffect.IssueStock ? "selected" : null)">صرف من المخزون (Issue Stock)</option>
+                                    <option value="@((int)InventoryEffect.ReceiveStock)" selected="@(t.InventoryEffect == InventoryEffect.ReceiveStock ? "selected" : null)">إضافة للمخزون (Receive Stock)</option>
+                                    <option value="@((int)InventoryEffect.ReserveStock)" selected="@(t.InventoryEffect == InventoryEffect.ReserveStock ? "selected" : null)">حجز مخزون (Reserve Stock)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label small fw-bold">الأثر المحاسبي</label>
+                                <select name="AccountingEffect" class="form-select form-select-sm">
+                                    <option value="0" selected="@(t.AccountingEffect == AccountingEffect.None ? "selected" : null)">لا قيد محاسبي (None)</option>
+                                    <option value="1" selected="@(t.AccountingEffect == AccountingEffect.FullInvoiceAndCOGS ? "selected" : null)">قيد تام (Full Invoice + COGS)</option>
+                                    <option value="2" selected="@(t.AccountingEffect == AccountingEffect.COGSAndInventoryOnly ? "selected" : null)">تكلفة المخزون فقط</option>
+                                    <option value="3" selected="@(t.AccountingEffect == AccountingEffect.InvoiceARAPOnly ? "selected" : null)">حسابات عملاء/موردين فقط</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label small fw-bold">طبيعة المستند الأساسية</label>
+                                <select name="BaseNature" class="form-select form-select-sm">
+                                    <option value="1" selected="@(t.BaseNature == DocumentBaseNature.Invoice ? "selected" : null)">فاتورة (Invoice)</option>
+                                    <option value="2" selected="@(t.BaseNature == DocumentBaseNature.Return ? "selected" : null)">مردودات (Return)</option>
+                                    <option value="3" selected="@(t.BaseNature == DocumentBaseNature.IssueVoucher ? "selected" : null)">إذن تسليم / صرف (Issue Voucher)</option>
+                                    <option value="4" selected="@(t.BaseNature == DocumentBaseNature.ReceiptVoucher ? "selected" : null)">إذن استلام (Receipt Voucher)</option>
+                                    <option value="5" selected="@(t.BaseNature == DocumentBaseNature.Quotation ? "selected" : null)">عرض سعر (Quotation)</option>
+                                    <option value="6" selected="@(t.BaseNature == DocumentBaseNature.Order ? "selected" : null)">أمر (Order)</option>
+                                    <option value="7" selected="@(t.BaseNature == DocumentBaseNature.Transfer ? "selected" : null)">تحويل (Transfer)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label small fw-bold">بادئة الترقيم التلقائي</label>
+                                <input type="text" name="CodeSequencePrefix" value="@t.CodeSequencePrefix" class="form-control form-control-sm font-monospace" />
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <label class="form-label small fw-bold">المستودع الافتراضي</label>
+                                <div class="erp-lookup-picker"
+                                     data-type="warehouse"
+                                     data-input-name="DefaultWarehouseId"
+                                     data-value="@t.DefaultWarehouseId"
+                                     data-text="@(t.DefaultWarehouseId.HasValue && whDict.TryGetValue(t.DefaultWarehouseId.Value, out var wTxt) ? wTxt : t.DefaultWarehouseName)"
+                                     data-placeholder="-- اختياري (ابحث بالكود أو الاسم) --">
+                                </div>
+                            </div>
+                            <!-- Accounting Accounts Configuration -->
+                            <div class="col-12 mt-2">
+                                <div class="card bg-white border p-2 shadow-none">
+                                    <div class="fw-bold small text-primary mb-2">
+                                        <i class="fa-solid fa-book-journal-whills me-1"></i> الربط المحاسبي الافتراضي (شجرة الحسابات)
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold mb-1">الحساب المدين الافتراضي</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="account"
+                                                 data-input-name="DefaultDebitAccountId"
+                                                 data-value="@t.DefaultDebitAccountId"
+                                                 data-text="@(t.DefaultDebitAccountId.HasValue && glDict.TryGetValue(t.DefaultDebitAccountId.Value, out var dTxt) ? dTxt : t.DefaultDebitAccountName)"
+                                                 data-placeholder="-- اختياري (تلقائي) - ابحث برقم أو اسم الحساب --"
+                                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(حـ/ المشتريات / المخزون)</span>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold mb-1">الحساب الدائن الافتراضي</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="account"
+                                                 data-input-name="DefaultCreditAccountId"
+                                                 data-value="@t.DefaultCreditAccountId"
+                                                 data-text="@(t.DefaultCreditAccountId.HasValue && glDict.TryGetValue(t.DefaultCreditAccountId.Value, out var crTxt) ? crTxt : t.DefaultCreditAccountName)"
+                                                 data-placeholder="-- اختياري (تلقائي) - ابحث برقم أو اسم الحساب --"
+                                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(حـ/ إيرادات المبيعات)</span>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold mb-1">حساب الضريبة الافتراضي</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="account"
+                                                 data-input-name="DefaultTaxAccountId"
+                                                 data-value="@t.DefaultTaxAccountId"
+                                                 data-text="@(t.DefaultTaxAccountId.HasValue && glDict.TryGetValue(t.DefaultTaxAccountId.Value, out var txTxt) ? txTxt : t.DefaultTaxAccountName)"
+                                                 data-placeholder="-- اختياري (تلقائي) - ابحث برقم أو اسم الحساب --"
+                                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(حـ/ ضريبة القيمة المضافة)</span>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold mb-1">حساب الخصم الافتراضي</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="account"
+                                                 data-input-name="DefaultDiscountAccountId"
+                                                 data-value="@t.DefaultDiscountAccountId"
+                                                 data-text="@(t.DefaultDiscountAccountId.HasValue && glDict.TryGetValue(t.DefaultDiscountAccountId.Value, out var dsTxt) ? dsTxt : t.DefaultDiscountAccountName)"
+                                                 data-placeholder="-- اختياري (تلقائي) - ابحث برقم أو اسم الحساب --"
+                                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(حـ/ الخصم المسموح به / المكتسب)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Default Parties & Cash/Bank Configuration -->
+                            <div class="col-12 mt-2">
+                                <div class="card bg-white border p-2 shadow-none">
+                                    <div class="fw-bold small text-primary mb-2">
+                                        <i class="fa-solid fa-users-gear me-1"></i> الأطراف الافتراضية وحساب النقدية (Default Parties & Cash/Bank)
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold mb-1">العميل الافتراضي</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="customer"
+                                                 data-input-name="DefaultCustomerId"
+                                                 data-value="@t.DefaultCustomerId"
+                                                 data-text="@(t.DefaultCustomerId.HasValue && custDict.TryGetValue(t.DefaultCustomerId.Value, out var cTxt) ? cTxt : t.DefaultCustomerName)"
+                                                 data-placeholder="-- اختياري (تحديد يدوي) --">
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(لحركات المبيعات - يعين تلقائياً عند فتح الفاتورة)</span>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold mb-1">المورد الافتراضي</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="vendor"
+                                                 data-input-name="DefaultVendorId"
+                                                 data-value="@t.DefaultVendorId"
+                                                 data-text="@(t.DefaultVendorId.HasValue && vendDict.TryGetValue(t.DefaultVendorId.Value, out var vTxt) ? vTxt : t.DefaultVendorName)"
+                                                 data-placeholder="-- اختياري (تحديد يدوي) --">
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(لحركات المشتريات - يعين تلقائياً عند فتح الفاتورة)</span>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold mb-1">حساب الخزينة / البنك الافتراضي</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="account"
+                                                 data-input-name="DefaultCashBankAccountId"
+                                                 data-value="@t.DefaultCashBankAccountId"
+                                                 data-text="@(t.DefaultCashBankAccountId.HasValue && cashDict.TryGetValue(t.DefaultCashBankAccountId.Value, out var caTxt) ? caTxt : (t.DefaultCashBankAccountId.HasValue && glDict.TryGetValue(t.DefaultCashBankAccountId.Value, out var caGlTxt) ? caGlTxt : t.DefaultCashBankAccountName))"
+                                                 data-placeholder="-- اختياري (الافتراضي للفرع) --"
+                                                 data-extra-filters='{"transactionalOnly":"true","accountCategory":"Assets"}'>
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(يعين تلقائياً عند اختيار السداد النقدي)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 mt-2">
+                                <div class="card bg-light border p-2">
+                                    <div class="d-flex flex-wrap gap-4">
+                                        <div class="form-check">
+                                            <input type="hidden" name="IsCashAllowed" value="false" />
+                                            <input class="form-check-input" type="checkbox" name="IsCashAllowed" value="true" id="editCash_@t.Id" @(t.IsCashAllowed ? "checked" : "") />
+                                            <label class="form-check-label small fw-semibold" for="editCash_@t.Id">مسموح نقدي (Cash)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="hidden" name="IsCreditAllowed" value="false" />
+                                            <input class="form-check-input" type="checkbox" name="IsCreditAllowed" value="true" id="editCredit_@t.Id" @(t.IsCreditAllowed ? "checked" : "") />
+                                            <label class="form-check-label small fw-semibold" for="editCredit_@t.Id">مسموح آجل (Credit)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="hidden" name="AutoPost" value="false" />
+                                            <input class="form-check-input" type="checkbox" name="AutoPost" value="true" id="editAutoPost_@t.Id" @(t.AutoPost ? "checked" : "") />
+                                            <label class="form-check-label small fw-semibold text-warning" for="editAutoPost_@t.Id">ترحيل فوري تلقائي</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="hidden" name="ShowLineNotes" value="false" />
+                                            <input class="form-check-input" type="checkbox" name="ShowLineNotes" value="true" id="editLineNotes_@t.Id" @(t.ShowLineNotes ? "checked" : "") />
+                                            <label class="form-check-label small fw-semibold text-info" for="editLineNotes_@t.Id"><i class="fa-solid fa-comment-dots me-1"></i>ملاحظات البنود</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="hidden" name="IsActive" value="false" />
+                                            <input class="form-check-input" type="checkbox" name="IsActive" value="true" id="editActive_@t.Id" @(t.IsActive ? "checked" : "") />
+                                            <label class="form-check-label small fw-semibold text-success" for="editActive_@t.Id">نشط (Active)</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer py-1 bg-light">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-save me-1"></i> حفظ التعديلات</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Create New Transaction Type Modal -->
+<div class="modal fade" id="createTypeModal" tabindex="-1" aria-hidden="true" data-bs-focus="false">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-light py-2">
+                    <h6 class="modal-title fw-bold text-dark">
+                        <i class="fa-solid fa-plus text-primary me-2"></i> إضافة نوع حركة ومستند جديد
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="row g-2">
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">كود الحركة الفريد <span class="text-danger">*</span></label>
+                            <input type="text" name="Code" class="form-control form-control-sm font-monospace text-uppercase" placeholder="مثال: SI_POS" required maxlength="50" />
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">الاسم العربي <span class="text-danger">*</span></label>
+                            <input type="text" name="NameAr" class="form-control form-control-sm" placeholder="فاتورة نقاط البيع" required maxlength="100" />
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">الاسم اللاتيني</label>
+                            <input type="text" name="NameEn" class="form-control form-control-sm" placeholder="POS Sales Invoice" maxlength="100" />
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">الموديول <span class="text-danger">*</span></label>
+                            <select name="Module" class="form-select form-select-sm" required>
+                                <option value="1">مبيعات (Sales)</option>
+                                <option value="2">مشتريات (Purchase)</option>
+                                <option value="3">مخازن (Inventory)</option>
+                                <option value="4">تحويلات (Transfer)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">أثر المخزون <span class="text-danger">*</span></label>
+                            <select name="InventoryEffect" class="form-select form-select-sm" required>
+                                <option value="@((int)InventoryEffect.None)">لا أثر مخزني (None)</option>
+                                <option value="@((int)InventoryEffect.IssueStock)" selected>صرف من المخزون (Issue Stock)</option>
+                                <option value="@((int)InventoryEffect.ReceiveStock)">إضافة للمخزون (Receive Stock)</option>
+                                <option value="@((int)InventoryEffect.ReserveStock)">حجز مخزون (Reserve Stock)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">الأثر المحاسبي <span class="text-danger">*</span></label>
+                            <select name="AccountingEffect" class="form-select form-select-sm" required>
+                                <option value="0">لا قيد محاسبي (None)</option>
+                                <option value="1" selected>قيد تام (Full Invoice + COGS)</option>
+                                <option value="2">تكلفة المخزون فقط</option>
+                                <option value="3">حسابات عملاء/موردين فقط</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">طبيعة المستند الأساسية</label>
+                            <select name="BaseNature" class="form-select form-select-sm">
+                                <option value="1" selected>فاتورة (Invoice)</option>
+                                <option value="2">مردودات (Return)</option>
+                                <option value="3">إذن تسليم / صرف (Issue Voucher)</option>
+                                <option value="4">إذن استلام (Receipt Voucher)</option>
+                                <option value="5">عرض سعر (Quotation)</option>
+                                <option value="6">أمر (Order)</option>
+                                <option value="7">تحويل (Transfer)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">بادئة الترقيم</label>
+                            <input type="text" name="CodeSequencePrefix" class="form-control form-control-sm font-monospace" placeholder="POS-" value="POS-" />
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <label class="form-label small fw-bold">المستودع الافتراضي</label>
+                            <div class="erp-lookup-picker"
+                                 data-type="warehouse"
+                                 data-input-name="DefaultWarehouseId"
+                                 data-placeholder="-- اختياري (ابحث بالكود أو الاسم) --">
+                            </div>
+                        </div>
+                        <!-- Accounting Accounts Configuration -->
+                        <div class="col-12 mt-2">
+                            <div class="card bg-white border p-2 shadow-none">
+                                <div class="fw-bold small text-primary mb-2">
+                                    <i class="fa-solid fa-book-journal-whills me-1"></i> الربط المحاسبي الافتراضي (شجرة الحسابات)
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold mb-1">الحساب المدين الافتراضي</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="account"
+                                             data-input-name="DefaultDebitAccountId"
+                                             data-placeholder="-- اختياري (تلقائي) - ابحث برقم أو اسم الحساب --"
+                                             data-extra-filters='{"transactionalOnly":"true"}'>
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(حـ/ المشتريات / المخزون)</span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold mb-1">الحساب الدائن الافتراضي</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="account"
+                                             data-input-name="DefaultCreditAccountId"
+                                             data-placeholder="-- اختياري (تلقائي) - ابحث برقم أو اسم الحساب --"
+                                             data-extra-filters='{"transactionalOnly":"true"}'>
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(حـ/ إيرادات المبيعات)</span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold mb-1">حساب الضريبة الافتراضي</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="account"
+                                             data-input-name="DefaultTaxAccountId"
+                                             data-placeholder="-- اختياري (تلقائي) - ابحث برقم أو اسم الحساب --"
+                                             data-extra-filters='{"transactionalOnly":"true"}'>
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(حـ/ ضريبة القيمة المضافة)</span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold mb-1">حساب الخصم الافتراضي</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="account"
+                                             data-input-name="DefaultDiscountAccountId"
+                                             data-placeholder="-- اختياري (تلقائي) - ابحث برقم أو اسم الحساب --"
+                                             data-extra-filters='{"transactionalOnly":"true"}'>
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(حـ/ الخصم المسموح به / المكتسب)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Default Parties & Cash/Bank Configuration -->
+                        <div class="col-12 mt-2">
+                            <div class="card bg-white border p-2 shadow-none">
+                                <div class="fw-bold small text-primary mb-2">
+                                    <i class="fa-solid fa-users-gear me-1"></i> الأطراف الافتراضية وحساب النقدية (Default Parties & Cash/Bank)
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold mb-1">العميل الافتراضي</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="customer"
+                                             data-input-name="DefaultCustomerId"
+                                             data-placeholder="-- اختياري (تحديد يدوي) --">
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(لحركات المبيعات - يعين تلقائياً عند فتح الفاتورة)</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold mb-1">المورد الافتراضي</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="vendor"
+                                             data-input-name="DefaultVendorId"
+                                             data-placeholder="-- اختياري (تحديد يدوي) --">
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(لحركات المشتريات - يعين تلقائياً عند فتح الفاتورة)</span>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold mb-1">حساب الخزينة / البنك الافتراضي</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="account"
+                                             data-input-name="DefaultCashBankAccountId"
+                                             data-placeholder="-- اختياري (الافتراضي للفرع) --"
+                                             data-extra-filters='{"transactionalOnly":"true","accountCategory":"Assets"}'>
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(يعين تلقائياً عند اختيار السداد النقدي)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 mt-2">
+                            <div class="card bg-light border p-2">
+                                <div class="d-flex flex-wrap gap-4">
+                                    <div class="form-check">
+                                        <input type="hidden" name="IsCashAllowed" value="false" />
+                                        <input class="form-check-input" type="checkbox" name="IsCashAllowed" value="true" id="createCash" checked />
+                                        <label class="form-check-label small fw-semibold" for="createCash">مسموح نقدي (Cash)</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="hidden" name="IsCreditAllowed" value="false" />
+                                        <input class="form-check-input" type="checkbox" name="IsCreditAllowed" value="true" id="createCredit" />
+                                        <label class="form-check-label small fw-semibold" for="createCredit">مسموح آجل (Credit)</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="hidden" name="AutoPost" value="false" />
+                                        <input class="form-check-input" type="checkbox" name="AutoPost" value="true" id="createAutoPost" />
+                                        <label class="form-check-label small fw-semibold text-warning" for="createAutoPost">ترحيل فوري تلقائي</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="hidden" name="ShowLineNotes" value="false" />
+                                        <input class="form-check-input" type="checkbox" name="ShowLineNotes" value="true" id="createLineNotes" checked />
+                                        <label class="form-check-label small fw-semibold text-info" for="createLineNotes"><i class="fa-solid fa-comment-dots me-1"></i>ملاحظات البنود</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="hidden" name="IsActive" value="false" />
+                                        <input class="form-check-input" type="checkbox" name="IsActive" value="true" id="createActive" checked />
+                                        <label class="form-check-label small fw-semibold text-success" for="createActive">نشط (Active)</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-1 bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-plus me-1"></i> إضافة النوع الآن</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

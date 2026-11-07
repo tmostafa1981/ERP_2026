@@ -1,0 +1,165 @@
+@model ERP.Application.DTOs.UserTransactionTypePermissionMatrixDto
+@{
+    ViewData["Title"] = "صلاحيات أنواع الحركات";
+    var users = ViewBag.Users as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var selectedUserId = ViewBag.SelectedUserId as string ?? "";
+}
+
+<div class="container-fluid px-4 py-3" id="ttPermApp" v-cloak>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-user-shield text-primary me-2"></i> صلاحيات المستخدمين على أنواع الحركات
+            </h4>
+            <span class="text-muted small">تحديد الحركات المسموح لكل مستخدم بإنشائها، تعديلها، ترحيلها، أو تحويلها.</span>
+        </div>
+        <div>
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة لقائمة الحركات
+            </a>
+        </div>
+    </div>
+
+    <!-- User Selector Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2">
+            <div class="row align-items-center g-2">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold mb-1">المستخدم المستهدف:</label>
+                    <select class="form-select form-select-sm fw-bold" v-model="currentUserId" @@change="onUserChange">
+                        @foreach (var u in users)
+                        {
+                            <option value="@u.Id">@u.UserName (@(u.FullName ?? u.UserName))</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-8 text-end">
+                    <button type="button" class="btn btn-sm btn-outline-success me-2" @@click="grantAll">
+                        <i class="fa-solid fa-check-double me-1"></i> منح الكل
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger me-2" @@click="revokeAll">
+                        <i class="fa-solid fa-ban me-1"></i> سحب الكل
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary px-4 fw-bold" @@click="savePermissions" :disabled="isSaving">
+                        <span v-if="isSaving" class="spinner-border spinner-border-sm me-1"></span>
+                        <i v-else class="fa-solid fa-save me-1"></i> حفظ التغييرات
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Permissions Grid -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-dark small text-center">
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th style="width: 120px;">كود الحركة</th>
+                            <th class="text-start">اسم الحركة</th>
+                            <th style="width: 90px;">الموديول</th>
+                            <th style="width: 80px;">عرض</th>
+                            <th style="width: 80px;">إنشاء</th>
+                            <th style="width: 80px;">تعديل</th>
+                            <th style="width: 80px;">حذف</th>
+                            <th style="width: 80px;">ترحيل</th>
+                            <th style="width: 80px;">إلغاء ترحيل</th>
+                            <th style="width: 80px;">تحويل</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(item, idx) in permissions" :key="item.id">
+                            <td class="text-center fw-bold text-muted">{{ idx + 1 }}</td>
+                            <td class="font-monospace fw-bold text-primary text-center">{{ item.code }}</td>
+                            <td class="fw-semibold">{{ item.localizedName }}</td>
+                            <td class="text-center"><span class="badge bg-light text-dark border">{{ item.module }}</span></td>
+                            <td class="text-center"><input class="form-check-input" type="checkbox" v-model="item.canView" /></td>
+                            <td class="text-center"><input class="form-check-input" type="checkbox" v-model="item.canCreate" /></td>
+                            <td class="text-center"><input class="form-check-input" type="checkbox" v-model="item.canEdit" /></td>
+                            <td class="text-center"><input class="form-check-input" type="checkbox" v-model="item.canDelete" /></td>
+                            <td class="text-center"><input class="form-check-input" type="checkbox" v-model="item.canPost" /></td>
+                            <td class="text-center"><input class="form-check-input" type="checkbox" v-model="item.canUnpost" /></td>
+                            <td class="text-center"><input class="form-check-input" type="checkbox" v-model="item.canConvert" /></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/lib/vue/vue.global.prod.js"></script>
+    <script src="~/lib/sweetalert2/sweetalert2.all.min.js"></script>
+    <script>
+        const { createApp, ref } = Vue;
+
+        createApp({
+            setup() {
+                const currentUserId = ref('@selectedUserId');
+                const isSaving = ref(false);
+                const permissions = ref(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Permissions, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase })));
+
+                function onUserChange() {
+                    window.location.href = `@Url.Action("Permissions", "TransactionTypes")?userId=${currentUserId.value}`;
+                }
+
+                function grantAll() {
+                    permissions.value.forEach(p => {
+                        p.canView = true; p.canCreate = true; p.canEdit = true;
+                        p.canDelete = true; p.canPost = true; p.canUnpost = true; p.canConvert = true;
+                    });
+                }
+
+                function revokeAll() {
+                    permissions.value.forEach(p => {
+                        p.canView = false; p.canCreate = false; p.canEdit = false;
+                        p.canDelete = false; p.canPost = false; p.canUnpost = false; p.canConvert = false;
+                    });
+                }
+
+                function savePermissions() {
+                    isSaving.value = true;
+                    const payload = {
+                        userId: currentUserId.value,
+                        permissions: permissions.value
+                    };
+
+                    $.ajax({
+                        url: `@Url.Action("SavePermissions", "TransactionTypes")`,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        data: JSON.stringify(payload),
+                        success: function(res) {
+                            isSaving.value = false;
+                            if (res.success) {
+                                Swal.fire('تم بنجاح', res.message, 'success');
+                            } else {
+                                Swal.fire('خطأ', res.message, 'error');
+                            }
+                        },
+                        error: function() {
+                            isSaving.value = false;
+                            Swal.fire('خطأ', 'فشل حفظ الصلاحيات.', 'error');
+                        }
+                    });
+                }
+
+                return {
+                    currentUserId,
+                    isSaving,
+                    permissions,
+                    onUserChange,
+                    grantAll,
+                    revokeAll,
+                    savePermissions
+                };
+            }
+        }).mount('#ttPermApp');
+    </script>
+}

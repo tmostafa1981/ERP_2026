@@ -1,0 +1,113 @@
+@model List<ERP.Application.DTOs.FixedAssets.AssetCategoryDto>
+@{
+    ViewData["Title"] = "تصنيفات ومجموعات الأصول الثابتة";
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="mb-1 text-primary"><i class="fas fa-boxes me-2"></i>تصنيفات ومجموعات الأصول الثابتة</h3>
+            <p class="text-muted small mb-0">تعريف مجموعات الأصول وحساباتها المحاسبية وطرق وعمر الإهلاك الافتراضي</p>
+        </div>
+        <div>
+            <a asp-action="Create" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i>إضافة مجموعة أصول جديدة
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-1"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-1"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>الكود</th>
+                            <th class="text-start">اسم المجموعة</th>
+                            <th>طريقة الإهلاك</th>
+                            <th>العمر الافتراضي (شهر)</th>
+                            <th>حساب الأصل</th>
+                            <th>حساب مجمع الإهلاك</th>
+                            <th>حساب مصروف الإهلاك</th>
+                            <th>عدد الأصول</th>
+                            <th>الحالة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model == null || !Model.Any())
+                        {
+                            <tr>
+                                <td colspan="10" class="text-muted py-4">لا توجد مجموعات أصول مسجلة حتى الآن.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var c in Model)
+                            {
+                                <tr>
+                                    <td><span class="badge bg-secondary">@c.Code</span></td>
+                                    <td class="text-start fw-bold">@c.LocalizedName</td>
+                                    <td>
+                                        <span class="badge bg-info text-dark">
+                                            @(c.DefaultDepreciationMethod switch {
+                                                ERP.Domain.Enums.DepreciationMethod.StraightLine => "قسط ثابت",
+                                                ERP.Domain.Enums.DepreciationMethod.DecliningBalance => "قسط متناقص",
+                                                ERP.Domain.Enums.DepreciationMethod.UnitsOfProduction => "وحدات إنتاج",
+                                                ERP.Domain.Enums.DepreciationMethod.NoDepreciation => "بدون إهلاك",
+                                                _ => c.DefaultDepreciationMethod.ToString()
+                                            })
+                                        </span>
+                                    </td>
+                                    <td>@c.DefaultUsefulLifeMonths (@(c.DefaultUsefulLifeMonths / 12) سنة)</td>
+                                    <td class="small text-muted">@c.AssetCostAccountCode - @c.AssetCostAccountName</td>
+                                    <td class="small text-muted">@c.AccumulatedDepreciationAccountCode - @c.AccumulatedDepreciationAccountName</td>
+                                    <td class="small text-muted">@c.DepreciationExpenseAccountCode - @c.DepreciationExpenseAccountName</td>
+                                    <td><span class="badge bg-primary rounded-pill">@c.AssetsCount</span></td>
+                                    <td>
+                                        @if (c.IsActive)
+                                        {
+                                            <span class="badge bg-success">نشط</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">غير نشط</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a asp-action="Edit" asp-route-id="@c.Id" class="btn btn-outline-primary" title="تعديل">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <form asp-action="Delete" asp-route-id="@c.Id" method="post" class="d-inline" onsubmit="return confirm('هل أنت متأكد من حذف هذه المجموعة؟');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-danger" title="حذف" @(c.AssetsCount > 0 ? "disabled" : "")>
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

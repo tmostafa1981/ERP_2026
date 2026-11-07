@@ -160,6 +160,8 @@ namespace ERP.Web.Models
     public class PermissionScreenGroupViewModel
     {
         public string ScreenName { get; set; } = string.Empty;
+        public string? ScreenTitleAr { get; set; }
+        public string? ScreenTitleEn { get; set; }
         public List<PermissionActionItemViewModel> Actions { get; set; } = new List<PermissionActionItemViewModel>();
     }
 

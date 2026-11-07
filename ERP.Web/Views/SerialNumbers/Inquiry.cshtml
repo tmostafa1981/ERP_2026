@@ -1,0 +1,579 @@
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = "استعلام وتتبع السيريال نمبر (Serial Inquiry)";
+    var branches = ViewBag.Branches as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var warehouses = ViewBag.Warehouses as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var initialSerial = ViewBag.InitialSerial as string ?? "";
+}
+
+<div class="container-fluid px-4 py-3">
+    <!-- Breadcrumb & Title -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark">
+                <i class="fa-solid fa-barcode text-primary me-2"></i> استعلام وتتبع السيريال نمبر (360° Serial Inquiry)
+            </h4>
+            <span class="text-muted small">تتبع فوري ومحكم لموقع وحالة وتاريخ حركات السيريال عبر كافة الفروع والمستودعات والمستندات.</span>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-controller="UniversalDocuments" asp-action="Index" class="btn btn-outline-primary btn-sm">
+                <i class="fa-solid fa-file-invoice me-1"></i> الفواتير والمستندات
+            </a>
+            <a asp-controller="Item" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-boxes-stacked me-1"></i> دليل الأصناف
+            </a>
+        </div>
+    </div>
+
+    <!-- Quick Search & Barcode Scanner Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4 bg-light rounded">
+            <div class="row g-3 align-items-center">
+                <div class="col-lg-7 col-md-12">
+                    <label class="form-label fw-bold text-dark mb-1">
+                        <i class="fa-solid fa-qrcode text-primary me-1"></i> رقم السيريال (Serial Number) - مسح باركود أو إدخال يدوي:
+                    </label>
+                    <div class="input-group input-group-lg shadow-sm">
+                        <span class="input-group-text bg-white border-end-0 text-primary">
+                            <i class="fa-solid fa-barcode fa-lg"></i>
+                        </span>
+                        <input type="text" id="txtQuickSerial" class="form-control border-start-0 border-end-0 fw-bold fs-5 text-uppercase" 
+                               placeholder="امسح الباركود أو اكتب رقم السيريال واضغط Enter..." value="@initialSerial" autocomplete="off" autofocus />
+                        <button class="btn btn-primary px-4 fw-bold" type="button" id="btnQuickSearch">
+                            <i class="fa-solid fa-magnifying-glass me-1"></i> بحث فوري
+                        </button>
+                    </div>
+                    <span class="form-text text-muted small">
+                        <i class="fa-solid fa-circle-info me-1"></i> متوافق بالكامل مع أجهزة قارئ الباركود اليدوية (يدعم الضغط التلقائي على Enter).
+                    </span>
+                </div>
+
+                <div class="col-lg-5 col-md-12 text-lg-end">
+                    <button class="btn btn-outline-secondary btn-sm mt-3" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFilterCollapse" aria-expanded="false">
+                        <i class="fa-solid fa-filter me-1"></i> فلاتر البحث المتقدم (Advanced Search)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Advanced Filters Collapsible -->
+            <div class="collapse mt-3 pt-3 border-top" id="advancedFilterCollapse">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">كود أو اسم الصنف:</label>
+                        <input type="text" id="filterItemText" class="form-control form-control-sm" placeholder="ابحث باسم الصنف أو كوده..." />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">الفرع:</label>
+                        <select id="filterBranchId" class="form-select form-select-sm">
+                            <option value="">-- كل الفروع --</option>
+                            @foreach (var br in branches)
+                            {
+                                <option value="@br.Id">@br.NameAr</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">المستودع:</label>
+                        <select id="filterWarehouseId" class="form-select form-select-sm">
+                            <option value="">-- كل المستودعات --</option>
+                            @foreach (var wh in warehouses)
+                            {
+                                <option value="@wh.Id">@wh.NameAr</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">حالة السيريال:</label>
+                        <select id="filterStatus" class="form-select form-select-sm">
+                            <option value="">-- كل الحالات --</option>
+                            <option value="1">متاح بالمخزن (Available)</option>
+                            <option value="2">محجوز (Reserved)</option>
+                            <option value="3">مباع (Sold)</option>
+                            <option value="4">مرتجع (Returned)</option>
+                            <option value="5">قيد النقل (Transferred)</option>
+                            <option value="6">تالف (Damaged)</option>
+                            <option value="7">مستبعد / تكهين (Scrapped)</option>
+                        </select>
+                    </div>
+                    <div class="col-12 text-end mt-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm me-1" id="btnResetFilters">
+                            <i class="fa-solid fa-rotate-left me-1"></i> إعادة ضبط
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm" id="btnAdvancedSearch">
+                            <i class="fa-solid fa-list-check me-1"></i> تطبيق الفلاتر
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert / Message Container -->
+    <div id="alertBox" class="alert d-none py-2 small" role="alert"></div>
+
+    <!-- Loader Spinner -->
+    <div id="loader" class="text-center py-5 d-none">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">جاري التحميل...</span>
+        </div>
+        <p class="mt-2 text-muted fw-bold">جاري البحث واسترجاع ملف السيريال وسجل الحركات...</p>
+    </div>
+
+    <!-- Main Results Section: Single Serial 360 Profile -->
+    <div id="serialProfileSection" class="d-none">
+        <!-- Top Status Bar Card -->
+        <div class="card border-0 shadow-sm mb-4 overflow-hidden">
+            <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary fs-6 px-3 py-2 text-uppercase" id="spSerialBadge">SN: -</span>
+                    <h5 class="fw-bold mb-0 text-dark" id="spItemName">اسم الصنف</h5>
+                    <span class="badge bg-light text-secondary border" id="spItemCode">كود: -</span>
+                </div>
+                <div>
+                    <span class="badge fs-6 px-3 py-2" id="spStatusBadge">متاح بالمخزن</span>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-4">
+                    <!-- Column 1: Inventory Location -->
+                    <div class="col-lg-3 col-md-6 border-end">
+                        <h6 class="text-muted fw-bold small text-uppercase mb-3">
+                            <i class="fa-solid fa-location-dot text-danger me-1"></i> الموقع الجغرافي الحالي
+                        </h6>
+                        <div class="mb-2">
+                            <span class="text-muted small d-block">الفرع المالك:</span>
+                            <span class="fw-bold fs-6 text-dark" id="spBranchName">-</span>
+                        </div>
+                        <div class="mb-2">
+                            <span class="text-muted small d-block">المستودع الفعلي:</span>
+                            <span class="fw-bold fs-6 text-dark" id="spWarehouseName">-</span>
+                        </div>
+                        <div>
+                            <span class="text-muted small d-block">تاريخ التوريد بالمخزن:</span>
+                            <span class="fw-bold text-secondary" id="spInDate">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Parties (Customer / Vendor) -->
+                    <div class="col-lg-3 col-md-6 border-end">
+                        <h6 class="text-muted fw-bold small text-uppercase mb-3">
+                            <i class="fa-solid fa-users text-primary me-1"></i> الأطراف المرتبطة
+                        </h6>
+                        <div class="mb-2">
+                            <span class="text-muted small d-block">المورد (جهة الشراء):</span>
+                            <span class="fw-bold text-dark" id="spVendorName">غير محدد</span>
+                        </div>
+                        <div class="mb-2">
+                            <span class="text-muted small d-block">العميل (في حال البيع):</span>
+                            <span class="fw-bold text-success" id="spCustomerName">غير مباع</span>
+                        </div>
+                        <div>
+                            <span class="text-muted small d-block">تاريخ الصرف / البيع:</span>
+                            <span class="fw-bold text-secondary" id="spOutDate">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Warranty & Asset Tracking -->
+                    <div class="col-lg-3 col-md-6 border-end">
+                        <h6 class="text-muted fw-bold small text-uppercase mb-3">
+                            <i class="fa-solid fa-shield-halved text-success me-1"></i> الضمان والأصول (Warranty & Asset)
+                        </h6>
+                        <div class="mb-2">
+                            <span class="text-muted small d-block">حالة الضمان:</span>
+                            <span class="badge" id="spWarrantyBadge">لا يوجد ضمان مسجل</span>
+                        </div>
+                        <div class="mb-2">
+                            <span class="text-muted small d-block">تاريخ انتهاء الضمان:</span>
+                            <span class="fw-bold text-dark" id="spWarrantyEndDate">-</span>
+                        </div>
+                        <div>
+                            <span class="text-muted small d-block">كود الأصل (Asset Tag):</span>
+                            <span class="fw-bold text-secondary" id="spAssetTag">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Column 4: Documents Summary -->
+                    <div class="col-lg-3 col-md-6">
+                        <h6 class="text-muted fw-bold small text-uppercase mb-3">
+                            <i class="fa-solid fa-file-lines text-warning me-1"></i> المستندات المرتبطة
+                        </h6>
+                        <div class="mb-2">
+                            <span class="text-muted small d-block">مستند التوريد / الإدخال:</span>
+                            <span class="badge bg-light text-dark border" id="spSourceDoc">-</span>
+                        </div>
+                        <div class="mb-2">
+                            <span class="text-muted small d-block">مستند الصرف / البيع:</span>
+                            <span class="badge bg-light text-dark border" id="spOutDoc">-</span>
+                        </div>
+                        <div>
+                            <span class="text-muted small d-block">ملاحظات:</span>
+                            <span class="small text-muted" id="spNotes">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Movements History Timeline Card -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="fa-solid fa-clock-rotate-left text-primary me-2"></i> الجدول الزمني لتاريخ الحركات والتدقيق (Movement Audit History)
+                </h5>
+                <span class="badge bg-secondary" id="spMovementsCount">0 حركة</span>
+            </div>
+            <div class="card-body p-4">
+                <div id="timelineContainer" class="timeline-wrapper">
+                    <!-- Dynamically rendered timeline events -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Multi-results Table Section (when searching via filters) -->
+    <div id="multiResultsSection" class="card border-0 shadow-sm mb-4 d-none">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-table-list text-primary me-2"></i> نتائج البحث في السيريالات
+            </h5>
+            <span class="badge bg-primary" id="multiCountBadge">0 نتيجة</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small">
+                        <tr>
+                            <th>رقم السيريال</th>
+                            <th>كود الصنف</th>
+                            <th>اسم الصنف</th>
+                            <th>الفرع</th>
+                            <th>المستودع</th>
+                            <th>الحالة</th>
+                            <th>الطرف (عميل/مورد)</th>
+                            <th>تاريخ التوريد</th>
+                            <th class="text-center">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="multiResultsTbody">
+                        <!-- Dynamically filled -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Timeline Styling */
+    .timeline-wrapper {
+        position: relative;
+        padding: 20px 0 20px 20px;
+    }
+    .timeline-wrapper::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        right: 32px;
+        width: 3px;
+        background: #e9ecef;
+    }
+    .timeline-item {
+        position: relative;
+        margin-bottom: 30px;
+        padding-right: 60px;
+    }
+    .timeline-icon {
+        position: absolute;
+        right: 15px;
+        top: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 36px;
+        color: #fff;
+        font-size: 14px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        z-index: 1;
+    }
+    .timeline-content {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px 20px;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .timeline-item:hover .timeline-content {
+        background: #fff;
+        border-color: #0d6efd;
+        box-shadow: 0 4px 12px rgba(13,110,253,0.08);
+    }
+</style>
+
+@section Scripts {
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const txtQuickSerial = document.getElementById("txtQuickSerial");
+        const btnQuickSearch = document.getElementById("btnQuickSearch");
+        const loader = document.getElementById("loader");
+        const alertBox = document.getElementById("alertBox");
+        const serialProfileSection = document.getElementById("serialProfileSection");
+        const multiResultsSection = document.getElementById("multiResultsSection");
+        const timelineContainer = document.getElementById("timelineContainer");
+
+        function showAlert(msg, isError = false) {
+            alertBox.className = "alert py-2 small " + (isError ? "alert-danger" : "alert-success");
+            alertBox.innerHTML = (isError ? '<i class="fa-solid fa-circle-exclamation me-1"></i> ' : '<i class="fa-solid fa-check-circle me-1"></i> ') + msg;
+            alertBox.classList.remove("d-none");
+        }
+
+        function hideAlert() {
+            alertBox.classList.add("d-none");
+        }
+
+        function loadSerialDetails(sn) {
+            if (!sn || !sn.trim()) {
+                showAlert("يرجى إدخال رقم السيريال للبحث.", true);
+                return;
+            }
+
+            hideAlert();
+            serialProfileSection.classList.add("d-none");
+            multiResultsSection.classList.add("d-none");
+            loader.classList.remove("d-none");
+
+            fetch(`/SerialNumbers/GetDetails?serialNumber=${encodeURIComponent(sn.trim())}`)
+                .then(res => res.json())
+                .then(res => {
+                    loader.classList.add("d-none");
+                    if (!res.success || !res.data) {
+                        showAlert(res.message || "لم يتم العثور على هذا السيريال.", true);
+                        return;
+                    }
+                    renderSerialProfile(res.data);
+                })
+                .catch(err => {
+                    loader.classList.add("d-none");
+                    showAlert("حدث خطأ في الاتصال بالخادم: " + err.message, true);
+                });
+        }
+
+        function renderSerialProfile(data) {
+            document.getElementById("spSerialBadge").innerText = "SN: " + data.serialNumber;
+            document.getElementById("spItemName").innerText = data.itemNameAr || data.itemNameEn || "-";
+            document.getElementById("spItemCode").innerText = "كود: " + (data.itemCode || "-");
+            
+            const spStatusBadge = document.getElementById("spStatusBadge");
+            spStatusBadge.innerText = data.statusNameAr;
+            spStatusBadge.className = "badge fs-6 px-3 py-2 " + (data.statusBadgeClass || "bg-secondary");
+
+            document.getElementById("spBranchName").innerText = data.branchName || "-";
+            document.getElementById("spWarehouseName").innerText = data.warehouseName || "-";
+            document.getElementById("spInDate").innerText = data.inDate ? new Date(data.inDate).toLocaleDateString('ar-EG') : "-";
+
+            document.getElementById("spVendorName").innerText = data.vendorName || (data.currentPartyType === "Vendor" ? data.currentPartyName : "غير مسجل");
+            document.getElementById("spCustomerName").innerText = data.customerName || (data.currentPartyType === "Customer" ? data.currentPartyName : "غير مباع");
+            document.getElementById("spOutDate").innerText = data.outDate ? new Date(data.outDate).toLocaleDateString('ar-EG') : "-";
+
+            // Warranty
+            const spWarrantyBadge = document.getElementById("spWarrantyBadge");
+            if (data.warrantyEndDate) {
+                const end = new Date(data.warrantyEndDate);
+                const isExpired = end < new Date();
+                spWarrantyBadge.innerText = isExpired ? "منتهي الصلاحية" : `ساري (${data.warrantyMonths || 0} شهر)`;
+                spWarrantyBadge.className = "badge " + (isExpired ? "bg-danger" : "bg-success");
+                document.getElementById("spWarrantyEndDate").innerText = end.toLocaleDateString('ar-EG');
+            } else {
+                spWarrantyBadge.innerText = "لا يوجد ضمان مسجل";
+                spWarrantyBadge.className = "badge bg-secondary";
+                document.getElementById("spWarrantyEndDate").innerText = "-";
+            }
+
+            document.getElementById("spAssetTag").innerText = data.assetTag || "غير معرف كأصل";
+            document.getElementById("spSourceDoc").innerText = (data.sourceDocType || "-") + (data.sourceDocId ? ` #${data.sourceDocId}` : "");
+            document.getElementById("spOutDoc").innerText = (data.outDocType || "-") + (data.outDocId ? ` #${data.outDocId}` : "");
+            document.getElementById("spNotes").innerText = data.notes || "لا توجد ملاحظات";
+
+            // Render Timeline
+            renderTimeline(data.movements || []);
+
+            serialProfileSection.classList.remove("d-none");
+        }
+
+        function renderTimeline(movements) {
+            document.getElementById("spMovementsCount").innerText = movements.length + " حركة";
+            if (!movements || movements.length === 0) {
+                timelineContainer.innerHTML = '<div class="alert alert-light text-center small text-muted">لا يوجد سجل حركات سابق لهذا السيريال.</div>';
+                return;
+            }
+
+            let html = "";
+            movements.forEach(m => {
+                let iconClass = "fa-circle-dot";
+                let bgClass = "bg-secondary";
+
+                if (m.movementType === 1) { // Purchase
+                    iconClass = "fa-cart-shopping";
+                    bgClass = "bg-success";
+                } else if (m.movementType === 2) { // Sales
+                    iconClass = "fa-hand-holding-dollar";
+                    bgClass = "bg-primary";
+                } else if (m.movementType === 3) { // Sales Return
+                    iconClass = "fa-rotate-left";
+                    bgClass = "bg-warning text-dark";
+                } else if (m.movementType === 5 || m.movementType === 6 || m.movementType === 7) { // Transfer
+                    iconClass = "fa-truck-arrow-right";
+                    bgClass = "bg-info";
+                } else if (m.movementType === 10 || m.movementType === 11) { // Damaged/Scrapped
+                    iconClass = "fa-ban";
+                    bgClass = "bg-danger";
+                }
+
+                const moveDate = new Date(m.movementDate).toLocaleString('ar-EG');
+
+                html += `
+                    <div class="timeline-item">
+                        <div class="timeline-icon ${bgClass}">
+                            <i class="fa-solid ${iconClass}"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+                                <span class="fw-bold fs-6 text-dark">${m.movementTypeNameAr || m.movementTypeNameEn}</span>
+                                <span class="badge bg-light text-muted border">${moveDate}</span>
+                            </div>
+                            <div class="row g-2 small text-secondary">
+                                <div class="col-md-6">
+                                    <strong>المسار: </strong>
+                                    ${m.fromWarehouseName ? `من: <span class="text-dark">${m.fromWarehouseName} (${m.fromBranchName || ''})</span> &rarr; ` : ''}
+                                    ${m.toWarehouseName ? `إلى: <span class="text-dark">${m.toWarehouseName} (${m.toBranchName || ''})</span>` : ''}
+                                </div>
+                                <div class="col-md-6 text-md-end">
+                                    ${m.documentType ? `<strong>المستند: </strong> <span class="badge bg-white text-dark border">${m.documentType} ${m.documentNumber ? '#' + m.documentNumber : ''}</span>` : ''}
+                                    ${m.partyName ? ` | <strong>الطرف: </strong> <span class="text-dark">${m.partyName}</span>` : ''}
+                                </div>
+                                <div class="col-12 mt-1">
+                                    <span class="badge bg-light text-secondary border">الحالة: ${m.newStatusNameAr || ''}</span>
+                                    ${m.notes ? `<span class="ms-2 text-muted"><i class="fa-regular fa-comment-dots me-1"></i>${m.notes}</span>` : ''}
+                                    ${m.userId ? `<span class="float-start text-muted small"><i class="fa-regular fa-user me-1"></i>${m.userId}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            timelineContainer.innerHTML = html;
+        }
+
+        // Quick Search click & Enter key
+        btnQuickSearch.addEventListener("click", function () {
+            loadSerialDetails(txtQuickSerial.value);
+        });
+
+        txtQuickSerial.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                loadSerialDetails(txtQuickSerial.value);
+            }
+        });
+
+        // Advanced Search
+        document.getElementById("btnAdvancedSearch").addEventListener("click", function () {
+            const filter = {
+                serialNumber: txtQuickSerial.value.trim(),
+                itemCode: document.getElementById("filterItemText").value.trim(),
+                itemName: document.getElementById("filterItemText").value.trim(),
+                branchId: document.getElementById("filterBranchId").value ? parseInt(document.getElementById("filterBranchId").value) : null,
+                warehouseId: document.getElementById("filterWarehouseId").value ? parseInt(document.getElementById("filterWarehouseId").value) : null,
+                status: document.getElementById("filterStatus").value ? parseInt(document.getElementById("filterStatus").value) : null
+            };
+
+            hideAlert();
+            serialProfileSection.classList.add("d-none");
+            multiResultsSection.classList.add("d-none");
+            loader.classList.remove("d-none");
+
+            fetch("/SerialNumbers/Search", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(filter)
+            })
+            .then(res => res.json())
+            .then(res => {
+                loader.classList.add("d-none");
+                if (!res.success || !res.data || res.data.length === 0) {
+                    showAlert("لم يتم العثور على أي نتائج تطابق محددات البحث.", true);
+                    return;
+                }
+
+                if (res.data.length === 1 && filter.serialNumber) {
+                    renderSerialProfile(res.data[0]);
+                    return;
+                }
+
+                renderMultiResults(res.data);
+            })
+            .catch(err => {
+                loader.classList.add("d-none");
+                showAlert("حدث خطأ أثناء البحث: " + err.message, true);
+            });
+        });
+
+        function renderMultiResults(list) {
+            document.getElementById("multiCountBadge").innerText = list.length + " نتيجة";
+            const tbody = document.getElementById("multiResultsTbody");
+            tbody.innerHTML = "";
+
+            list.forEach(item => {
+                const tr = document.createElement("tr");
+                const inDateStr = item.inDate ? new Date(item.inDate).toLocaleDateString('ar-EG') : "-";
+                const party = item.customerName || item.vendorName || item.currentPartyName || "-";
+
+                tr.innerHTML = `
+                    <td class="fw-bold text-uppercase text-primary">${item.serialNumber}</td>
+                    <td><span class="badge bg-light text-dark border">${item.itemCode || '-'}</span></td>
+                    <td class="fw-bold">${item.itemNameAr || item.itemNameEn || '-'}</td>
+                    <td>${item.branchName || '-'}</td>
+                    <td>${item.warehouseName || '-'}</td>
+                    <td><span class="badge ${item.statusBadgeClass || 'bg-secondary'}">${item.statusNameAr}</span></td>
+                    <td>${party}</td>
+                    <td class="small text-muted">${inDateStr}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2 btn-view-serial" data-sn="${item.serialNumber}">
+                            <i class="fa-solid fa-eye me-1"></i> التفاصيل والمسار
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            tbody.querySelectorAll(".btn-view-serial").forEach(btn => {
+                btn.addEventListener("click", function () {
+                    const sn = this.getAttribute("data-sn");
+                    txtQuickSerial.value = sn;
+                    loadSerialDetails(sn);
+                });
+            });
+
+            multiResultsSection.classList.remove("d-none");
+        }
+
+        document.getElementById("btnResetFilters").addEventListener("click", function () {
+            document.getElementById("filterItemText").value = "";
+            document.getElementById("filterBranchId").value = "";
+            document.getElementById("filterWarehouseId").value = "";
+            document.getElementById("filterStatus").value = "";
+            txtQuickSerial.value = "";
+            hideAlert();
+            serialProfileSection.classList.add("d-none");
+            multiResultsSection.classList.add("d-none");
+        });
+
+        // If initial serial is passed in query string, trigger search immediately
+        if (txtQuickSerial.value.trim()) {
+            loadSerialDetails(txtQuickSerial.value.trim());
+        }
+    });
+</script>
+}

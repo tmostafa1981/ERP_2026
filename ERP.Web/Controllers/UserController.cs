@@ -6,6 +6,7 @@ using ERP.Application.Interfaces;
 using ERP.Infrastructure.Data;
 using ERP.Infrastructure.Identity;
 using ERP.Web.Authorization;
+using ERP.Web.Extensions;
 using ERP.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -129,16 +130,23 @@ namespace ERP.Web.Controllers
         [HasPermission("Administration.Users.Add")]
         public async Task<IActionResult> Create(UserCreateEditViewModel model)
         {
-            if (ModelState.IsValid)
+            if (string.IsNullOrWhiteSpace(model.EmployeeCode))
+                ModelState.AddModelError("EmployeeCode", "كود الموظف مطلوب.");
+
+            if (string.IsNullOrWhiteSpace(model.FullNameAr) && string.IsNullOrWhiteSpace(model.FullNameEn))
+                ModelState.AddModelError("FullNameAr", "اسم المستخدم بالعربي أو بالإنجليزي مطلوب.");
+
+            if (!string.IsNullOrWhiteSpace(model.EmployeeCode))
             {
-                // Validate EmployeeCode uniqueness
-                var existingEmpCode = await _userManager.Users.FirstOrDefaultAsync(u => u.EmployeeCode == model.EmployeeCode);
+                var existingEmpCode = await _userManager.Users.FirstOrDefaultAsync(u => u.EmployeeCode == model.EmployeeCode.Trim());
                 if (existingEmpCode != null)
                 {
-                    TempData["ErrorMessage"] = $"Employee Code '{model.EmployeeCode}' is already registered to another user.";
-                    return RedirectToAction(nameof(Index));
+                    ModelState.AddModelError("EmployeeCode", $"كود الموظف '{model.EmployeeCode}' مسجل لمستخدم آخر بالفعل.");
                 }
+            }
 
+            if (ModelState.IsValid)
+            {
                 var username = !string.IsNullOrWhiteSpace(model.UserName) ? model.UserName.Trim() : model.EmployeeCode.Trim();
 
                 var user = new ApplicationUser
@@ -182,17 +190,23 @@ namespace ERP.Web.Controllers
                             user.PasswordResetRequired
                         });
 
-                    TempData["SuccessMessage"] = $"User '{user.EmployeeCode}' created successfully.";
+                    if (Request.IsAjaxRequest())
+                        return this.JsonSuccess($"تم إنشاء المستخدم '{user.EmployeeCode}' بنجاح.");
+
+                    TempData["SuccessMessage"] = $"تم إنشاء المستخدم '{user.EmployeeCode}' بنجاح.";
                     return RedirectToAction(nameof(Index));
                 }
 
-                TempData["ErrorMessage"] = string.Join(" | ", result.Errors.Select(e => e.Description));
-            }
-            else
-            {
-                TempData["ErrorMessage"] = "Invalid data submitted.";
+                foreach (var err in result.Errors)
+                {
+                    ModelState.AddModelError("", err.Description);
+                }
             }
 
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(ModelState, "يرجى تصحيح أخطاء الإدخال الموضحة أدناه.");
+
+            TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
         }
 
@@ -202,78 +216,105 @@ namespace ERP.Web.Controllers
         [HasPermission("Administration.Users.Edit")]
         public async Task<IActionResult> Edit(UserCreateEditViewModel model)
         {
-            if (string.IsNullOrEmpty(model.Id)) return NotFound();
+            if (string.IsNullOrEmpty(model.Id))
+            {
+                if (Request.IsAjaxRequest())
+                    return this.JsonValidationFailure(new[] { "المستخدم غير موجود أو تم حذفه." });
+                return NotFound();
+            }
 
             var user = await _userManager.FindByIdAsync(model.Id);
-            if (user == null) return NotFound();
+            if (user == null)
+            {
+                if (Request.IsAjaxRequest())
+                    return this.JsonValidationFailure(new[] { "المستخدم غير موجود أو تم حذفه." });
+                return NotFound();
+            }
+
+            if (string.IsNullOrWhiteSpace(model.EmployeeCode))
+                ModelState.AddModelError("EmployeeCode", "كود الموظف مطلوب.");
+
+            if (string.IsNullOrWhiteSpace(model.FullNameAr) && string.IsNullOrWhiteSpace(model.FullNameEn))
+                ModelState.AddModelError("FullNameAr", "اسم المستخدم بالعربي أو بالإنجليزي مطلوب.");
 
             // Check EmployeeCode uniqueness if changed
-            if (user.EmployeeCode != model.EmployeeCode)
+            if (!string.IsNullOrWhiteSpace(model.EmployeeCode) && user.EmployeeCode != model.EmployeeCode.Trim())
             {
-                var codeExists = await _userManager.Users.AnyAsync(u => u.EmployeeCode == model.EmployeeCode && u.Id != user.Id);
+                var codeExists = await _userManager.Users.AnyAsync(u => u.EmployeeCode == model.EmployeeCode.Trim() && u.Id != user.Id);
                 if (codeExists)
                 {
-                    TempData["ErrorMessage"] = $"Employee Code '{model.EmployeeCode}' is already taken.";
+                    ModelState.AddModelError("EmployeeCode", $"كود الموظف '{model.EmployeeCode}' مسجل لمستخدم آخر بالفعل.");
+                }
+            }
+
+            if (ModelState.IsValid)
+            {
+                // ── Capture OldValues BEFORE any changes ──────────────────────────────
+                var oldValues = new {
+                    user.Id, user.EmployeeCode, user.UserName,
+                    user.FullNameAr, user.FullNameEn,
+                    user.Email, user.Mobile,
+                    user.IsActive, user.HasAllBranches,
+                    user.PasswordResetRequired
+                };
+
+                user.EmployeeCode         = model.EmployeeCode.Trim();
+                user.FullNameAr           = model.FullNameAr?.Trim() ?? string.Empty;
+                user.FullNameEn           = model.FullNameEn?.Trim() ?? string.Empty;
+                user.FullName             = user.FullNameAr;
+                user.Email                = model.Email?.Trim();
+                user.Mobile               = model.Mobile?.Trim() ?? string.Empty;
+                user.PhoneNumber          = model.Mobile?.Trim();
+                user.IsActive             = model.IsActive;
+                user.LockoutEnabled       = model.LockoutEnabled;
+                user.PasswordResetRequired = model.PasswordResetRequired;
+                user.HasAllBranches       = model.HasAllBranches;
+                user.UpdatedAt            = DateTime.UtcNow;
+                user.UpdatedBy            = _userContext.Username;
+
+                var result = await _userManager.UpdateAsync(user);
+                if (result.Succeeded)
+                {
+                    // Update roles
+                    var currentRoles = await _userManager.GetRolesAsync(user);
+                    await _userManager.RemoveFromRolesAsync(user, currentRoles);
+
+                    if (model.SelectedRoleIds != null && model.SelectedRoleIds.Any())
+                    {
+                        var newRoles = await _roleManager.Roles.Where(r => model.SelectedRoleIds.Contains(r.Id)).Select(r => r.Name!).ToListAsync();
+                        await _userManager.AddToRolesAsync(user, newRoles);
+                    }
+
+                    // ── Audit: Update ─────────────────────────────────────────────────
+                    await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
+                        entityName: "User",
+                        entityId:   user.Id,
+                        oldValues:  oldValues,
+                        newValues: new {
+                            user.Id, user.EmployeeCode, user.UserName,
+                            user.FullNameAr, user.FullNameEn,
+                            user.Email, user.Mobile,
+                            user.IsActive, user.HasAllBranches,
+                            user.PasswordResetRequired
+                        });
+
+                    if (Request.IsAjaxRequest())
+                        return this.JsonSuccess($"تم تحديث بيانات المستخدم '{user.EmployeeCode}' بنجاح.");
+
+                    TempData["SuccessMessage"] = $"تم تحديث بيانات المستخدم '{user.EmployeeCode}' بنجاح.";
                     return RedirectToAction(nameof(Index));
                 }
-            }
 
-            // ── Capture OldValues BEFORE any changes ──────────────────────────────
-            var oldValues = new {
-                user.Id, user.EmployeeCode, user.UserName,
-                user.FullNameAr, user.FullNameEn,
-                user.Email, user.Mobile,
-                user.IsActive, user.HasAllBranches,
-                user.PasswordResetRequired
-            };
-
-            user.EmployeeCode         = model.EmployeeCode.Trim();
-            user.FullNameAr           = model.FullNameAr?.Trim() ?? string.Empty;
-            user.FullNameEn           = model.FullNameEn?.Trim() ?? string.Empty;
-            user.FullName             = user.FullNameAr;
-            user.Email                = model.Email?.Trim();
-            user.Mobile               = model.Mobile?.Trim() ?? string.Empty;
-            user.PhoneNumber          = model.Mobile?.Trim();
-            user.IsActive             = model.IsActive;
-            user.LockoutEnabled       = model.LockoutEnabled;
-            user.PasswordResetRequired = model.PasswordResetRequired;
-            user.HasAllBranches       = model.HasAllBranches;
-            user.UpdatedAt            = DateTime.UtcNow;
-            user.UpdatedBy            = _userContext.Username;
-
-            var result = await _userManager.UpdateAsync(user);
-            if (result.Succeeded)
-            {
-                // Update roles
-                var currentRoles = await _userManager.GetRolesAsync(user);
-                await _userManager.RemoveFromRolesAsync(user, currentRoles);
-
-                if (model.SelectedRoleIds != null && model.SelectedRoleIds.Any())
+                foreach (var err in result.Errors)
                 {
-                    var newRoles = await _roleManager.Roles.Where(r => model.SelectedRoleIds.Contains(r.Id)).Select(r => r.Name!).ToListAsync();
-                    await _userManager.AddToRolesAsync(user, newRoles);
+                    ModelState.AddModelError("", err.Description);
                 }
-
-                // ── Audit: Update ─────────────────────────────────────────────────
-                await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "User",
-                    entityId:   user.Id,
-                    oldValues:  oldValues,
-                    newValues: new {
-                        user.Id, user.EmployeeCode, user.UserName,
-                        user.FullNameAr, user.FullNameEn,
-                        user.Email, user.Mobile,
-                        user.IsActive, user.HasAllBranches,
-                        user.PasswordResetRequired
-                    });
-
-                TempData["SuccessMessage"] = $"User '{user.EmployeeCode}' updated successfully.";
-            }
-            else
-            {
-                TempData["ErrorMessage"] = string.Join(" | ", result.Errors.Select(e => e.Description));
             }
 
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(ModelState, "يرجى تصحيح أخطاء الإدخال الموضحة أدناه.");
+
+            TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
         }
 
@@ -326,7 +367,12 @@ namespace ERP.Web.Controllers
         public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
         {
             var user = await _userManager.FindByIdAsync(model.UserId);
-            if (user == null) return NotFound();
+            if (user == null)
+            {
+                if (Request.IsAjaxRequest())
+                    return this.JsonValidationFailure(new[] { "المستخدم غير موجود أو تم حذفه." });
+                return NotFound();
+            }
 
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
             var result = await _userManager.ResetPasswordAsync(user, token, model.NewPassword);
@@ -335,13 +381,18 @@ namespace ERP.Web.Controllers
             {
                 user.PasswordResetRequired = model.RequirePasswordResetOnNextLogin;
                 await _userManager.UpdateAsync(user);
-                TempData["SuccessMessage"] = $"Password for user '{user.EmployeeCode}' reset successfully.";
-            }
-            else
-            {
-                TempData["ErrorMessage"] = string.Join(" | ", result.Errors.Select(e => e.Description));
+
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess($"تم إعادة تعيين كلمة المرور للمستخدم '{user.EmployeeCode}' بنجاح.");
+
+                TempData["SuccessMessage"] = $"تم إعادة تعيين كلمة المرور للمستخدم '{user.EmployeeCode}' بنجاح.";
+                return RedirectToAction(nameof(Index));
             }
 
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(result.Errors.Select(e => e.Description), "تعذر إعادة تعيين كلمة المرور.");
+
+            TempData["ErrorMessage"] = string.Join(" | ", result.Errors.Select(e => e.Description));
             return RedirectToAction(nameof(Index));
         }
     }

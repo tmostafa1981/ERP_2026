@@ -1,0 +1,1996 @@
+@model ERP.Application.DTOs.TransactionTypeDto
+@{
+    ViewData["Title"] = $"إنشاء {Model.LocalizedName}";
+    var allowedTypes = ViewBag.AllowedTypes as IEnumerable<ERP.Application.DTOs.TransactionTypeDto> ?? Enumerable.Empty<ERP.Application.DTOs.TransactionTypeDto>();
+    var customers = ViewBag.Customers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var vendors = ViewBag.Vendors as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var warehouses = ViewBag.Warehouses as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var currencies = ViewBag.Currencies as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var cashAccounts = ViewBag.CashAccounts as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var allowedAdjustments = ViewBag.AllowedAdjustments as IEnumerable<ERP.Application.DTOs.DocumentAdjustmentDto> ?? Enumerable.Empty<ERP.Application.DTOs.DocumentAdjustmentDto>();
+}
+
+<div class="container-fluid px-4 py-3" id="docApp" v-cloak>
+    <form id="afForm" style="display:none">
+        @Html.AntiForgeryToken()
+    </form>
+    <!-- Header Title Bar -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-file-signature text-primary me-2"></i> {{ currentType.localizedName }}
+            </h4>
+            <span class="text-muted small">
+                كود الحركة: <span class="badge bg-light text-primary border font-monospace">{{ currentType.code }}</span> | 
+                الفرع: <span class="badge bg-light text-dark border">@ViewBag.CurrentBranchName</span>
+            </span>
+        </div>
+        <div class="d-flex gap-2">
+            <!-- Dynamic Transaction Type Switcher -->
+            <div class="input-group input-group-sm" style="width: 280px;">
+                <span class="input-group-text bg-light fw-bold small">نوع الحركة:</span>
+                <select class="form-select form-select-sm fw-bold" v-model.number="selectedTypeId" @@change="onTypeChange">
+                    @foreach (var t in allowedTypes.Where(x => x.CanCreate))
+                    {
+                        <option value="@t.Id">@t.LocalizedName (@t.Code)</option>
+                    }
+                </select>
+            </div>
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-xmark me-1"></i> إلغاء
+            </a>
+        </div>
+    </div>
+
+    <!-- 1. Header Information Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold">
+                <i class="fa-solid fa-circle-info me-1"></i> البيانات الأساسية للمستند
+            </h6>
+            <div>
+                <span v-if="currentType.inventoryEffect === 2" class="badge bg-danger-subtle text-danger border">صرف من المخزن</span>
+                <span v-else-if="currentType.inventoryEffect === 3" class="badge bg-success-subtle text-success border">استلام بالمخزن</span>
+                <span v-else class="badge bg-secondary-subtle text-muted border">بدون حركة مخزنية</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <!-- Date -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">تاريخ المستند <span class="text-danger">*</span>:</label>
+                    <input type="date" class="form-control form-control-sm" v-model="header.documentDate" @@change="onDateChange" required />
+                </div>
+
+                <!-- Party (Customer or Vendor based on module) with Search Modal & Currency Sync -->
+                <div class="col-md-4" v-if="requiresParty">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-bold mb-0">
+                            {{ currentType.module === 1 ? 'العميل' : 'المورد' }} <span class="text-danger">*</span>:
+                        </label>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none fw-bold" @@click="openPartySearchModal">
+                            <i class="fa-solid fa-magnifying-glass me-1"></i> بحث متقدم
+                        </button>
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <select class="form-select form-select-sm fw-bold" v-model.number="header.partyId" @@change="onPartySelectChange" required>
+                            <option :value="null">-- اختر {{ currentType.module === 1 ? 'العميل' : 'المورد' }} --</option>
+                            <template v-if="currentType.module === 1">
+                                <option v-for="c in customersList" :key="c.id" :value="c.id">
+                                    {{ c.code }} - {{ c.localizedName }}
+                                </option>
+                            </template>
+                            <template v-else>
+                                <option v-for="v in vendorsList" :key="v.id" :value="v.id">
+                                    {{ v.code }} - {{ v.localizedName }}
+                                </option>
+                            </template>
+                        </select>
+                        <button class="btn btn-outline-primary" type="button" @@click="openPartySearchModal" title="بحث سريع">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </button>
+                    </div>
+                    <!-- Display Registered Party Currency Badge -->
+                    <div v-if="selectedPartyCurrencyInfo" class="mt-1 small">
+                        <span class="badge bg-info-subtle text-info border">
+                            <i class="fa-solid fa-coins me-1"></i> عملة العميل المسجلة: <strong>{{ selectedPartyCurrencyInfo.code }} - {{ selectedPartyCurrencyInfo.name }}</strong>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Payment Method -->
+                <div class="col-md-2" v-if="currentType.isCashAllowed && currentType.isCreditAllowed">
+                    <label class="form-label small fw-bold">طريقة السداد:</label>
+                    <select class="form-select form-select-sm" v-model.number="header.paymentMethod">
+                        <option :value="1">💵 نقداً (Cash)</option>
+                        <option :value="2">📝 آجل (Credit)</option>
+                    </select>
+                </div>
+
+                <!-- Cash / Bank Account (If Cash) -->
+                <div class="col-md-3" v-if="header.paymentMethod === 1 && currentType.isCashAllowed">
+                    <label class="form-label small fw-bold">حساب الخزينة / البنك <span class="text-danger">*</span>:</label>
+                    <select class="form-select form-select-sm" v-model.number="header.cashBankAccountId">
+                        <option :value="null">-- اختر حساب السداد --</option>
+                        @foreach (var a in cashAccounts)
+                        {
+                            <option value="@a.Id">@a.Code - @a.LocalizedName</option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Default Warehouse (If Inventory Effect) -->
+                <div class="col-md-3" v-if="currentType.inventoryEffect !== 0">
+                    <label class="form-label small fw-bold">المستودع الرئيسي <span class="text-danger">*</span>:</label>
+                    <select class="form-select form-select-sm" v-model.number="header.warehouseId">
+                        <option :value="null">-- اختر المستودع --</option>
+                        @foreach (var w in warehouses)
+                        {
+                            <option value="@w.Id">@w.Code - @w.LocalizedName</option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Currency & Exchange Rate (Party Currency Locked, Rate Auto-resolved by Document Date) -->
+                <div class="col-md-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-bold mb-0">
+                            العملة ومعامل الصرف <span class="text-danger">*</span>:
+                        </label>
+                        <span v-if="isPartyCurrencyLocked" class="badge bg-warning-subtle text-dark border px-1" title="عملة المستند مقيدة بعملة الطرف ولا يمكن تغييرها">
+                            <i class="fa-solid fa-lock me-1"></i> مقيدة بالطرف
+                        </span>
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <select class="form-select form-select-sm" v-model.number="header.currencyId" :disabled="isPartyCurrencyLocked" @@change="onCurrencyChange">
+                            <option v-for="curr in currenciesList" :key="curr.id" :value="curr.id">
+                                {{ curr.code }} - {{ curr.localizedName }}
+                            </option>
+                        </select>
+                        <input type="number" step="0.0001" min="0.0001" class="form-control form-control-sm text-end font-monospace fw-bold" 
+                               :class="{ 'border-danger bg-danger-subtle': isRateError }"
+                               style="max-width: 105px;" v-model.number="header.exchangeRate" placeholder="معامل الصرف" readonly title="معامل تحويل العملة (يتم تحديثه آلياً حسب تاريخ المستند)">
+                    </div>
+                    <div class="mt-1 small" v-if="rateStatusMessage">
+                        <span :class="isRateError ? 'text-danger fw-bold' : 'text-muted'">
+                            <i :class="isRateError ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-circle-check text-success'"></i>
+                            {{ rateStatusMessage }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Reference Number -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">رقم المرجع / الورقي:</label>
+                    <input type="text" class="form-control form-control-sm" v-model="header.referenceNumber" placeholder="رقم الفاتورة الورقية إن وجد" />
+                </div>
+
+                <!-- Notes -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">ملاحظات المستند:</label>
+                    <input type="text" class="form-control form-control-sm" v-model="header.notes" placeholder="ملاحظات عامة..." />
+                </div>
+
+                <!-- Accounting Impact Preview Strip -->
+                <div class="col-12 mt-2 pt-2 border-top d-flex flex-wrap align-items-center justify-content-between small text-muted">
+                    <div>
+                        <i class="fa-solid fa-scale-balanced text-primary me-1"></i>
+                        <strong>الأثر المحاسبي التلقائي:</strong>
+                        <span class="badge bg-light text-dark border ms-1">
+                            <template v-if="currentType.accountingEffect === 1">قيد مالي تام (فاتورة + تكلفة المخزون)</template>
+                            <template v-else-if="currentType.accountingEffect === 2">قيد تكلفة المخزون فقط</template>
+                            <template v-else-if="currentType.accountingEffect === 3">قيد حسابات الذمم والضريبة فقط</template>
+                            <template v-else>بدون قيد محاسبي</template>
+                        </span>
+                    </div>
+                    <div v-if="currentType.accountingEffect !== 0">
+                        <span v-if="currentType.defaultCreditAccountName" class="badge bg-light text-muted border me-1">
+                            دائن: {{ currentType.defaultCreditAccountName }}
+                        </span>
+                        <span v-if="currentType.defaultDebitAccountName" class="badge bg-light text-muted border me-1">
+                            مدين: {{ currentType.defaultDebitAccountName }}
+                        </span>
+                        <span v-if="currentType.defaultTaxAccountName" class="badge bg-light text-muted border">
+                            ضريبة: {{ currentType.defaultTaxAccountName }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Detail Lines Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="fa-solid fa-list-check text-primary me-1"></i> بنود المستند (Document Lines)
+            </h6>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" @@click="addNewLine">
+                    <i class="fa-solid fa-plus me-1"></i> إضافة سطر
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-dark text-center small">
+                        <tr>
+                            <th style="width: 35px;">#</th>
+                            <th style="min-width: 250px;">الصنف</th>
+                            <!-- Dynamic Line Notes Header -->
+                            <th v-if="currentType.showLineNotes" style="min-width: 170px;">ملاحظات البند</th>
+                            <th style="width: 120px;">الكمية</th>
+                            <th style="width: 120px;">سعر الوحدة</th>
+                            <th style="width: 100px;">الخصم</th>
+                            <th style="width: 90px;">الضريبة %</th>
+                            <th style="width: 130px;">الإجمالي الصافي</th>
+                            <th v-if="currentType.inventoryEffect !== 0" style="width: 130px;">السيريالات</th>
+                            <th style="width: 45px;">حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(line, idx) in lines" :key="line.id">
+                            <td class="text-center fw-bold text-muted small">{{ idx + 1 }}</td>
+
+                            <!-- Item Search / Select with Search Modal Button -->
+                            <td>
+                                <div class="input-group input-group-sm position-relative">
+                                    <input type="text" class="form-control form-control-sm font-monospace" v-model="line.itemQuery"
+                                           placeholder="كود، اسم، أو باركود..." @@input="searchItems(line)" @@focus="searchItems(line)" />
+                                    <button class="btn btn-outline-secondary" type="button" @@click="openItemModal(line)" title="بحث متقدم في الأصناف">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                    </button>
+                                </div>
+                                <!-- Autocomplete Dropdown List -->
+                                <div v-if="activeItemDropdown.show && activeItemDropdown.lineId === line.id" 
+                                     class="dropdown-menu show p-0 shadow-lg position-absolute w-100" 
+                                     style="max-height: 250px; overflow-y: auto; z-index: 1050;">
+                                    <div v-if="activeItemDropdown.items.length === 0" class="p-2 text-center text-muted small">
+                                        لا توجد نتائج مطابقة
+                                    </div>
+                                    <a v-for="item in activeItemDropdown.items" :key="item.id" href="#" class="dropdown-item py-1 px-2 border-bottom small"
+                                       @@click.prevent="selectItem(line, item)">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span><strong class="text-primary font-monospace">{{ item.code }}</strong> - {{ item.name }}</span>
+                                            <span v-if="item.isSerial" class="badge bg-warning-subtle text-dark border ms-1">سيريال</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center text-muted" style="font-size: 0.75rem;">
+                                            <span>الوحدة: {{ item.unitName }} | السعر: {{ formatNumber((currentType.module === 1 ? item.salesPrice : item.purchasePrice) || 0) }}</span>
+                                            <span v-if="!item.isService" :class="{'badge font-monospace': true, 'bg-success': item.balance > 0, 'bg-danger': !item.balance || item.balance <= 0}">
+                                                <i class="fa-solid fa-boxes-stacked me-1"></i>رصيد: {{ formatNumber(item.balance || 0) }}
+                                            </span>
+                                        </div>
+                                    </a>
+                                </div>
+                                <!-- Live Stock Availability Strip -->
+                                <div v-if="line.itemId > 0 && (currentType.inventoryEffect === 2 || currentType.inventoryEffect === 4)" class="mt-1" style="font-size: 0.72rem;">
+                                    <div v-if="line.availabilityLoading" class="text-muted">
+                                        <i class="fa-solid fa-spinner fa-spin me-1"></i> جارٍ فحص الرصيد...
+                                    </div>
+                                    <div v-else-if="line.availability" class="d-flex flex-wrap gap-1 align-items-center">
+                                        <span class="badge bg-light text-dark border py-1" title="الرصيد الفعلي الحالي في المستودع">
+                                            الفعلي: <strong>{{ line.availability.onHandQuantity }}</strong>
+                                        </span>
+                                        <span class="badge bg-warning-subtle text-warning border py-1" title="الكميات المحجوزة لأوامر بيع">
+                                            المحجوز: <strong>{{ line.availability.reservedQuantity }}</strong>
+                                        </span>
+                                        <span :class="['badge border py-1', line.availability.availableQuantity >= line.quantity ? 'bg-success-subtle text-success' : 'bg-danger text-white']" 
+                                              title="الكمية المتاحة للبيع">
+                                            المتاح: <strong>{{ line.availability.availableQuantity }}</strong>
+                                        </span>
+                                        <span v-if="line.availability.availableQuantity < line.quantity" class="badge bg-danger text-white py-1">
+                                            <i class="fa-solid fa-triangle-exclamation me-1"></i> عجز: {{ (line.quantity - line.availability.availableQuantity) }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- Dynamic Line Notes Field (Controlled by TransactionType.ShowLineNotes) -->
+                            <td v-if="currentType.showLineNotes">
+                                <input type="text" class="form-control form-control-sm" v-model="line.notes" placeholder="ملاحظات البند..." />
+                            </td>
+
+                            <!-- Quantity -->
+                            <td>
+                                <input type="number" step="1" min="1" class="form-control form-control-sm text-end fw-bold font-monospace"
+                                       v-model.number="line.quantity" @@input="calcLine(line)" />
+                            </td>
+
+                            <!-- Unit Price -->
+                            <td>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm text-end font-monospace"
+                                       v-model.number="line.unitPrice" @@input="calcLine(line)" />
+                            </td>
+
+                            <!-- Discount -->
+                            <td>
+                                <input type="number" step="0.01" min="0" class="form-control form-control-sm text-end font-monospace"
+                                       v-model.number="line.discountAmount" @@input="calcLine(line)" />
+                            </td>
+
+                            <!-- Tax Rate % -->
+                            <td>
+                                <input type="number" step="1" min="0" max="100" class="form-control form-control-sm text-end font-monospace"
+                                       v-model.number="line.taxRate" @@input="calcLine(line)" />
+                            </td>
+
+                            <!-- Line Total -->
+                            <td class="text-end fw-bold font-monospace text-primary bg-light">
+                                {{ formatNumber(line.lineTotal) }}
+                            </td>
+
+                            <!-- Serials Button -->
+                            <td v-if="currentType.inventoryEffect !== 0" class="text-center">
+                                <div v-if="line.isSerial" class="d-flex flex-column align-items-center gap-1">
+                                    <button type="button"
+                                            :class="['btn btn-sm py-0 px-2 fw-bold btn-open-serials', line.serialNumbers.length === line.quantity && line.quantity > 0 ? 'btn-success' : 'btn-outline-warning text-dark']"
+                                            @@click="openSerialsModal(line)" style="font-size: 0.75rem;">
+                                        <i class="fa-solid fa-barcode me-1"></i>
+                                        <span v-if="isIssueSerialMode">اختيار السيريالات ({{ line.serialNumbers.length }}/{{ line.quantity }})</span>
+                                        <span v-else>سيريالات ({{ line.serialNumbers.length }}/{{ line.quantity }})</span>
+                                    </button>
+                                    <span v-if="isIssueSerialMode && line.availableSerialsCount !== null && line.availableSerialsCount !== undefined"
+                                          class="badge bg-info-subtle text-info border border-info-subtle" style="font-size: 0.68rem;">
+                                        المتاح للصرف: {{ line.availableSerialsCount }}
+                                    </span>
+                                </div>
+                                <span v-else class="text-muted small">-</span>
+                            </td>
+
+                            <!-- Remove Line -->
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm text-danger p-0" @@click="removeLine(idx)" :disabled="lines.length <= 1">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Lines Subtotal Footer -->
+        <div class="card-footer bg-light py-2">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <span class="small fw-bold text-muted">إجمالي سطور البنود: </span>
+                    <span class="badge bg-secondary">{{ lines.length }}</span>
+                </div>
+                <div class="col-md-6 text-end">
+                    <span class="small fw-bold me-2">إجمالي البنود:</span>
+                    <span class="fw-bold fs-6 font-monospace">{{ formatNumber(linesSubtotal) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Additional Charges & Discounts Card (المصاريف والخصومات الإضافية) -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="fa-solid fa-calculator text-primary me-1"></i> المصاريف والخصومات الإضافية (Additional Charges & Discounts)
+            </h6>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" @@click="addAdjustmentRow" :disabled="allowedAdjustmentsList.length === 0">
+                    <i class="fa-solid fa-plus me-1"></i> إضافة مصروف / خصم
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <!-- If no allowed adjustments configured -->
+            <div class="p-3 text-center text-muted" v-if="allowedAdjustmentsList.length === 0">
+                <i class="fa-solid fa-circle-info text-primary fs-4 d-block mb-1"></i>
+                لم يتم ربط أي مصاريف أو خصومات مسموحة بنوع الحركة ({{ currentType.localizedName }}) بعد.
+                <div class="mt-2">
+                    <a asp-controller="DocumentAdjustments" asp-action="Index" class="btn btn-sm btn-outline-primary" target="_blank">
+                        <i class="fa-solid fa-sliders me-1"></i> فتح شاشة تهيئة المصاريف والخصومات لنوع الحركة
+                    </a>
+                </div>
+            </div>
+
+            <!-- If allowed adjustments exist -->
+            <div class="table-responsive" v-else>
+                <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                    <thead class="table-light small">
+                        <tr>
+                            <th style="width: 35px;">#</th>
+                            <th style="min-width: 220px;">نوع البند (Adjustment Type)</th>
+                            <th style="min-width: 220px;">الحساب المحاسبي المرتبط (Account)</th>
+                            <th style="width: 140px;">النسبة (Percentage %)</th>
+                            <th style="width: 160px;">القيمة / المبلغ (Amount)</th>
+                            <th style="min-width: 200px;">ملاحظات / بيان (Notes)</th>
+                            <th style="width: 45px;">حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(adj, idx) in adjustments" :key="adj.id">
+                            <td class="text-center fw-bold text-muted small">{{ idx + 1 }}</td>
+                            <td>
+                                <select class="form-select form-select-sm fw-bold" v-model.number="adj.documentAdjustmentId" @@change="onAdjustmentSelectChange(adj)">
+                                    <option v-for="opt in allowedAdjustmentsList" :key="opt.id" :value="opt.id">
+                                        {{ opt.adjustmentType === 1 ? '➕' : '➖' }} {{ opt.localizedName || opt.nameAr }} ({{ opt.code }})
+                                    </option>
+                                </select>
+                            </td>
+                            <td class="text-start">
+                                <span class="badge bg-light text-dark border font-monospace me-1">{{ adj.glAccountCode }}</span>
+                                <span class="small fw-semibold">{{ adj.glAccountName }}</span>
+                            </td>
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm text-end font-monospace"
+                                           v-model.number="adj.percentage" @@input="onAdjustmentPercentChange(adj)" />
+                                    <span class="input-group-text small">%</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text small fw-bold" :class="adj.adjustmentType === 1 ? 'text-primary' : 'text-danger'">
+                                        {{ adj.adjustmentType === 1 ? '+' : '-' }}
+                                    </span>
+                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm text-end font-monospace fw-bold"
+                                           v-model.number="adj.amount" @@input="onAdjustmentAmountChange(adj)" />
+                                </div>
+                            </td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm" v-model="adj.notes" placeholder="ملاحظات البند..." />
+                            </td>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm text-danger p-0" @@click="removeAdjustmentRow(idx)">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="adjustments.length === 0">
+                            <td colspan="7" class="text-muted py-2 small">
+                                لا توجد مصاريف أو خصومات إضافية مضافة على هذا المستند. اضغط "إضافة مصروف / خصم" لإضافة بند.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Grand Totals Summary Card -->
+    <div class="card shadow-sm border-0 mb-3 bg-light">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center text-center">
+                <div class="col-md-2 border-end">
+                    <span class="small text-muted d-block">الإجمالي قبل الخصم</span>
+                    <span class="fw-bold font-monospace fs-6">{{ formatNumber(header.totalAmountBeforeTax) }}</span>
+                </div>
+                <div class="col-md-2 border-end">
+                    <span class="small text-danger d-block">إجمالي الخصومات</span>
+                    <span class="fw-bold font-monospace fs-6 text-danger">- {{ formatNumber(header.discountAmount) }}</span>
+                </div>
+                <div class="col-md-2 border-end">
+                    <span class="small text-primary d-block">المصاريف والإضافات</span>
+                    <span class="fw-bold font-monospace fs-6 text-primary">+ {{ formatNumber(header.totalAdditions) }}</span>
+                </div>
+                <div class="col-md-2 border-end">
+                    <span class="small text-muted d-block">ضريبة القيمة المضافة</span>
+                    <span class="fw-bold font-monospace fs-6 text-dark">+ {{ formatNumber(header.taxAmount) }}</span>
+                </div>
+                <div class="col-md-4">
+                    <span class="small text-muted d-block">الصافي النهائي المطلوب</span>
+                    <span class="fw-bold font-monospace fs-4 text-success">{{ formatNumber(header.totalAmountNet) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-xmark me-1"></i> إلغاء
+            </a>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-success px-4 fw-bold" @@click="saveDocument" :disabled="isSubmitting">
+                <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="fa-solid fa-save me-1"></i> {{ currentType.autoPost ? 'حفظ وترحيل فوري' : 'حفظ المستند' }}
+            </button>
+        </div>
+    </div>
+
+    <!-- 3. Customer / Vendor Search Modal -->
+    <div class="modal fade" id="partySearchModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white py-2">
+                    <h6 class="modal-title fw-bold">
+                        <i class="fa-solid fa-users me-1"></i> بحث عن {{ currentType.module === 1 ? 'عميل' : 'مورد' }}
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass"></i></span>
+                            <input type="text" class="form-control" v-model="partySearchQuery" @@input="onPartySearchInput"
+                                   placeholder="ابحث بالكود، الاسم، رقم الهاتف، أو الرقم الضريبي..." id="partySearchInputBox" />
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table table-hover table-sm align-middle text-center small mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>الكود</th>
+                                    <th>الاسم</th>
+                                    <th>الهاتف</th>
+                                    <th>الرقم الضريبي</th>
+                                    <th>العملة المسجلة</th>
+                                    <th>إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="party in filteredParties" :key="party.id">
+                                    <td class="fw-bold font-monospace text-primary">{{ party.code }}</td>
+                                    <td class="text-start">{{ party.name || party.localizedName }}</td>
+                                    <td>{{ party.phone || '-' }}</td>
+                                    <td>{{ party.taxNumber || '-' }}</td>
+                                    <td>
+                                        <span v-if="party.currencyCode" class="badge bg-info-subtle text-info border">
+                                            {{ party.currencyCode }}
+                                        </span>
+                                        <span v-else class="text-muted">-</span>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-primary py-0 px-2" @@click="selectPartyFromModal(party)">
+                                            اختيار
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr v-if="filteredParties.length === 0">
+                                    <td colspan="6" class="text-muted py-3">لا توجد نتائج مطابقة لبحثك.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer py-1">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Item Search Modal -->
+    <div class="modal fade" id="itemSearchModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content shadow border-0">
+                <div class="modal-header bg-primary text-white py-2">
+                    <h6 class="modal-title fw-bold d-flex align-items-center">
+                        <i class="fa-solid fa-box-open me-2"></i> بحث متقدم عن الأصناف
+                        <span class="badge bg-light text-primary ms-3 fw-normal small">
+                            <i class="fa-solid fa-computer-mouse me-1"></i>انقر مرتين (Double Click) على أي سطر للاختيار السريع
+                        </span>
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass"></i></span>
+                            <input type="text" class="form-control" v-model="itemModalSearchQuery" @@input="onItemModalSearchInput"
+                                   placeholder="ابحث بكود الصنف، الاسم بالعربي أو الإنجليزي، أو الباركود..." id="itemModalSearchInputBox" />
+                        </div>
+                    </div>
+                    <div class="table-responsive border rounded" style="max-height: 420px; overflow-y: auto;">
+                        <table class="table table-hover table-striped table-sm align-middle text-center small mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 130px;">كود الصنف</th>
+                                    <th>اسم الصنف</th>
+                                    <th style="width: 140px;">الباركود</th>
+                                    <th style="width: 90px;">نوع التتبع</th>
+                                    <th style="width: 100px;">الوحدة</th>
+                                    <th style="width: 110px;">رصيد المخزن</th>
+                                    <th style="width: 110px;">السعر</th>
+                                    <th style="width: 80px;">إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="it in itemModalResults" :key="it.id" 
+                                    @@dblclick="selectItemFromModal(it)" 
+                                    style="cursor: pointer; user-select: none;"
+                                    title="انقر مرتين للاختيار السريع">
+                                    <td class="fw-bold font-monospace text-primary">{{ it.code }}</td>
+                                    <td class="text-start">
+                                        <div class="fw-bold">{{ it.name }}</div>
+                                        <div v-if="it.nameEn" class="text-muted" style="font-size:0.75rem;">{{ it.nameEn }}</div>
+                                    </td>
+                                    <td class="font-monospace">{{ it.barcode || '-' }}</td>
+                                    <td>
+                                        <span v-if="it.isSerial" class="badge bg-warning-subtle text-dark border">
+                                            <i class="fa-solid fa-barcode me-1"></i> سيريال
+                                        </span>
+                                        <span v-else class="badge bg-light text-muted border">عادي</span>
+                                    </td>
+                                    <td>{{ it.unitName }}</td>
+                                    <td>
+                                        <span v-if="it.isService" class="badge bg-secondary">خدمي</span>
+                                        <span v-else :class="{'badge font-monospace px-2 py-1': true, 'bg-success': it.balance > 0, 'bg-danger': !it.balance || it.balance <= 0}">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>
+                                            {{ formatNumber(it.balance || 0) }}
+                                        </span>
+                                    </td>
+                                    <td class="fw-bold font-monospace">
+                                        {{ formatNumber(currentType.module === 1 ? it.salesPrice : it.purchasePrice) }}
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-primary py-0 px-2" @@click.stop="selectItemFromModal(it)">
+                                            اختيار
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr v-if="itemModalResults.length === 0">
+                                    <td colspan="8" class="text-muted py-4">لا توجد أصناف مطابقة للبحث.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer py-1">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Serial Numbers Modal -->
+    <div class="modal fade" id="serialsModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" v-if="activeSerialLine">
+                <div class="modal-header bg-warning-subtle py-2">
+                    <h6 class="modal-title fw-bold">
+                        <i class="fa-solid fa-barcode me-1"></i>
+                        <span v-if="isIssueSerialMode">اختيار السيريالات المتاحة للصرف: {{ activeSerialLine.itemName }}</span>
+                        <span v-else>إدارة وإضافة سيريالات الصنف: {{ activeSerialLine.itemName }}</span>
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <!-- ==================== MODE A: ISSUE SERIALS (شاشة الصرف - عرض واختيار السيريالات المتاحة) ==================== -->
+                <div class="modal-body" v-if="isIssueSerialMode">
+                    <!-- Summary Header Bar -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <div class="border rounded p-2 bg-light h-100">
+                                <div class="text-muted small">الصنف (Item)</div>
+                                <div class="fw-bold text-dark" id="issueModalItemName">
+                                    {{ availableSerialsMeta.itemCode ? (availableSerialsMeta.itemCode + ' - ' + availableSerialsMeta.itemName) : activeSerialLine.itemName }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-2 bg-light h-100">
+                                <div class="text-muted small">المخزن (Warehouse)</div>
+                                <div class="fw-bold text-primary" id="issueModalWarehouseName">
+                                    <i class="fa-solid fa-warehouse me-1"></i>
+                                    {{ availableSerialsMeta.warehouseName || 'المستودع المحدد' }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="border rounded p-2 bg-info-subtle text-center h-100">
+                                <div class="text-muted small">عدد السيريالات المتاحة</div>
+                                <div class="fw-bold fs-5 text-info font-monospace" id="availableSerialsTotalBadge">
+                                    {{ availableSerialsTotalCount }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="border rounded p-2 bg-success-subtle text-center h-100">
+                                <div class="text-muted small">السيريالات المختارة (كمية الصرف)</div>
+                                <div class="fw-bold fs-5 text-success font-monospace" id="selectedIssueSerialsCountBadge">
+                                    {{ activeSerialLine.serialNumbers.length }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Server-Side Search & Selection Toolbar -->
+                    <div class="row g-2 align-items-center mb-3">
+                        <div class="col-md-6">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                                <input type="text" id="availableSerialSearchInput" class="form-control font-monospace" dir="ltr"
+                                       v-model="availableSerialSearch"
+                                       @@input="onAvailableSerialSearchInput"
+                                       @@keydown.enter.prevent="loadAvailableSerials(1)"
+                                       placeholder="بحث داخل السيريالات بالكود الكامل أو جزء منه (Search Serial)..." />
+                                <button type="button" id="btnSearchAvailableSerials" class="btn btn-primary fw-bold" @@click="loadAvailableSerials(1)">
+                                    بحث
+                                </button>
+                                <button v-if="availableSerialSearch" type="button" class="btn btn-outline-secondary" @@click="resetAvailableSerialSearch">
+                                    الكل
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6 d-flex justify-content-end gap-2 flex-wrap">
+                            <button type="button" id="btnSelectPageSerials" class="btn btn-sm btn-outline-primary fw-bold"
+                                    @@click="selectPageAvailableSerials" :disabled="availableSerialsList.length === 0">
+                                <i class="fa-solid fa-check-double me-1"></i> تحديد الصفحة
+                            </button>
+                            <button type="button" id="btnClearSelectedIssueSerials" class="btn btn-sm btn-outline-danger fw-bold"
+                                    @@click="clearSelectedIssueSerials" :disabled="activeSerialLine.serialNumbers.length === 0">
+                                <i class="fa-solid fa-xmark me-1"></i> إلغاء تحديد الكل
+                            </button>
+                            <select class="form-select form-select-sm w-auto" v-model.number="availableSerialsPageSize" @@change="loadAvailableSerials(1)">
+                                <option :value="25">25 / صفحة</option>
+                                <option :value="50">50 / صفحة</option>
+                                <option :value="100">100 / صفحة</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Available Serials Table -->
+                    <div class="border rounded bg-white mb-3" style="max-height: 310px; overflow-y: auto;">
+                        <div v-if="availableSerialsLoading" id="availableSerialsLoadingSpinner" class="text-center py-5">
+                            <i class="fa-solid fa-spinner fa-spin fa-2x text-primary mb-2"></i>
+                            <div class="fw-bold text-muted">جارٍ تحميل السيريالات المتاحة من قاعدة البيانات... / Loading available serials...</div>
+                        </div>
+                        <table v-else class="table table-sm table-hover table-bordered align-middle mb-0" id="availableSerialsTable">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 45px;" class="text-center">
+                                        <input type="checkbox" class="form-check-input"
+                                               :checked="isCurrentPageFullySelected"
+                                               @@change="toggleSelectPageAvailableSerials" />
+                                    </th>
+                                    <th>Serial Number</th>
+                                    <th>الصنف (Item)</th>
+                                    <th>المخزن (Warehouse)</th>
+                                    <th class="text-center">حالة السيريال (Status)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="s in availableSerialsList" :key="s.id || s.serialNumber"
+                                    :class="['available-serial-row', isIssueSerialSelected(s.serialNumber) ? 'table-success' : '']"
+                                    style="cursor: pointer;"
+                                    @@click="toggleIssueSerial(s.serialNumber)">
+                                    <td class="text-center" @@click.stop>
+                                        <input type="checkbox" class="form-check-input issue-serial-checkbox"
+                                               :value="s.serialNumber"
+                                               :checked="isIssueSerialSelected(s.serialNumber)"
+                                               @@change="toggleIssueSerial(s.serialNumber)" />
+                                    </td>
+                                    <td class="font-monospace fw-bold text-primary" dir="ltr">{{ s.serialNumber }}</td>
+                                    <td>{{ s.itemCode ? (s.itemCode + ' - ' + s.itemName) : activeSerialLine.itemName }}</td>
+                                    <td>{{ s.warehouseName || availableSerialsMeta.warehouseName }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ s.statusNameAr || 'متاح بالمخزن' }}</span>
+                                    </td>
+                                </tr>
+                                <tr v-if="availableSerialsList.length === 0">
+                                    <td colspan="5" class="text-center text-muted py-4" id="noAvailableSerialsMessage">
+                                        <i class="fa-solid fa-box-open fa-lg mb-2 d-block"></i>
+                                        لا توجد سيريالات متاحة للصرف لهذا الصنف في المخزن المحدد حالياً.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Server-Side Pagination Footer -->
+                    <div class="d-flex justify-content-between align-items-center mb-3 bg-light p-2 rounded border">
+                        <div class="small text-muted fw-bold">
+                            صفحة <span class="text-dark">{{ availableSerialsPage }}</span> من <span class="text-dark">{{ availableSerialsTotalPages || 1 }}</span>
+                            (إجمالي المتاح: <span class="text-primary">{{ availableSerialsTotalCount }}</span> سيريال)
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-secondary"
+                                    :disabled="availableSerialsPage <= 1 || availableSerialsLoading"
+                                    @@click="loadAvailableSerials(availableSerialsPage - 1)">
+                                <i class="fa-solid fa-chevron-right me-1"></i> السابق
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary"
+                                    :disabled="availableSerialsPage >= availableSerialsTotalPages || availableSerialsLoading"
+                                    @@click="loadAvailableSerials(availableSerialsPage + 1)">
+                                التالي <i class="fa-solid fa-chevron-left ms-1"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Selected Serials Display Area -->
+                    <div class="border rounded p-2 bg-light" id="selectedIssueSerialsContainer">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small fw-bold text-dark">
+                                <i class="fa-solid fa-list-check text-success me-1"></i>
+                                السيريالات التي تم اختيارها للصرف ({{ activeSerialLine.serialNumbers.length }}) — يتم احتساب الكمية تلقائياً:
+                            </span>
+                        </div>
+                        <div v-if="activeSerialLine.serialNumbers.length > 0" class="d-flex flex-wrap gap-1" style="max-height: 110px; overflow-y: auto;">
+                            <span v-for="(sn, idx) in activeSerialLine.serialNumbers" :key="sn"
+                                  class="badge bg-success-subtle text-success border border-success d-inline-flex align-items-center gap-1 py-1 px-2 font-monospace" dir="ltr">
+                                <span>{{ sn }}</span>
+                                <button type="button" class="btn-close btn-close-sm ms-1" style="font-size: 0.55rem;"
+                                        @@click="removeIssueSerialByIndex(idx)" title="إلغاء اختيار السيريال"></button>
+                            </span>
+                        </div>
+                        <div v-else class="text-muted small text-center py-2">
+                            لم يتم اختيار أي سيريال بعد. قم بتحديد السيريالات من الجدول أعلاه.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== MODE B: RECEIVE / ADD SERIALS (إضافة السيريالات + Excel Copy/Paste) ==================== -->
+                <div class="modal-body" v-else>
+                    <div class="row g-3">
+                        <!-- Left/Top Column: Excel Copy/Paste & Barcode Input -->
+                        <div class="col-lg-7">
+                            <!-- Single Barcode Scanner Input -->
+                            <div class="card border shadow-none mb-3">
+                                <div class="card-body p-2">
+                                    <label class="form-label small fw-bold mb-1">
+                                        <i class="fa-solid fa-barcode me-1 text-primary"></i> مسح أو كتابة رقم سيريال منفرد (Barcode Scanner):
+                                    </label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control font-monospace" dir="ltr" v-model="serialInput"
+                                               placeholder="أدخل رقم السيريال واضغط Enter..."
+                                               @@keydown.enter.prevent="addSerial" id="serialInputBox" />
+                                        <button type="button" class="btn btn-primary fw-bold" id="btnAddSingleSerial" @@click="addSerial">
+                                            <i class="fa-solid fa-plus me-1"></i> إضافة
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Excel Copy/Paste Area (Paste Serials) -->
+                            <div class="card border-primary-subtle shadow-none">
+                                <div class="card-header bg-primary-subtle py-2 d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold small text-primary-emphasis">
+                                        <i class="fa-solid fa-file-excel me-1 text-success"></i>
+                                        لصق السيريالات من Excel (Paste Serials)
+                                    </span>
+                                    <span class="badge bg-white text-dark border small">يدعم Tab / Enter / Comma / Semicolon</span>
+                                </div>
+                                <div class="card-body p-2">
+                                    <textarea id="pasteSerialsTextarea" class="form-control form-control-sm font-monospace mb-2"
+                                              rows="5" dir="ltr" v-model="pasteSerialsText"
+                                              placeholder="انسخ عمود كامل أو مجموعة خلايا من Excel والصقها هنا مباشرة...&#10;مثال:&#10;00012345&#10;00012346	00012347"></textarea>
+
+                                    <!-- 4 Required Action Buttons -->
+                                    <div class="d-flex flex-wrap gap-2 mb-2">
+                                        <button type="button" id="btnValidatePastedSerials" class="btn btn-primary btn-sm fw-bold"
+                                                @@click="validatePastedSerials" :disabled="pasteValidationLoading">
+                                            <i class="fa-solid fa-magnifying-glass-check me-1"></i> فحص السيريالات
+                                        </button>
+                                        <button type="button" id="btnSaveValidPastedSerials" class="btn btn-success btn-sm fw-bold"
+                                                @@click="saveValidPastedSerials" :disabled="pasteValidationLoading">
+                                            <i class="fa-solid fa-floppy-disk me-1"></i> حفظ السيريالات الصحيحة
+                                        </button>
+                                        <button type="button" id="btnDeleteSelectedPastedSerials" class="btn btn-outline-danger btn-sm fw-bold"
+                                                @@click="deleteSelectedPasteRows" :disabled="!hasSelectedPasteRows">
+                                            <i class="fa-solid fa-trash-can me-1"></i> حذف السيريالات المحددة
+                                        </button>
+                                        <button type="button" id="btnClearPastedSerials" class="btn btn-outline-secondary btn-sm fw-bold"
+                                                @@click="clearPasteData">
+                                            <i class="fa-solid fa-eraser me-1"></i> مسح البيانات
+                                        </button>
+                                    </div>
+
+                                    <!-- Loading Indicator -->
+                                    <div v-if="pasteValidationLoading" id="pasteValidationSpinner" class="text-center py-3">
+                                        <i class="fa-solid fa-spinner fa-spin text-primary me-2"></i>
+                                        <span class="small fw-bold">جارٍ فحص السيريالات الملصقة والتحقق من قاعدة البيانات...</span>
+                                    </div>
+
+                                    <!-- Import Inspection Results Table -->
+                                    <div v-if="pasteValidationResults.length > 0" id="pasteValidationResultsSection" class="mt-2">
+                                        <div class="d-flex flex-wrap gap-1 mb-2">
+                                            <span class="badge bg-dark">الإجمالي: <strong id="pasteTotalCount">{{ pasteValidationSummary.total }}</strong></span>
+                                            <span class="badge bg-success">صالح للإضافة: <strong id="pasteValidCount">{{ pasteValidationSummary.valid }}</strong></span>
+                                            <span class="badge bg-warning text-dark">مكرر في البيانات الملصقة: <strong id="pasteDuplicateCount">{{ pasteValidationSummary.duplicate }}</strong></span>
+                                            <span class="badge bg-danger">موجود مسبقًا: <strong id="pasteExistingCount">{{ pasteValidationSummary.existing }}</strong></span>
+                                            <span class="badge bg-secondary">غير صالح: <strong id="pasteInvalidCount">{{ pasteValidationSummary.invalid }}</strong></span>
+                                        </div>
+
+                                        <div class="border rounded bg-white" style="max-height: 240px; overflow-y: auto;">
+                                            <table class="table table-sm table-bordered table-hover align-middle mb-0" id="pasteValidationTable">
+                                                <thead class="table-light sticky-top">
+                                                    <tr>
+                                                        <th style="width: 36px;" class="text-center">
+                                                            <input type="checkbox" class="form-check-input"
+                                                                   v-model="selectAllPasteRows" @@change="toggleAllPasteRows" />
+                                                        </th>
+                                                        <th style="width: 42px;">#</th>
+                                                        <th>Serial Number</th>
+                                                        <th class="text-center">حالة السيريال</th>
+                                                        <th>رسالة الخطأ إن وجدت</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr v-for="(row, rIdx) in pasteValidationResults" :key="rIdx"
+                                                        :class="row.statusKey === 'Valid' ? 'table-success' : (row.statusKey === 'DuplicateInPaste' ? 'table-warning' : 'table-danger')">
+                                                        <td class="text-center">
+                                                            <input type="checkbox" class="form-check-input paste-row-checkbox" v-model="row.selected" />
+                                                        </td>
+                                                        <td class="text-muted small">{{ rIdx + 1 }}</td>
+                                                        <td class="font-monospace fw-bold" dir="ltr">{{ row.serialNumber }}</td>
+                                                        <td class="text-center">
+                                                            <span v-if="row.statusKey === 'Valid'" class="badge bg-success">{{ row.statusTextAr }}</span>
+                                                            <span v-else-if="row.statusKey === 'DuplicateInPaste'" class="badge bg-warning text-dark">{{ row.statusTextAr }}</span>
+                                                            <span v-else-if="row.statusKey === 'AlreadyExists'" class="badge bg-danger">{{ row.statusTextAr }}</span>
+                                                            <span v-else class="badge bg-secondary">{{ row.statusTextAr }}</span>
+                                                        </td>
+                                                        <td class="small text-danger">{{ row.errorMessage || '—' }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right/Bottom Column: Currently Added Serials in Line -->
+                        <div class="col-lg-5">
+                            <div class="card border h-100 shadow-none">
+                                <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold small">
+                                        <i class="fa-solid fa-list-ol me-1 text-success"></i>
+                                        السيريالات المضافة للسطر ({{ activeSerialLine.serialNumbers.length }} / {{ activeSerialLine.quantity }})
+                                    </span>
+                                    <button v-if="activeSerialLine.serialNumbers.length > 0" type="button"
+                                            class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size: 0.72rem;"
+                                            @@click="clearLineSerials">
+                                        مسح القائمة
+                                    </button>
+                                </div>
+                                <div class="card-body p-2" style="max-height: 390px; overflow-y: auto;" id="addedLineSerialsList">
+                                    <div v-for="(s, sIdx) in activeSerialLine.serialNumbers" :key="sIdx"
+                                         class="d-flex justify-content-between align-items-center py-1 px-2 border-bottom added-serial-item">
+                                        <span class="font-monospace fw-bold" dir="ltr">{{ s }}</span>
+                                        <button type="button" class="btn btn-link btn-sm text-danger p-0" @@click="removeSerial(sIdx)">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                    <div v-if="activeSerialLine.serialNumbers.length === 0" class="text-center text-muted small py-5">
+                                        لم يتم إدخال سيريالات بعد.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer py-1">
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnCloseSerialsModal" data-bs-dismiss="modal">إغلاق</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/lib/vue/vue.global.prod.js"></script>
+    <script src="~/lib/sweetalert2/sweetalert2.all.min.js"></script>
+    <script>
+        const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
+
+        createApp({
+            setup() {
+                const currentType = reactive(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase })));
+                const selectedTypeId = ref(currentType.id);
+                const isSubmitting = ref(false);
+
+                // Master Lookup Lists
+                const customersList = reactive(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(customers, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase })));
+                const vendorsList = reactive(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(vendors, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase })));
+                const currenciesList = reactive(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(currencies, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase })));
+                const allowedAdjustmentsList = ref(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(allowedAdjustments, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase })));
+
+                const requiresParty = computed(() => {
+                    return currentType.baseNature === 1 || currentType.baseNature === 2 || currentType.baseNature === 6; // Invoice, Return, Order
+                });
+
+                const defaultPartyId = currentType.module === 1 
+                    ? (currentType.defaultCustomerId || null) 
+                    : (currentType.module === 2 ? (currentType.defaultVendorId || null) : null);
+
+                const header = reactive({
+                    branchId: @(ViewBag.CurrentBranchId ?? 0),
+                    documentDate: new Date().toISOString().split('T')[0],
+                    partyId: defaultPartyId,
+                    paymentMethod: currentType.isCashAllowed ? 1 : 2,
+                    cashBankAccountId: currentType.defaultCashBankAccountId || null,
+                    warehouseId: currentType.defaultWarehouseId || null,
+                    currencyId: currenciesList.length > 0 ? currenciesList[0].id : 1,
+                    exchangeRate: currenciesList.length > 0 ? (currenciesList[0].exchangeRate || 1.0) : 1.0,
+                    referenceNumber: '',
+                    notes: '',
+                    totalAmountBeforeTax: 0,
+                    discountAmount: 0,
+                    totalAdditions: 0,
+                    taxAmount: 0,
+                    totalAmountNet: 0
+                });
+
+                const lines = ref([
+                    createDefaultLine()
+                ]);
+
+                const adjustments = ref([]);
+
+                const linesSubtotal = computed(() => {
+                    return lines.value.reduce((acc, l) => {
+                        const g = (l.quantity || 0) * (l.unitPrice || 0);
+                        const d = l.discountAmount || 0;
+                        return acc + Math.max(0, g - d);
+                    }, 0);
+                });
+
+                const isIssueSerialMode = computed(() => {
+                    return currentType.inventoryEffect === 2 || currentType.inventoryEffect === 1;
+                });
+
+                const isSalesReturnMode = computed(() => {
+                    return currentType.module === 1 && currentType.baseNature === 2;
+                });
+
+                function createDefaultLine() {
+                    return {
+                        id: 'line_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                        itemId: 0,
+                        itemQuery: '',
+                        itemName: '',
+                        isSerial: false,
+                        unitId: 1,
+                        quantity: 1,
+                        unitPrice: 0,
+                        discountAmount: 0,
+                        taxRate: 14,
+                        lineTotal: 0,
+                        notes: '',
+                        warehouseId: null,
+                        serialNumbers: [],
+                        availableSerialsCount: null,
+                        availability: null,
+                        availabilityLoading: false
+                    };
+                }
+
+                function fetchLineAvailableSerialsCount(line) {
+                    if (!isIssueSerialMode.value || !line.isSerial || !line.itemId || line.itemId <= 0) {
+                        line.availableSerialsCount = null;
+                        return;
+                    }
+                    const whId = line.warehouseId || header.warehouseId;
+                    if (!whId || whId <= 0) {
+                        line.availableSerialsCount = null;
+                        return;
+                    }
+                    $.get(`/Documents/GetAvailableSerialsPagedApi?itemId=${line.itemId}&warehouseId=${whId}&page=1&pageSize=1`)
+                        .done(function(res) {
+                            if (res && res.success && res.data) {
+                                line.availableSerialsCount = res.data.totalCount || 0;
+                            }
+                        });
+                }
+
+                function checkLineAvailability(line) {
+                    if (!line.itemId || line.itemId <= 0) return;
+                    const whId = line.warehouseId || header.warehouseId;
+                    if (!whId) return;
+                    line.availabilityLoading = true;
+                    $.get(`/Documents/CheckAvailabilityApi?itemId=${line.itemId}&warehouseId=${whId}&unitId=${line.unitId || 1}&quantity=${line.quantity || 1}`)
+                        .done(function(res) {
+                            line.availabilityLoading = false;
+                            if (res && res.success && res.data) {
+                                line.availability = res.data;
+                            }
+                        })
+                        .fail(function() {
+                            line.availabilityLoading = false;
+                        });
+                    if (line.isSerial && isIssueSerialMode.value) {
+                        fetchLineAvailableSerialsCount(line);
+                    }
+                }
+
+                function checkAllLinesAvailability() {
+                    lines.value.forEach(l => {
+                        if (l.itemId > 0) checkLineAvailability(l);
+                    });
+                }
+
+                watch(() => header.warehouseId, (newWh, oldWh) => {
+                    if (newWh !== oldWh && isIssueSerialMode.value) {
+                        lines.value.forEach(l => {
+                            if (l.isSerial && !l.warehouseId) {
+                                l.serialNumbers = [];
+                                fetchLineAvailableSerialsCount(l);
+                            }
+                        });
+                        if (activeSerialLine.value && !activeSerialLine.value.warehouseId) {
+                            loadAvailableSerials(1);
+                        }
+                    }
+                    checkAllLinesAvailability();
+                });
+
+                function addNewLine() {
+                    lines.value.push(createDefaultLine());
+                }
+
+                function removeLine(idx) {
+                    if (lines.value.length > 1) {
+                        lines.value.splice(idx, 1);
+                        recalcTotals();
+                    }
+                }
+
+                function calcLine(line) {
+                    const gross = (line.quantity || 0) * (line.unitPrice || 0);
+                    const disc = line.discountAmount || 0;
+                    const afterDisc = Math.max(0, gross - disc);
+                    const tax = (line.taxRate || 0) > 0 ? (afterDisc * (line.taxRate / 100)) : 0;
+                    line.lineTotal = afterDisc + tax;
+                    recalcTotals();
+                    if (line.itemId > 0 && (currentType.inventoryEffect === 2 || currentType.inventoryEffect === 4)) {
+                        checkLineAvailability(line);
+                    }
+                }
+
+                // ─── Document Adjustments Logic ───
+                function addAdjustmentRow() {
+                    if (!allowedAdjustmentsList.value || allowedAdjustmentsList.value.length === 0) return;
+                    const first = allowedAdjustmentsList.value[0];
+                    const row = {
+                        id: 'adj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                        documentAdjustmentId: first.id,
+                        code: first.code,
+                        name: first.localizedName || first.nameAr,
+                        adjustmentType: first.adjustmentType,
+                        calculationMethod: first.calculationMethod,
+                        percentage: first.calculationMethod === 2 ? (first.defaultValue || 0) : null,
+                        amount: first.calculationMethod === 1 ? (first.defaultValue || 0) : 0,
+                        glAccountId: first.glAccountId,
+                        glAccountCode: first.glAccountCode || first.code,
+                        glAccountName: first.glAccountName || '',
+                        notes: ''
+                    };
+                    if (row.calculationMethod === 2 && row.percentage) {
+                        row.amount = Math.round((linesSubtotal.value * (row.percentage / 100)) * 100) / 100;
+                    }
+                    adjustments.value.push(row);
+                    recalcTotals();
+                }
+
+                function removeAdjustmentRow(idx) {
+                    adjustments.value.splice(idx, 1);
+                    recalcTotals();
+                }
+
+                function onAdjustmentSelectChange(adj) {
+                    const opt = allowedAdjustmentsList.value.find(x => x.id === adj.documentAdjustmentId);
+                    if (!opt) return;
+                    adj.code = opt.code;
+                    adj.name = opt.localizedName || opt.nameAr;
+                    adj.adjustmentType = opt.adjustmentType;
+                    adj.calculationMethod = opt.calculationMethod;
+                    adj.glAccountId = opt.glAccountId;
+                    adj.glAccountCode = opt.glAccountCode || opt.code;
+                    adj.glAccountName = opt.glAccountName || '';
+                    if (opt.calculationMethod === 2) {
+                        adj.percentage = opt.defaultValue || 0;
+                        adj.amount = Math.round((linesSubtotal.value * (adj.percentage / 100)) * 100) / 100;
+                    } else {
+                        adj.percentage = null;
+                        adj.amount = opt.defaultValue || 0;
+                    }
+                    recalcTotals();
+                }
+
+                function onAdjustmentPercentChange(adj) {
+                    adj.amount = Math.round((linesSubtotal.value * ((adj.percentage || 0) / 100)) * 100) / 100;
+                    recalcTotals();
+                }
+
+                function onAdjustmentAmountChange(adj) {
+                    if (linesSubtotal.value > 0) {
+                        adj.percentage = Math.round(((adj.amount || 0) / linesSubtotal.value * 100) * 100) / 100;
+                    } else {
+                        adj.percentage = 0;
+                    }
+                    recalcTotals();
+                }
+
+                function recalcTotals() {
+                    let gross = 0; let lineDisc = 0; let lineTax = 0;
+                    lines.value.forEach(l => {
+                        const lg = (l.quantity || 0) * (l.unitPrice || 0);
+                        const ld = l.discountAmount || 0;
+                        const afterD = Math.max(0, lg - ld);
+                        const lt = (l.taxRate || 0) > 0 ? (afterD * (l.taxRate / 100)) : 0;
+                        gross += lg;
+                        lineDisc += ld;
+                        lineTax += lt;
+                    });
+                    const baseSubtotal = Math.max(0, gross - lineDisc);
+
+                    // Recalculate percentage adjustments against current base subtotal
+                    let headerAdditions = 0;
+                    let headerDiscounts = 0;
+                    adjustments.value.forEach(a => {
+                        if (a.calculationMethod === 2 && a.percentage != null) {
+                            a.amount = Math.round((baseSubtotal * (a.percentage / 100)) * 100) / 100;
+                        }
+                        if (a.adjustmentType === 1) {
+                            headerAdditions += (a.amount || 0);
+                        } else if (a.adjustmentType === 2) {
+                            headerDiscounts += (a.amount || 0);
+                        }
+                    });
+
+                    header.totalAmountBeforeTax = gross;
+                    header.discountAmount = lineDisc + headerDiscounts;
+                    header.totalAdditions = headerAdditions;
+                    header.taxAmount = lineTax;
+                    header.totalAmountNet = Math.max(0, baseSubtotal - headerDiscounts + headerAdditions + lineTax);
+                }
+
+                function onTypeChange() {
+                    window.location.href = `@Url.Action("Create", "Documents")?transactionTypeId=${selectedTypeId.value}&module=${currentType.module}`;
+                }
+
+                const rateStatusMessage = ref('');
+                const isRateError = ref(false);
+
+                function fetchRateForCurrency(currencyId, date) {
+                    if (!currencyId || !date) return;
+                    fetch(`@Url.Action("GetRate", "CurrencyRates")?currencyId=${currencyId}&documentDate=${date}`)
+                        .then(r => r.json())
+                        .then(res => {
+                            if (res.success) {
+                                header.exchangeRate = res.rate;
+                                isRateError.value = false;
+                                rateStatusMessage.value = res.isBaseCurrency
+                                    ? 'العملة الأساسية (سعر الصرف: 1.0000)'
+                                    : `سعر الصرف المعتمد حتى (${res.rateDate}): ${res.rate}`;
+                                recalcTotals();
+                            } else {
+                                header.exchangeRate = 0;
+                                isRateError.value = true;
+                                rateStatusMessage.value = res.message || 'لا يوجد سعر صرف مسجل حتى تاريخ المستند!';
+                                recalcTotals();
+                            }
+                        })
+                        .catch(() => {
+                            isRateError.value = true;
+                            rateStatusMessage.value = 'تعذر الاتصال للتحقق من سعر الصرف.';
+                        });
+                }
+
+                function onDateChange() {
+                    if (header.currencyId) {
+                        fetchRateForCurrency(header.currencyId, header.documentDate);
+                    }
+                }
+
+                function onCurrencyChange() {
+                    fetchRateForCurrency(header.currencyId, header.documentDate);
+                }
+
+                // Party selection & Currency auto-sync
+                const isPartyCurrencyLocked = computed(() => {
+                    if (!requiresParty.value || !header.partyId) return false;
+                    const list = currentType.module === 1 ? customersList : vendorsList;
+                    const p = list.find(x => x.id === header.partyId);
+                    return !!(p && p.currencyId);
+                });
+
+                const selectedPartyCurrencyInfo = computed(() => {
+                    if (!header.partyId) return null;
+                    const list = currentType.module === 1 ? customersList : vendorsList;
+                    const p = list.find(x => x.id === header.partyId);
+                    if (!p || !p.currencyId) return null;
+                    const curr = currenciesList.find(c => c.id === p.currencyId);
+                    return {
+                        code: p.currencyCode || (curr ? curr.code : ''),
+                        name: p.currencyName || (curr ? curr.localizedName : '')
+                    };
+                });
+
+                function applyParty(party) {
+                    if (!party) return;
+                    header.partyId = party.id;
+                    if (party.currencyId) {
+                        header.currencyId = party.currencyId;
+                        fetchRateForCurrency(party.currencyId, header.documentDate);
+                    } else {
+                        fetchRateForCurrency(header.currencyId, header.documentDate);
+                    }
+                }
+
+                function onPartySelectChange() {
+                    if (!header.partyId) return;
+                    const list = currentType.module === 1 ? customersList : vendorsList;
+                    const p = list.find(x => x.id === header.partyId);
+                    if (p) {
+                        applyParty(p);
+                    }
+                }
+
+                // Party Search Modal
+                const partySearchQuery = ref('');
+                const partySearchResults = ref([]);
+                let partyModalInstance = null;
+
+                const filteredParties = computed(() => {
+                    const q = partySearchQuery.value.trim().toLowerCase();
+                    const list = currentType.module === 1 ? customersList : vendorsList;
+                    if (!q) return list;
+                    return list.filter(p => 
+                        (p.code && p.code.toLowerCase().includes(q)) ||
+                        (p.localizedName && p.localizedName.toLowerCase().includes(q)) ||
+                        (p.name && p.name.toLowerCase().includes(q)) ||
+                        (p.phone && p.phone.toLowerCase().includes(q)) ||
+                        (p.taxNumber && p.taxNumber.toLowerCase().includes(q))
+                    );
+                });
+
+                function openPartySearchModal() {
+                    partySearchQuery.value = '';
+                    if (!partyModalInstance) {
+                        partyModalInstance = new bootstrap.Modal(document.getElementById('partySearchModal'));
+                    }
+                    partyModalInstance.show();
+                    setTimeout(() => document.getElementById('partySearchInputBox')?.focus(), 300);
+                }
+
+                function selectPartyFromModal(party) {
+                    applyParty(party);
+                    if (partyModalInstance) {
+                        partyModalInstance.hide();
+                    }
+                }
+
+                function onPartySearchInput() {
+                    // Filtered reactively via computed filteredParties
+                }
+
+                // Item Autocomplete Dropdown per line
+                const activeItemDropdown = reactive({ show: false, lineId: null, items: [] });
+                let searchTimeout = null;
+
+                function searchItems(line) {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => {
+                        const q = (line.itemQuery || '').trim();
+                        const whId = line.warehouseId || header.warehouseId || '';
+                        const brId = header.branchId || '';
+                        $.get(`/api/lookup/item?q=${encodeURIComponent(q)}&warehouseId=${whId}&branchId=${brId}`, function(res) {
+                            activeItemDropdown.items = (res && res.results) ? res.results : [];
+                            activeItemDropdown.lineId = line.id;
+                            activeItemDropdown.show = true;
+                        });
+                    }, 250);
+                }
+
+                function selectItem(line, item) {
+                    const itemChanged = line.itemId !== item.id;
+                    line.itemId = item.id;
+                    line.itemQuery = `${item.code} - ${item.name}`;
+                    line.itemName = item.name;
+                    line.isSerial = (item.trackingType === 1 || item.isSerial === true);
+                    line.unitId = item.unitId || 1;
+                    line.unitPrice = (currentType.module === 1 ? item.salesPrice : item.purchasePrice) || 0;
+                    if (itemChanged) {
+                        line.serialNumbers = [];
+                        line.availableSerialsCount = null;
+                    }
+                    calcLine(line);
+                    activeItemDropdown.show = false;
+                    checkLineAvailability(line);
+                    if (line.isSerial && isIssueSerialMode.value) {
+                        fetchLineAvailableSerialsCount(line);
+                    }
+                }
+
+                // Item Search Modal
+                const itemModalSearchQuery = ref('');
+                const itemModalResults = ref([]);
+                const activeModalTargetLine = ref(null);
+                let itemModalInstance = null;
+                let itemModalTimeout = null;
+
+                function openItemModal(line) {
+                    activeModalTargetLine.value = line;
+                    itemModalSearchQuery.value = line.itemQuery || '';
+                    if (!itemModalInstance) {
+                        itemModalInstance = new bootstrap.Modal(document.getElementById('itemSearchModal'));
+                    }
+                    itemModalInstance.show();
+                    fetchItemModalResults();
+                    setTimeout(() => document.getElementById('itemModalSearchInputBox')?.focus(), 300);
+                }
+
+                function fetchItemModalResults() {
+                    const q = (itemModalSearchQuery.value || '').trim();
+                    const whId = (activeModalTargetLine.value && activeModalTargetLine.value.warehouseId) || header.warehouseId || '';
+                    const brId = header.branchId || '';
+                    $.get(`/api/lookup/item?q=${encodeURIComponent(q)}&warehouseId=${whId}&branchId=${brId}`, function(res) {
+                        itemModalResults.value = (res && res.results) ? res.results : [];
+                    });
+                }
+
+                function onItemModalSearchInput() {
+                    clearTimeout(itemModalTimeout);
+                    itemModalTimeout = setTimeout(() => {
+                        fetchItemModalResults();
+                    }, 250);
+                }
+
+                function selectItemFromModal(item) {
+                    if (activeModalTargetLine.value) {
+                        selectItem(activeModalTargetLine.value, item);
+                    }
+                    if (itemModalInstance) {
+                        itemModalInstance.hide();
+                    }
+                }
+
+                // ─── Serials Modal (Issue Available Serials + Receive Excel Copy/Paste) ───
+                const activeSerialLine = ref(null);
+                const serialInput = ref('');
+                let serialsModalInstance = null;
+
+                // Issue Mode State (Server-side search & pagination)
+                const availableSerialsList = ref([]);
+                const availableSerialsTotalCount = ref(0);
+                const availableSerialsPage = ref(1);
+                const availableSerialsPageSize = ref(50);
+                const availableSerialsTotalPages = ref(1);
+                const availableSerialSearch = ref('');
+                const availableSerialsLoading = ref(false);
+                const availableSerialsMeta = reactive({ itemCode: '', itemName: '', warehouseName: '' });
+                let availableSerialSearchTimer = null;
+
+                // Receive / Excel Paste State
+                const pasteSerialsText = ref('');
+                const pasteValidationLoading = ref(false);
+                const pasteValidationResults = ref([]);
+                const selectAllPasteRows = ref(false);
+
+                const pasteValidationSummary = computed(() => {
+                    const list = pasteValidationResults.value || [];
+                    return {
+                        total: list.length,
+                        valid: list.filter(r => r.statusKey === 'Valid').length,
+                        duplicate: list.filter(r => r.statusKey === 'DuplicateInPaste').length,
+                        existing: list.filter(r => r.statusKey === 'AlreadyExists').length,
+                        invalid: list.filter(r => r.statusKey === 'Invalid').length
+                    };
+                });
+
+                const hasSelectedPasteRows = computed(() => {
+                    return (pasteValidationResults.value || []).some(r => r.selected);
+                });
+
+                const isCurrentPageFullySelected = computed(() => {
+                    if (!activeSerialLine.value || availableSerialsList.value.length === 0) return false;
+                    return availableSerialsList.value.every(s => activeSerialLine.value.serialNumbers.includes(s.serialNumber));
+                });
+
+                function openSerialsModal(line) {
+                    if (!line.itemId || line.itemId <= 0) {
+                        Swal.fire('تنبيه', 'يرجى اختيار الصنف أولاً.', 'warning');
+                        return;
+                    }
+                    const whId = line.warehouseId || header.warehouseId;
+                    if (isIssueSerialMode.value && (!whId || whId <= 0)) {
+                        Swal.fire('تنبيه', 'يرجى اختيار المخزن أولاً لعرض السيريالات المتاحة للصرف.', 'warning');
+                        return;
+                    }
+
+                    activeSerialLine.value = line;
+                    serialInput.value = '';
+                    clearPasteData();
+
+                    if (!serialsModalInstance) {
+                        serialsModalInstance = new bootstrap.Modal(document.getElementById('serialsModal'));
+                    }
+                    serialsModalInstance.show();
+
+                    if (isIssueSerialMode.value) {
+                        availableSerialSearch.value = '';
+                        loadAvailableSerials(1);
+                        setTimeout(() => document.getElementById('availableSerialSearchInput')?.focus(), 350);
+                    } else {
+                        setTimeout(() => document.getElementById('serialInputBox')?.focus(), 350);
+                    }
+                }
+
+                // ─── Issue Mode Functions ───
+                function loadAvailableSerials(page = 1) {
+                    if (!activeSerialLine.value || !activeSerialLine.value.itemId) return;
+                    const whId = activeSerialLine.value.warehouseId || header.warehouseId;
+                    if (!whId) return;
+
+                    availableSerialsPage.value = page;
+                    availableSerialsLoading.value = true;
+                    const q = encodeURIComponent((availableSerialSearch.value || '').trim());
+                    const url = `/Documents/GetAvailableSerialsPagedApi?itemId=${activeSerialLine.value.itemId}&warehouseId=${whId}&search=${q}&page=${page}&pageSize=${availableSerialsPageSize.value}`;
+
+                    $.get(url)
+                        .done(function(res) {
+                            availableSerialsLoading.value = false;
+                            if (res && res.success && res.data) {
+                                availableSerialsList.value = res.data.items || [];
+                                availableSerialsTotalCount.value = res.data.totalCount || 0;
+                                availableSerialsPage.value = res.data.pageNumber || page;
+                                availableSerialsTotalPages.value = res.data.totalPages || 1;
+                                availableSerialsMeta.itemCode = res.data.itemCode || '';
+                                availableSerialsMeta.itemName = res.data.itemName || activeSerialLine.value.itemName || '';
+                                availableSerialsMeta.warehouseName = res.data.warehouseName || '';
+                                if (!availableSerialSearch.value) {
+                                    activeSerialLine.value.availableSerialsCount = res.data.totalCount || 0;
+                                }
+                            }
+                        })
+                        .fail(function() {
+                            availableSerialsLoading.value = false;
+                        });
+                }
+
+                function onAvailableSerialSearchInput() {
+                    clearTimeout(availableSerialSearchTimer);
+                    availableSerialSearchTimer = setTimeout(() => {
+                        loadAvailableSerials(1);
+                    }, 250);
+                }
+
+                function resetAvailableSerialSearch() {
+                    availableSerialSearch.value = '';
+                    loadAvailableSerials(1);
+                }
+
+                function isIssueSerialSelected(sn) {
+                    if (!activeSerialLine.value) return false;
+                    return activeSerialLine.value.serialNumbers.includes(sn);
+                }
+
+                function syncIssueLineQuantityWithSelectedSerials() {
+                    if (!activeSerialLine.value) return;
+                    const count = activeSerialLine.value.serialNumbers.length;
+                    if (count > 0) {
+                        activeSerialLine.value.quantity = count;
+                    }
+                    calcLine(activeSerialLine.value);
+                }
+
+                function toggleIssueSerial(sn) {
+                    if (!activeSerialLine.value || !sn) return;
+                    const idx = activeSerialLine.value.serialNumbers.indexOf(sn);
+                    if (idx >= 0) {
+                        activeSerialLine.value.serialNumbers.splice(idx, 1);
+                    } else {
+                        // Ensure not selected on another line of the same document for the same item
+                        const usedInOtherLine = lines.value.some(l =>
+                            l.id !== activeSerialLine.value.id &&
+                            l.itemId === activeSerialLine.value.itemId &&
+                            l.serialNumbers.includes(sn));
+                        if (usedInOtherLine) {
+                            Swal.fire('تنبيه', `السيريال (${sn}) محدد بالفعل في سطر آخر داخل نفس المستند.`, 'warning');
+                            return;
+                        }
+                        activeSerialLine.value.serialNumbers.push(sn);
+                    }
+                    syncIssueLineQuantityWithSelectedSerials();
+                }
+
+                function removeIssueSerialByIndex(idx) {
+                    if (!activeSerialLine.value) return;
+                    activeSerialLine.value.serialNumbers.splice(idx, 1);
+                    syncIssueLineQuantityWithSelectedSerials();
+                }
+
+                function selectPageAvailableSerials() {
+                    if (!activeSerialLine.value) return;
+                    availableSerialsList.value.forEach(s => {
+                        if (!activeSerialLine.value.serialNumbers.includes(s.serialNumber)) {
+                            const usedInOtherLine = lines.value.some(l =>
+                                l.id !== activeSerialLine.value.id &&
+                                l.itemId === activeSerialLine.value.itemId &&
+                                l.serialNumbers.includes(s.serialNumber));
+                            if (!usedInOtherLine) {
+                                activeSerialLine.value.serialNumbers.push(s.serialNumber);
+                            }
+                        }
+                    });
+                    syncIssueLineQuantityWithSelectedSerials();
+                }
+
+                function toggleSelectPageAvailableSerials() {
+                    if (!activeSerialLine.value) return;
+                    if (isCurrentPageFullySelected.value) {
+                        const pageSet = new Set(availableSerialsList.value.map(s => s.serialNumber));
+                        activeSerialLine.value.serialNumbers = activeSerialLine.value.serialNumbers.filter(sn => !pageSet.has(sn));
+                        syncIssueLineQuantityWithSelectedSerials();
+                    } else {
+                        selectPageAvailableSerials();
+                    }
+                }
+
+                function clearSelectedIssueSerials() {
+                    if (!activeSerialLine.value) return;
+                    activeSerialLine.value.serialNumbers = [];
+                    syncIssueLineQuantityWithSelectedSerials();
+                }
+
+                // ─── Receive & Excel Copy/Paste Functions ───
+                function parseExcelPastedSerials(rawText) {
+                    if (!rawText || typeof rawText !== 'string') return [];
+                    // Support Tab (\t), Enter (\r\n, \n), Comma (,), Semicolon (;)
+                    // Keep exact string representation (never convert to Number, preserving leading zeros)
+                    return rawText
+                        .split(/[\t\r\n,;]+/)
+                        .map(s => s.trim())
+                        .filter(s => s.length > 0);
+                }
+
+                function getExistingSerialsForItemInDocument(itemId) {
+                    const existing = [];
+                    lines.value.forEach(l => {
+                        if (l.itemId === itemId && Array.isArray(l.serialNumbers)) {
+                            l.serialNumbers.forEach(sn => existing.push(sn));
+                        }
+                    });
+                    return existing;
+                }
+
+                function validatePastedSerials() {
+                    return new Promise((resolve) => {
+                        if (!activeSerialLine.value) {
+                            resolve(false);
+                            return;
+                        }
+                        const extracted = parseExcelPastedSerials(pasteSerialsText.value);
+                        if (extracted.length === 0) {
+                            Swal.fire('تنبيه', 'يرجى لصق السيريالات أولاً في مربع الإدخال.', 'warning');
+                            resolve(false);
+                            return;
+                        }
+
+                        pasteValidationLoading.value = true;
+                        selectAllPasteRows.value = false;
+
+                        const payload = {
+                            itemId: activeSerialLine.value.itemId,
+                            warehouseId: activeSerialLine.value.warehouseId || header.warehouseId || 0,
+                            branchId: header.branchId || 0,
+                            rawSerials: extracted,
+                            existingLineSerials: getExistingSerialsForItemInDocument(activeSerialLine.value.itemId),
+                            isSalesReturn: isSalesReturnMode.value,
+                            excludeDocumentId: null
+                        };
+
+                        $.ajax({
+                            url: '/Documents/ValidateSerialsBatchApi',
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify(payload),
+                            success: function(res) {
+                                pasteValidationLoading.value = false;
+                                if (res && res.success && res.data && Array.isArray(res.data.results)) {
+                                    pasteValidationResults.value = res.data.results.map(r => ({
+                                        ...r,
+                                        selected: false
+                                    }));
+                                    resolve(true);
+                                } else {
+                                    resolve(false);
+                                }
+                            },
+                            error: function() {
+                                pasteValidationLoading.value = false;
+                                Swal.fire('خطأ', 'تعذر فحص السيريالات الملصقة. يرجى المحاولة مرة أخرى.', 'error');
+                                resolve(false);
+                            }
+                        });
+                    });
+                }
+
+                function toggleAllPasteRows() {
+                    const checked = selectAllPasteRows.value;
+                    pasteValidationResults.value.forEach(r => {
+                        r.selected = checked;
+                    });
+                }
+
+                function deleteSelectedPasteRows() {
+                    pasteValidationResults.value = pasteValidationResults.value.filter(r => !r.selected);
+                    selectAllPasteRows.value = false;
+                    pasteSerialsText.value = pasteValidationResults.value.map(r => r.serialNumber).join('\n');
+                }
+
+                function clearPasteData() {
+                    pasteSerialsText.value = '';
+                    pasteValidationResults.value = [];
+                    selectAllPasteRows.value = false;
+                }
+
+                async function saveValidPastedSerials() {
+                    if (!activeSerialLine.value) return;
+
+                    if (pasteValidationResults.value.length === 0) {
+                        if ((pasteSerialsText.value || '').trim().length > 0) {
+                            const ok = await validatePastedSerials();
+                            if (!ok) return;
+                        } else {
+                            Swal.fire('تنبيه', 'لا توجد سيريالات لحفظها. يرجى لصق السيريالات وفحصها أولاً.', 'warning');
+                            return;
+                        }
+                    }
+
+                    const validRows = pasteValidationResults.value.filter(r => r.statusKey === 'Valid' && r.isValid);
+                    if (validRows.length === 0) {
+                        Swal.fire('تنبيه', 'لا توجد سيريالات صالحة للإضافة في نتائج الفحص الحالية.', 'warning');
+                        return;
+                    }
+
+                    let addedCount = 0;
+                    const existingSet = new Set(getExistingSerialsForItemInDocument(activeSerialLine.value.itemId));
+
+                    validRows.forEach(r => {
+                        const sn = r.serialNumber;
+                        if (!existingSet.has(sn)) {
+                            activeSerialLine.value.serialNumbers.push(sn);
+                            existingSet.add(sn);
+                            addedCount++;
+                        }
+                    });
+
+                    // Auto-adjust line quantity to match total added serials if serials count exceeds current quantity
+                    if (activeSerialLine.value.serialNumbers.length > activeSerialLine.value.quantity || activeSerialLine.value.quantity <= 1) {
+                        activeSerialLine.value.quantity = activeSerialLine.value.serialNumbers.length;
+                        calcLine(activeSerialLine.value);
+                    }
+
+                    // Keep only rejected rows in the inspection table so the user sees rejected serials and their reasons
+                    const rejectedRows = pasteValidationResults.value.filter(r => r.statusKey !== 'Valid' || !r.isValid);
+                    pasteValidationResults.value = rejectedRows;
+                    pasteSerialsText.value = rejectedRows.map(r => r.serialNumber).join('\n');
+                    selectAllPasteRows.value = false;
+                }
+
+                function clearLineSerials() {
+                    if (!activeSerialLine.value) return;
+                    activeSerialLine.value.serialNumbers = [];
+                }
+
+                function addSerial() {
+                    const sn = (serialInput.value || '').trim();
+                    if (!sn) return;
+                    const existingAll = getExistingSerialsForItemInDocument(activeSerialLine.value.itemId);
+                    if (existingAll.includes(sn)) {
+                        Swal.fire('تنبيه', 'تم إدخال هذا السيريال مسبقاً في نفس المستند.', 'warning');
+                        return;
+                    }
+                    if (activeSerialLine.value.serialNumbers.length >= activeSerialLine.value.quantity) {
+                        Swal.fire('تنبيه', `عدد السيريالات وصل للحد الأقصى للكمية (${activeSerialLine.value.quantity}).`, 'warning');
+                        return;
+                    }
+                    activeSerialLine.value.serialNumbers.push(sn);
+                    serialInput.value = '';
+                }
+
+                function removeSerial(idx) {
+                    activeSerialLine.value.serialNumbers.splice(idx, 1);
+                }
+
+                function formatNumber(val) {
+                    return (val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+
+                function saveDocument() {
+                    if (requiresParty.value && !header.partyId) {
+                        Swal.fire('تنبيه', 'يرجى اختيار العميل أو المورد أولاً.', 'warning');
+                        return;
+                    }
+                    if (isRateError.value || !header.exchangeRate || header.exchangeRate <= 0) {
+                        Swal.fire('خطأ في سعر الصرف', rateStatusMessage.value || 'لا يوجد سعر صرف مسجل لهذه العملة حتى تاريخ المستند. يرجى تسجيل سعر الصرف بسجل أسعار الصرف أولاً للمتابعة.', 'error');
+                        return;
+                    }
+                    if (currentType.inventoryEffect !== 0 && !header.warehouseId) {
+                        Swal.fire('تنبيه', 'يرجى اختيار المستودع.', 'warning');
+                        return;
+                    }
+
+                    // Check items & serials
+                    for (let i = 0; i < lines.value.length; i++) {
+                        const l = lines.value[i];
+                        if (!l.itemId || l.itemId <= 0) {
+                            Swal.fire('تنبيه', `السطر ${i + 1}: يرجى اختيار الصنف.`, 'warning');
+                            return;
+                        }
+                        if ((currentType.inventoryEffect === 2 || currentType.inventoryEffect === 4) && l.availability && l.availability.availableQuantity < l.quantity) {
+                            Swal.fire({
+                                title: 'تنبيه تجاوز الرصيد المتاح',
+                                html: `السطر <strong>${i + 1}</strong>: الصنف (<strong>${l.itemName || l.itemQuery}</strong>)<br>` +
+                                      `الكمية المطلوبة: <strong>${l.quantity}</strong><br>` +
+                                      `الكمية المتاحة: <strong>${l.availability.availableQuantity}</strong><br>` +
+                                      `العجز: <strong class="text-danger">${l.quantity - l.availability.availableQuantity}</strong><br><br>` +
+                                      `يرجى تعديل الكمية المطلوبة أو مراجعة رصيد المستودع.`,
+                                icon: 'error',
+                                confirmButtonText: 'حسناً'
+                            });
+                            return;
+                        }
+                        if (l.isSerial && currentType.inventoryEffect !== 0 && l.serialNumbers.length !== l.quantity) {
+                            Swal.fire('تنبيه', `السطر ${i + 1}: الصنف يتطلب إدخال سيريالات مساوية للكمية (${l.quantity}).`, 'warning');
+                            return;
+                        }
+                    }
+
+                    isSubmitting.value = true;
+                    const payload = {
+                        transactionTypeId: currentType.id,
+                        branchId: header.branchId || @(ViewBag.CurrentBranchId ?? 0),
+                        documentDate: header.documentDate,
+                        partyType: currentType.module === 1 ? 1 : (currentType.module === 2 ? 2 : 0),
+                        partyId: header.partyId,
+                        paymentMethod: header.paymentMethod,
+                        cashBankAccountId: header.cashBankAccountId,
+                        warehouseId: header.warehouseId,
+                        currencyId: header.currencyId,
+                        exchangeRate: header.exchangeRate,
+                        referenceNumber: header.referenceNumber,
+                        notes: header.notes,
+                        totalAdditions: header.totalAdditions,
+                        adjustments: adjustments.value.map(a => ({
+                            documentAdjustmentId: a.documentAdjustmentId,
+                            adjustmentType: a.adjustmentType,
+                            calculationMethod: a.calculationMethod,
+                            percentage: a.percentage,
+                            amount: a.amount,
+                            glAccountId: a.glAccountId,
+                            notes: a.notes
+                        })),
+                        lines: lines.value.map((l, idx) => ({
+                            lineNumber: idx + 1,
+                            itemId: l.itemId,
+                            unitId: l.unitId,
+                            quantity: l.quantity,
+                            unitPrice: l.unitPrice,
+                            discountAmount: l.discountAmount,
+                            taxRate: l.taxRate,
+                            notes: l.notes,
+                            serialNumbers: l.serialNumbers
+                        }))
+                    };
+
+                    $.ajax({
+                        url: `@Url.Action("Create", "Documents")?postImmediately=${currentType.autoPost}`,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'RequestVerificationToken': document.querySelector('#afForm input[name="__RequestVerificationToken"]')?.value || $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        data: JSON.stringify(payload),
+                        success: function(res) {
+                            isSubmitting.value = false;
+                            if (res.success) {
+                                Swal.fire('تم بنجاح', res.message, 'success').then(() => {
+                                    window.location.href = `@Url.Action("Index", "Documents")?module=${currentType.module}`;
+                                });
+                            } else {
+                                Swal.fire('خطأ', res.message, 'error');
+                            }
+                        },
+                        error: function(xhr) {
+                            isSubmitting.value = false;
+                            let errMsg = `حدث خطأ في الاتصال بالخادم (${xhr.status}: ${xhr.statusText || 'Error'}).`;
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errMsg = xhr.responseJSON.message;
+                            } else if (xhr.responseText) {
+                                try {
+                                    const parsed = JSON.parse(xhr.responseText);
+                                    if (parsed.message) errMsg = parsed.message;
+                                } catch(e) {}
+                            }
+                            Swal.fire('خطأ', errMsg, 'error');
+                        }
+                    });
+                }
+
+                onMounted(() => {
+                    if (header.partyId) {
+                        onPartySelectChange();
+                    } else if (header.currencyId) {
+                        fetchRateForCurrency(header.currencyId, header.documentDate);
+                    }
+                });
+
+                return {
+                    currentType,
+                    selectedTypeId,
+                    isSubmitting,
+                    requiresParty,
+                    customersList,
+                    vendorsList,
+                    currenciesList,
+                    allowedAdjustmentsList,
+                    header,
+                    lines,
+                    adjustments,
+                    linesSubtotal,
+                    addNewLine,
+                    removeLine,
+                    calcLine,
+                    addAdjustmentRow,
+                    removeAdjustmentRow,
+                    onAdjustmentSelectChange,
+                    onAdjustmentPercentChange,
+                    onAdjustmentAmountChange,
+                    onTypeChange,
+                    onDateChange,
+                    onCurrencyChange,
+                    isPartyCurrencyLocked,
+                    rateStatusMessage,
+                    isRateError,
+                    selectedPartyCurrencyInfo,
+                    onPartySelectChange,
+                    partySearchQuery,
+                    filteredParties,
+                    openPartySearchModal,
+                    selectPartyFromModal,
+                    onPartySearchInput,
+                    activeItemDropdown,
+                    searchItems,
+                    selectItem,
+                    itemModalSearchQuery,
+                    itemModalResults,
+                    openItemModal,
+                    onItemModalSearchInput,
+                    selectItemFromModal,
+                    activeSerialLine,
+                    serialInput,
+                    isIssueSerialMode,
+                    isSalesReturnMode,
+                    availableSerialsList,
+                    availableSerialsTotalCount,
+                    availableSerialsPage,
+                    availableSerialsPageSize,
+                    availableSerialsTotalPages,
+                    availableSerialSearch,
+                    availableSerialsLoading,
+                    availableSerialsMeta,
+                    isCurrentPageFullySelected,
+                    loadAvailableSerials,
+                    onAvailableSerialSearchInput,
+                    resetAvailableSerialSearch,
+                    isIssueSerialSelected,
+                    toggleIssueSerial,
+                    removeIssueSerialByIndex,
+                    selectPageAvailableSerials,
+                    toggleSelectPageAvailableSerials,
+                    clearSelectedIssueSerials,
+                    pasteSerialsText,
+                    pasteValidationLoading,
+                    pasteValidationResults,
+                    selectAllPasteRows,
+                    pasteValidationSummary,
+                    hasSelectedPasteRows,
+                    validatePastedSerials,
+                    toggleAllPasteRows,
+                    deleteSelectedPasteRows,
+                    clearPasteData,
+                    saveValidPastedSerials,
+                    clearLineSerials,
+                    openSerialsModal,
+                    addSerial,
+                    removeSerial,
+                    formatNumber,
+                    saveDocument
+                };
+            }
+        }).mount('#docApp');
+    </script>
+}

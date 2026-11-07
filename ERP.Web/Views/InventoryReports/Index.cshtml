@@ -1,0 +1,269 @@
+@{
+    ViewData["Title"] = "تقارير المخازن الشاملة";
+    Layout = "_Layout";
+}
+
+<div class="container-fluid py-3">
+    <!-- Header Page Title -->
+    <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-boxes-stacked me-2"></i>تقارير المخازن والمستودعات الشاملة (Inventory Reports Hub)
+            </h3>
+            <p class="text-muted small mb-0">أرصدة الأصناف، كارت الصنف التراكمي، الوارد والمنصرف، التحويلات، التسويات، الحجوزات، والأرقام المسلسلة</p>
+        </div>
+    </div>
+
+    <!-- Reports Cards Grid (10 Reports) -->
+    <div class="row g-4">
+        <!-- 1. Stock Balances -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary fs-3">
+                            <i class="fa-solid fa-layer-group"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">أرصدة الأصناف بالمخازن</h5>
+                            <span class="text-muted small">Stock Balances by Branch & Warehouse</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        تقرير الأرصدة الفعلية والمحجوزة والمتاحة للبيع وقيمة المخزون لكل فرع ومستودع.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="StockBalances" class="btn btn-primary w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Item Stock Card -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success fs-3">
+                            <i class="fa-solid fa-address-card"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">كارت الصنف التفصيلي</h5>
+                            <span class="text-muted small">Item Stock Ledger Card</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        سجل الحركات التاريخي للصنف: الوارد، المنصرف، ورصيد المخزن التراكمي الناتج بعد كل حركة.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ItemStockCard" class="btn btn-success w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Inward & Outward -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info fs-3">
+                            <i class="fa-solid fa-right-left"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">الوارد والمنصرف خلال فترة</h5>
+                            <span class="text-muted small">Inward & Outward Movement</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        رصيد أول المدة، إجمالي الوارد، إجمالي المنصرف، ورصيد آخر المدة خلال فترة زمنية محددة.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="InwardOutward" class="btn btn-info w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Warehouse Transfers -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning fs-3">
+                            <i class="fa-solid fa-truck-ramp-box"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">التحويلات بين المخازن</h5>
+                            <span class="text-muted small">Inter-Warehouse Transfers</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        متابعة حركة نقل البضائع بين المستودعات والفروع وحالات الإرسال والاستلام.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="WarehouseTransfers" class="btn btn-warning w-100 fw-bold text-dark">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Returns & Adjustments -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger fs-3">
+                            <i class="fa-solid fa-sliders"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">المرتجعات والتسويات المخزنية</h5>
+                            <span class="text-muted small">Returns & Stock Adjustments</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        تسويات الجرد (عجز / زيادة) ومرتجعات المخازن مع الكميات والقيم التقديرية.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ReturnsAndAdjustments" class="btn btn-danger w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. Reserved & Available -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-purple bg-opacity-10 p-3 text-primary fs-3">
+                            <i class="fa-solid fa-lock"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">الكميات المحجوزة والمتاحة للبيع</h5>
+                            <span class="text-muted small">Reserved & Available Stock</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        بيان تفصيلي بالأصناف المحجوزة لأوامر بيع معتمدة والكميات المتاحة فعلياً للبيع الفوري.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ReservedAndAvailable" class="btn btn-outline-primary w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. Reorder Level Alert -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger fs-3">
+                            <i class="fa-solid fa-bell"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">الأصناف تحت حد إعادة الطلب</h5>
+                            <span class="text-muted small">Reorder Point Alerts</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        تنبيهات فورية للأصناف التي قارب رصيدها على النفاد أو وصلت للحد الأدنى المسموح به.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ReorderLevelAlert" class="btn btn-outline-danger w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. Dead Stock -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-secondary bg-opacity-10 p-3 text-secondary fs-3">
+                            <i class="fa-solid fa-hourglass-end"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">الأصناف الراكدة</h5>
+                            <span class="text-muted small">Dead / Slow-Moving Stock</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        حصر البضائع الراكدة التي لم تشهد حركة صرف لفترات طويلة مع حساب رأس المال المجمد.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="DeadStock" class="btn btn-secondary w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. Serial Numbers -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-dark fs-3">
+                            <i class="fa-solid fa-barcode"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">الأرقام المسلسلة وسجل حركتها</h5>
+                            <span class="text-muted small">Serial Numbers Lifecycle</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        تتبع حالة وموقع كل سيريال (متاح، مباع، محجوز) وسجل حركته التاريخي الكامل.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="SerialNumbers" class="btn btn-warning w-100 fw-bold text-dark">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 10. Stock Discrepancy -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-dark bg-opacity-10 p-3 text-dark fs-3">
+                            <i class="fa-solid fa-scale-unbalanced"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">فروقات الرصيد المحسوب والتراكمي</h5>
+                            <span class="text-muted small">Stock Discrepancy & Audit</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        مطابقة الرصيد الناتج من حركات المستندات مع الأرصدة الفعلية وكشف أي تباين.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="StockDiscrepancy" class="btn btn-dark w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

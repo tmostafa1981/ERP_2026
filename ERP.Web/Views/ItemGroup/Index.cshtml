@@ -47,11 +47,12 @@
                 </div>
             </div>
             <div class="col-md-4 col-lg-3">
-                <select name="parentId" class="form-select form-select-sm erp-form-control">
+                <select name="parentId" class="form-select form-select-sm erp-form-control erp-select2" data-lookup-entity="itemGroup" data-placeholder="-- @Localizer["ParentGroup"] (@Localizer["All"]) --" data-allow-clear="true">
                     <option value="">-- @Localizer["ParentGroup"] (@Localizer["All"]) --</option>
-                    @foreach (var g in allGroups)
+                    @if (ViewBag.ParentId != null && allGroups.Any(g => g.Id == (int)ViewBag.ParentId))
                     {
-                        <option value="@g.Id" selected="@(ViewBag.ParentId != null && (int)ViewBag.ParentId == g.Id)">@g.LocalizedName (@g.Code)</option>
+                        var selG = allGroups.First(g => g.Id == (int)ViewBag.ParentId);
+                        <option value="@selG.Id" selected>@selG.LocalizedName (@selG.Code)</option>
                     }
                 </select>
             </div>
@@ -71,7 +72,7 @@
     <table class="erp-table">
         <thead>
             <tr>
-                <th style="width: 110px;">@Localizer["Code"]</th>
+                <th style="width: 120px;">@Localizer["Code"]</th>
                 <th>@Localizer["NameAr"]</th>
                 <th>@Localizer["NameEn"]</th>
                 <th>@Localizer["ParentGroup"]</th>
@@ -139,7 +140,7 @@
                             <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content border-0 shadow">
-                                        <form asp-action="Edit" method="post">
+                                        <form asp-action="Edit" method="post" class="erp-modal-form">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="Id" value="@item.Id" />
                                             <div class="modal-header bg-light py-2">
@@ -161,11 +162,11 @@
                                                 </div>
                                                 <div class="mb-2">
                                                     <label class="form-label small fw-bold">@Localizer["ParentGroup"]</label>
-                                                    <select name="ParentId" class="form-select form-select-sm">
+                                                    <select name="ParentId" class="form-select form-select-sm erp-select2" data-lookup-entity="itemGroup" data-allow-clear="true" data-placeholder="-- @Localizer["None"] (@Localizer["MainGroup"]) --">
                                                         <option value="">-- @Localizer["None"] (@Localizer["MainGroup"]) --</option>
-                                                        @foreach (var g in allGroups.Where(x => x.Id != item.Id))
+                                                        @if (item.ParentGroup != null)
                                                         {
-                                                            <option value="@g.Id" selected="@(item.ParentId == g.Id)">@g.LocalizedName (@g.Code)</option>
+                                                            <option value="@item.ParentId" selected>@item.ParentGroup.Code - @item.ParentGroup.LocalizedName</option>
                                                         }
                                                     </select>
                                                 </div>
@@ -215,7 +216,7 @@
 <div class="modal fade" id="createGroupModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-light py-2">
                     <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2"></i> @Localizer["AddNewItemGroup"]</h6>
@@ -224,7 +225,19 @@
                 <div class="modal-body p-3">
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                        <input type="text" name="Code" class="form-control form-control-sm" required maxlength="50" placeholder="GRP-01" />
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="Code" id="createGroupCode" value="@ViewBag.NextCode" class="form-control form-control-sm" required maxlength="50" @(ViewBag.IsAutoCode == true ? "readonly" : "") />
+                            @if (ViewBag.IsManualAllowed == true && ViewBag.IsAutoCode == true)
+                            {
+                                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('createGroupCode').removeAttribute('readonly'); this.style.display='none';" title="@Localizer["ManualEntry"]">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            }
+                        </div>
+                        @if (ViewBag.IsAutoCode == true)
+                        {
+                            <span class="text-muted small" style="font-size: 11px;">@Localizer["AutoGeneratedCode"]</span>
+                        }
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
@@ -236,12 +249,8 @@
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["ParentGroup"]</label>
-                        <select name="ParentId" class="form-select form-select-sm">
+                        <select name="ParentId" class="form-select form-select-sm erp-select2" data-lookup-entity="itemGroup" data-allow-clear="true" data-placeholder="-- @Localizer["None"] (@Localizer["MainGroup"]) --">
                             <option value="">-- @Localizer["None"] (@Localizer["MainGroup"]) --</option>
-                            @foreach (var g in allGroups)
-                            {
-                                <option value="@g.Id">@g.LocalizedName (@g.Code)</option>
-                            }
                         </select>
                     </div>
                     <div class="form-check form-switch mt-2">

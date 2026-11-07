@@ -2,6 +2,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Infrastructure.Data;
 using ERP.Web.Authorization;
+using ERP.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,16 +18,23 @@ namespace ERP.Web.Controllers
         private readonly ErpDbContext _context;
         private readonly ICurrentUserContext _currentUser;
         private readonly IAuditService _audit;
+        private readonly ICodeSequenceService _sequenceService;
 
         private const string SC_Code   = "CUR001";
         private const string SC_Name   = "Currencies";
         private const string SC_Module = "MasterData";
+        private const string EntityName = "Currency";
 
-        public CurrencyController(ErpDbContext context, ICurrentUserContext currentUser, IAuditService audit)
+        public CurrencyController(
+            ErpDbContext context,
+            ICurrentUserContext currentUser,
+            IAuditService audit,
+            ICodeSequenceService sequenceService)
         {
-            _context     = context;
-            _currentUser = currentUser;
-            _audit       = audit;
+            _context         = context;
+            _currentUser     = currentUser;
+            _audit           = audit;
+            _sequenceService = sequenceService;
         }
 
         [HttpGet]
@@ -53,10 +61,15 @@ namespace ERP.Web.Controllers
                 .Take(pageSize)
                 .ToListAsync();
 
-            ViewBag.SearchString = searchString;
-            ViewBag.CurrentPage  = page;
-            ViewBag.TotalPages   = (int)Math.Ceiling(totalCount / (double)pageSize);
-            ViewBag.TotalCount   = totalCount;
+            var seqConfig = await _sequenceService.GetConfigAsync(EntityName);
+
+            ViewBag.SearchString    = searchString;
+            ViewBag.CurrentPage     = page;
+            ViewBag.TotalPages      = (int)Math.Ceiling(totalCount / (double)pageSize);
+            ViewBag.TotalCount      = totalCount;
+            ViewBag.NextCode        = seqConfig.PreviewCode;
+            ViewBag.IsAutoCode      = seqConfig.IsAuto;
+            ViewBag.IsManualAllowed = seqConfig.IsManualAllowed;
 
             return View(items);
         }
@@ -64,27 +77,37 @@ namespace ERP.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [HasPermission("MasterData.Currencies.Add")]
-        public async Task<IActionResult> Create(Currency model)
+        public async Task<IActionResult> Create(Currency model, bool? isManualCode = null)
         {
+            // Auto-number logic
+            bool shouldAutoCode = isManualCode.HasValue
+                ? (!isManualCode.Value && await _sequenceService.IsAutoEnabledAsync(EntityName))
+                : (string.IsNullOrWhiteSpace(model.Code) || (await _sequenceService.IsAutoEnabledAsync(EntityName) && !await _sequenceService.IsManualAllowedAsync(EntityName)));
+
+            if (shouldAutoCode)
+            {
+                model.Code = await _sequenceService.GetNextCodeAsync(EntityName);
+            }
+
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "Currency Code is required.");
+                ModelState.AddModelError("Code", "كود العملة مطلوب.");
             else if (await _context.Currencies.AnyAsync(c => c.Code == model.Code.Trim()))
-                ModelState.AddModelError("Code", "Currency Code already exists.");
+                ModelState.AddModelError("Code", "كود العملة موجود بالفعل.");
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "اسم العملة بالعربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (model.ExchangeRate <= 0)
-                ModelState.AddModelError("ExchangeRate", "Exchange Rate must be greater than zero.");
+                ModelState.AddModelError("ExchangeRate", "سعر الصرف يجب أن يكون أكبر من الصفر.");
 
             if (ModelState.IsValid)
             {
                 model.Code      = model.Code.Trim().ToUpperInvariant();
-                model.NameAr    = model.NameAr.Trim();
-                model.NameEn    = model.NameEn.Trim();
+                model.NameAr    = model.NameAr?.Trim() ?? string.Empty;
+                model.NameEn    = string.IsNullOrWhiteSpace(model.NameEn) ? model.NameAr : model.NameEn.Trim();
                 model.Symbol    = model.Symbol?.Trim();
                 model.CreatedAt = DateTime.UtcNow;
 
@@ -92,13 +115,19 @@ namespace ERP.Web.Controllers
                 await _context.SaveChangesAsync();
 
                 await _audit.LogCreateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "Currency",
+                    entityName: EntityName,
                     entityId:   model.Id.ToString(),
                     newValues: new { model.Id, model.Code, model.NameAr, model.NameEn, model.Symbol, model.ExchangeRate, model.IsActive });
 
-                TempData["SuccessMessage"] = "Currency created successfully.";
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم إضافة العملة بنجاح.");
+
+                TempData["SuccessMessage"] = "تم إضافة العملة بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(ModelState, "يرجى تصحيح أخطاء الإدخال الموضحة أدناه.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
@@ -109,30 +138,45 @@ namespace ERP.Web.Controllers
         [HasPermission("MasterData.Currencies.Edit")]
         public async Task<IActionResult> Edit(Currency model)
         {
+            var entity = await _context.Currencies.FindAsync(model.Id);
+            if (entity == null)
+            {
+                if (Request.IsAjaxRequest())
+                    return this.JsonValidationFailure(new[] { "العملة غير موجودة أو تم حذفها." });
+                return NotFound();
+            }
+
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "Currency Code is required.");
+                ModelState.AddModelError("Code", "كود العملة مطلوب.");
             else if (await _context.Currencies.AnyAsync(c => c.Code == model.Code.Trim() && c.Id != model.Id))
-                ModelState.AddModelError("Code", "Currency Code already exists.");
+                ModelState.AddModelError("Code", "كود العملة موجود بالفعل.");
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "اسم العملة بالعربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (model.ExchangeRate <= 0)
-                ModelState.AddModelError("ExchangeRate", "Exchange Rate must be greater than zero.");
+                ModelState.AddModelError("ExchangeRate", "سعر الصرف يجب أن يكون أكبر من الصفر.");
 
             if (ModelState.IsValid)
             {
-                var entity = await _context.Currencies.FindAsync(model.Id);
-                if (entity == null) return NotFound();
-
-                var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.Symbol, entity.ExchangeRate, entity.IsActive };
+                var oldValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.Symbol,
+                    entity.ExchangeRate,
+                    entity.IsActive,
+                    OldCode = entity.Code
+                };
 
                 entity.Code         = model.Code.Trim().ToUpperInvariant();
-                entity.NameAr       = model.NameAr.Trim();
-                entity.NameEn       = model.NameEn.Trim();
+                entity.NameAr       = model.NameAr?.Trim() ?? string.Empty;
+                entity.NameEn       = string.IsNullOrWhiteSpace(model.NameEn) ? entity.NameAr : model.NameEn.Trim();
                 entity.Symbol       = model.Symbol?.Trim();
                 entity.ExchangeRate = model.ExchangeRate;
                 entity.IsActive     = model.IsActive;
@@ -140,15 +184,33 @@ namespace ERP.Web.Controllers
 
                 await _context.SaveChangesAsync();
 
+                var newValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.Symbol,
+                    entity.ExchangeRate,
+                    entity.IsActive,
+                    NewCode = entity.Code
+                };
+
                 await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "Currency",
+                    entityName: EntityName,
                     entityId:   entity.Id.ToString(),
                     oldValues:  oldValues,
-                    newValues: new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.Symbol, entity.ExchangeRate, entity.IsActive });
+                    newValues:  newValues);
 
-                TempData["SuccessMessage"] = "Currency updated successfully.";
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم تحديث العملة بنجاح.");
+
+                TempData["SuccessMessage"] = "تم تحديث العملة بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(ModelState, "يرجى تصحيح أخطاء الإدخال الموضحة أدناه.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
@@ -162,22 +224,13 @@ namespace ERP.Web.Controllers
             var entity = await _context.Currencies.FindAsync(id);
             if (entity == null) return NotFound();
 
-            bool isUsed = await _context.Customers.AnyAsync(c => c.CurrencyId == id) ||
-                          await _context.Vendors.AnyAsync(v => v.CurrencyId == id);
-
-            if (isUsed)
-            {
-                TempData["ErrorMessage"] = "Cannot delete currency because it is linked to customers or vendors.";
-                return RedirectToAction(nameof(Index));
-            }
-
-            var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.ExchangeRate, entity.IsActive };
+            var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.IsActive };
 
             _context.Currencies.Remove(entity);
             await _context.SaveChangesAsync();
 
             await _audit.LogDeleteAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "Currency",
+                entityName: EntityName,
                 entityId:   id.ToString(),
                 oldValues:  oldValues);
 
@@ -200,7 +253,7 @@ namespace ERP.Web.Controllers
             await _context.SaveChangesAsync();
 
             await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "Currency",
+                entityName: EntityName,
                 entityId:   id.ToString(),
                 oldValues:  oldValues,
                 newValues: new { entity.Id, entity.Code, entity.IsActive });

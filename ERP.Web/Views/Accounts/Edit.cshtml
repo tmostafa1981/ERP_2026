@@ -1,0 +1,272 @@
+@model ERP.Domain.Entities.GLAccount
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = $"تعديل الحساب: {Model.Code} - {Model.LocalizedName}";
+    var parentAccounts = ViewBag.ParentAccounts as List<ERP.Domain.Entities.GLAccount> ?? new List<ERP.Domain.Entities.GLAccount>();
+    var currencies = ViewBag.Currencies as List<ERP.Domain.Entities.Currency> ?? new List<ERP.Domain.Entities.Currency>();
+    var branches = ViewBag.Branches as List<ERP.Domain.Entities.Branch> ?? new List<ERP.Domain.Entities.Branch>();
+    bool hasTransactions = ViewBag.HasTransactions as bool? ?? false;
+    bool hasChildren = ViewBag.HasChildren as bool? ?? false;
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0 text-primary">
+                <i class="fa-solid fa-pen-to-square me-2"></i> تعديل بيانات الحساب: <span class="font-monospace">@Model.Code</span>
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item"><a asp-action="Index">دليل الحسابات</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">تعديل حساب</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة لدليل الحسابات
+            </a>
+        </div>
+    </div>
+
+    <!-- Warnings / Integrity Info -->
+    @if (hasTransactions)
+    {
+        <div class="alert alert-warning py-2 small d-flex align-items-center mb-3">
+            <i class="fa-solid fa-lock fs-5 me-2"></i>
+            <div>
+                <strong>تنبيه قيود مالية:</strong> هذا الحساب مسجل عليه قيود وحركات محاسبية في دفتر اليومية. للحفاظ على دقة القيود، تم قفل تعديل العملة ونوع الحساب.
+            </div>
+        </div>
+    }
+    @if (hasChildren)
+    {
+        <div class="alert alert-info py-2 small d-flex align-items-center mb-3">
+            <i class="fa-solid fa-sitemap fs-5 me-2"></i>
+            <div>
+                <strong>تنبيه بنية هرمية:</strong> يحتوي هذا الحساب على حسابات فرعية تابعة له في الشجرة، لذا يجب أن يظل كمجموعة رئيسية تجميعية.
+            </div>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3">
+            <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-pen-nib me-1"></i> بيانات الحساب المالي (GL Account)</h6>
+        </div>
+        <div class="card-body">
+            <form asp-action="Edit" method="post" id="accountForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Id" />
+                <input type="hidden" asp-for="RowVersion" />
+                <div asp-validation-summary="All" class="alert alert-danger py-2 small" style="display: @(ViewData.ModelState.IsValid ? "none" : "block");"></div>
+
+                <div class="row g-3">
+                    <!-- Parent Account -->
+                    <div class="col-md-6">
+                        <label asp-for="ParentId" class="form-label fw-bold">الحساب الأب (المجموعة التابع لها)</label>
+                        <select asp-for="ParentId" class="form-select select2" id="ddlParentId">
+                            <option value="">-- حساب مستوى أول رئيسي (بدون أب) --</option>
+                            @foreach (var p in parentAccounts)
+                            {
+                                <option value="@p.Id" selected="@(Model.ParentId == p.Id)" data-cat="@((int)p.AccountCategory)" data-nature="@((int)p.AccountNature)">
+                                    @p.Code - @p.LocalizedName (مستوى @p.Level)
+                                </option>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Code -->
+                    <div class="col-md-6">
+                        <label asp-for="Code" class="form-label fw-bold">كود الحساب <span class="text-danger">*</span></label>
+                        <input asp-for="Code" class="form-control font-monospace" required />
+                        <span asp-validation-for="Code" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Name Ar -->
+                    <div class="col-md-6">
+                        <label asp-for="NameAr" class="form-label fw-bold">اسم الحساب (عربي) <span class="text-danger">*</span></label>
+                        <input asp-for="NameAr" class="form-control" required />
+                        <span asp-validation-for="NameAr" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Name En -->
+                    <div class="col-md-6">
+                        <label asp-for="NameEn" class="form-label">اسم الحساب (إنجليزي)</label>
+                        <input asp-for="NameEn" class="form-control" />
+                        <span asp-validation-for="NameEn" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Category -->
+                    <div class="col-md-6">
+                        <label asp-for="AccountCategory" class="form-label fw-bold">التصنيف المحاسبي الرئيسي <span class="text-danger">*</span></label>
+                        <select asp-for="AccountCategory" class="form-select" id="ddlCategory">
+                            <option value="@((int)AccountCategory.Assets)">1 - الأصول (Assets)</option>
+                            <option value="@((int)AccountCategory.Liabilities)">2 - الخصوم والالتزامات (Liabilities)</option>
+                            <option value="@((int)AccountCategory.Equity)">3 - حقوق الملكية (Equity)</option>
+                            <option value="@((int)AccountCategory.Revenues)">4 - الإيرادات (Revenues)</option>
+                            <option value="@((int)AccountCategory.Expenses)">5 - المصروفات والتكاليف (Expenses)</option>
+                        </select>
+                    </div>
+
+                    <!-- Nature -->
+                    <div class="col-md-6">
+                        <label asp-for="AccountNature" class="form-label fw-bold">طبيعة الحساب <span class="text-danger">*</span></label>
+                        <select asp-for="AccountNature" class="form-select" id="ddlNature">
+                            <option value="@((int)AccountNature.Debit)">مدين (Debit)</option>
+                            <option value="@((int)AccountNature.Credit)">دائن (Credit)</option>
+                        </select>
+                    </div>
+
+                    <!-- Type Switch: IsGroup -->
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">نوع الحساب في الشجرة</label>
+                        <div class="form-check form-switch mt-1">
+                            <input asp-for="IsGroup" class="form-check-input" type="checkbox" id="chkIsGroup" disabled="@(hasTransactions || hasChildren)" />
+                            <label class="form-check-label fw-bold" for="chkIsGroup" id="lblIsGroup">
+                                @(Model.IsGroup ? "مجموعة رئيسية (تجميعي لا يقبل التوجيه)" : "حساب حركة فرعي (يقبل التوجيه المحاسبي)")
+                            </label>
+                        </div>
+                        @if (hasTransactions || hasChildren)
+                        {
+                            <input type="hidden" asp-for="IsGroup" />
+                            <small class="text-muted d-block">مغلق للربط بحركات أو حسابات تابعة.</small>
+                        }
+                    </div>
+
+                    <!-- Currency (for leaf accounts) -->
+                    <div class="col-md-6" id="secCurrency">
+                        <label asp-for="CurrencyId" class="form-label fw-bold">عملة الحساب الإلزامية</label>
+                        <select asp-for="CurrencyId" class="form-select select2" disabled="@hasTransactions">
+                            <option value="">-- جميع العملات (متعدد العملات) --</option>
+                            @foreach (var c in currencies)
+                            {
+                                <option value="@c.Id" selected="@(Model.CurrencyId == c.Id)">@c.Code - @c.LocalizedName</option>
+                            }
+                        </select>
+                        @if (hasTransactions)
+                        {
+                            <input type="hidden" asp-for="CurrencyId" />
+                            <small class="text-muted d-block">مغلقة لوجود قيود مالية مسجلة.</small>
+                        }
+                    </div>
+
+                    <!-- Account Usage -->
+                    <div class="col-md-6" id="secUsage">
+                        <label asp-for="AccountUsage" class="form-label fw-bold">نطاق استخدام الحساب في الشاشات</label>
+                        <select asp-for="AccountUsage" class="form-select">
+                            <option value="@((int)AccountUsage.All)">جميع الشاشات (All)</option>
+                            <option value="@((int)AccountUsage.JournalVoucher)">قيود اليومية فقط (Journal Voucher)</option>
+                            <option value="@((int)AccountUsage.Payment)">سندات الصرف والمدفوعات فقط (Payment)</option>
+                            <option value="@((int)AccountUsage.Receipt)">سندات القبض والمقبوضات فقط (Receipt)</option>
+                        </select>
+                    </div>
+
+                    <!-- Branch Assignment (for leaf accounts) -->
+                    <div class="col-md-6" id="secBranch">
+                        <label asp-for="BranchId" class="form-label fw-bold">الفرع المخصص للحساب</label>
+                        <select asp-for="BranchId" class="form-select select2" disabled="@(hasTransactions || Model.IsGroup)">
+                            <option value="">-- حساب عام (مشترك لجميع الفروع) --</option>
+                            @foreach (var br in branches)
+                            {
+                                <option value="@br.Id" selected="@(Model.BranchId == br.Id)">@br.Code - @br.LocalizedName</option>
+                            }
+                        </select>
+                        @if (hasTransactions)
+                        {
+                            <input type="hidden" asp-for="BranchId" />
+                            <small class="text-muted d-block text-warning"><i class="fa-solid fa-lock me-1"></i>مغلق لوجود قيود مالية مسجلة تخص هذا الفرع.</small>
+                        }
+                        else
+                        {
+                            <small class="text-muted">إذا تم تخصيصه لفرع معين، سيظهر الحساب ويُستخدم في ذلك الفرع فقط. المجموعات تظل عامة دائماً.</small>
+                        }
+                    </div>
+
+                    <div class="col-12"><hr class="my-2" /></div>
+
+                    <!-- Control Account & Sub-Ledger -->
+                    <div class="col-md-6" id="secControl">
+                        <div class="card border p-3 bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input asp-for="IsControlAccount" class="form-check-input" type="checkbox" id="chkIsControl" />
+                                <label class="form-check-label fw-bold" for="chkIsControl">
+                                    حساب مراقبة لدفتر أستاذ مساعد (Sub-Ledger Control Account)
+                                </label>
+                            </div>
+                            <div id="subLedgerOptions" class="mt-2" style="display: @(Model.IsControlAccount ? "block" : "none");">
+                                <label asp-for="SubLedgerType" class="form-label small fw-bold">نوع الدفتر المساعد المرتبط:</label>
+                                <select asp-for="SubLedgerType" class="form-select form-select-sm">
+                                    <option value="@((int)SubLedgerType.None)">-- حدد النوع --</option>
+                                    <option value="@((int)SubLedgerType.Customer)">عملاء (Customer)</option>
+                                    <option value="@((int)SubLedgerType.Vendor)">موردين (Vendor)</option>
+                                    <option value="@((int)SubLedgerType.Bank)">بنوك وخزائن (Bank & Cash)</option>
+                                    <option value="@((int)SubLedgerType.Employee)">عهد وسلف موظفين (Employee)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Other Flags -->
+                    <div class="col-md-6" id="secFlags">
+                        <div class="card border p-3 bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input asp-for="RequiresCostCenter" class="form-check-input" type="checkbox" id="chkCostCenter" />
+                                <label class="form-check-label fw-bold" for="chkCostCenter">
+                                    يلزم إدخال مركز تكلفة (Mandatory Cost Center)
+                                </label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input asp-for="IsReconciliationAccount" class="form-check-input" type="checkbox" id="chkRec" />
+                                <label class="form-check-label fw-bold" for="chkRec">
+                                    حساب تسوية ومطابقة (Reconciliation Account)
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input asp-for="IsActive" class="form-check-input" type="checkbox" id="chkActive" />
+                                <label class="form-check-label fw-bold" for="chkActive">الحساب نشط ويقبل العمليات</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-2 border-top d-flex gap-2">
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="fa-solid fa-save me-1"></i> حفظ التعديلات
+                    </button>
+                    <a asp-action="Index" class="btn btn-outline-secondary px-4">إلغاء</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('.select2').select2({ theme: 'bootstrap-5', width: '100%', dir: 'rtl' });
+
+            function toggleGroupUI() {
+                const isGroup = $('#chkIsGroup').is(':checked');
+                if (isGroup) {
+                    $('#lblIsGroup').text('مجموعة رئيسية (تجميعي لا يقبل التوجيه)');
+                    $('#secCurrency, #secUsage, #secBranch, #secControl, #secFlags').slideUp(200);
+                } else {
+                    $('#lblIsGroup').text('حساب حركة فرعي (يقبل التوجيه المحاسبي)');
+                    $('#secCurrency, #secUsage, #secBranch, #secControl, #secFlags').slideDown(200);
+                }
+            }
+
+            $('#chkIsGroup').change(toggleGroupUI);
+            toggleGroupUI();
+
+            $('#chkIsControl').change(function () {
+                if ($(this).is(':checked')) {
+                    $('#subLedgerOptions').slideDown(200);
+                } else {
+                    $('#subLedgerOptions').slideUp(200);
+                }
+            });
+        });
+    </script>
+}

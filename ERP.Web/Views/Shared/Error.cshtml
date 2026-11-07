@@ -1,4 +1,4 @@
-﻿@model ErrorViewModel
+@model ErrorViewModel
 @{
     ViewData["Title"] = "Error";
 }
@@ -11,6 +11,24 @@
     <p>
         <strong>Request ID:</strong> <code>@Model.RequestId</code>
     </p>
+}
+
+@if (!string.IsNullOrEmpty(ViewBag.ErrorMessage as string))
+{
+    <div class="alert alert-danger mt-3 text-start shadow-sm" dir="ltr">
+        <h5 class="fw-bold mb-2"><i class="fa-solid fa-triangle-exclamation me-2"></i> @ViewBag.ErrorMessage</h5>
+        @if (!string.IsNullOrEmpty(ViewBag.FailedPath as string))
+        {
+            <div class="small text-muted mb-2"><strong>Failed Path:</strong> @ViewBag.FailedPath</div>
+        }
+        @if (!string.IsNullOrEmpty(ViewBag.ErrorDetails as string))
+        {
+            <details class="mt-2">
+                <summary class="fw-bold text-danger" style="cursor: pointer;">Stack Trace &amp; Details</summary>
+                <pre class="bg-white p-3 border rounded text-dark mt-2" style="max-height: 450px; overflow: auto; font-size: 11.5px; white-space: pre-wrap;">@ViewBag.ErrorDetails</pre>
+            </details>
+        }
+    </div>
 }
 
 <h3>Development Mode</h3>

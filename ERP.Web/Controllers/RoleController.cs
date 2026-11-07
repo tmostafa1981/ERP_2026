@@ -234,6 +234,8 @@ namespace ERP.Web.Controllers
                         .Select(scrGrp => new PermissionScreenGroupViewModel
                         {
                             ScreenName = scrGrp.Key,
+                            ScreenTitleAr = scrGrp.FirstOrDefault(a => !string.IsNullOrEmpty(a.Description))?.Description,
+                            ScreenTitleEn = scrGrp.FirstOrDefault(a => !string.IsNullOrEmpty(a.Description))?.Description,
                             Actions = scrGrp.Select(a => new PermissionActionItemViewModel
                             {
                                 PermissionId = a.Id,

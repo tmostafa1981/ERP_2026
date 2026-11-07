@@ -1,0 +1,240 @@
+@model List<ERP.Application.DTOs.FixedAssets.FixedAssetListDto>
+@{
+    ViewData["Title"] = "سجل الأصول الثابتة";
+    var filter = ViewBag.Filter as ERP.Application.DTOs.FixedAssets.FixedAssetFilterDto ?? new();
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="mb-1 text-primary"><i class="fas fa-building me-2"></i>سجل الأصول الثابتة</h3>
+            <p class="text-muted small mb-0">إدارة ومتابعة الأصول الثابتة، تتبع المواقع والعهدة، والقيم الدفترية ومجمعات الإهلاك</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-controller="AssetDepreciation" asp-action="Create" class="btn btn-outline-success">
+                <i class="fas fa-play me-1"></i>تشغيل الإهلاك الدوري
+            </a>
+            <a asp-controller="AssetCategories" asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fas fa-boxes me-1"></i>مجموعات الأصول
+            </a>
+            <a asp-action="Create" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i>إضافة أصل جديد
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-1"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-1"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Stat Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50 small">إجمالي الأصول</div>
+                            <h4 class="mb-0 fw-bold">@ViewBag.TotalAssetsCount</h4>
+                        </div>
+                        <i class="fas fa-layer-group fa-2x opacity-50"></i>
+                    </div>
+                    <div class="small mt-2 pt-2 border-top border-white-50">
+                        في الخدمة: <span class="fw-bold">@ViewBag.InServiceCount</span> | تحت الإنشاء: <span class="fw-bold">@ViewBag.CipCount</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50 small">إجمالي التكلفة التاريخية</div>
+                            <h4 class="mb-0 fw-bold">@(((decimal)ViewBag.TotalCost).ToString("N2"))</h4>
+                        </div>
+                        <i class="fas fa-coins fa-2x opacity-50"></i>
+                    </div>
+                    <div class="small mt-2 pt-2 border-top border-white-50 text-truncate">
+                        للأصول القائمة النشطة
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-dark small opacity-75">مجمع الإهلاك المتراكم</div>
+                            <h4 class="mb-0 fw-bold">@(((decimal)ViewBag.TotalAccDep).ToString("N2"))</h4>
+                        </div>
+                        <i class="fas fa-chart-line-down fa-2x opacity-50"></i>
+                    </div>
+                    <div class="small mt-2 pt-2 border-top border-dark border-opacity-25">
+                        إجمالي ما تم إهلاكه حتى الآن
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-white-50 small">صافي القيمة الدفترية الحالية</div>
+                            <h4 class="mb-0 fw-bold">@(((decimal)ViewBag.TotalBookValue).ToString("N2"))</h4>
+                        </div>
+                        <i class="fas fa-balance-scale fa-2x opacity-50"></i>
+                    </div>
+                    <div class="small mt-2 pt-2 border-top border-white-50">
+                        التكلفة − مجمع الإهلاك
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-3">
+            <form method="get" asp-action="Index" class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">بحث</label>
+                    <input type="text" name="SearchTerm" value="@filter.SearchTerm" class="form-control form-control-sm" placeholder="كود، اسم، سيريال، باركود..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">الفرع</label>
+                    <select name="BranchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                        <option value="">-- كافة الفروع --</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">المجموعة</label>
+                    <select name="AssetCategoryId" class="form-select form-select-sm" asp-items="ViewBag.Categories">
+                        <option value="">-- كافة المجموعات --</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">الحالة</label>
+                    <select name="Status" class="form-select form-select-sm">
+                        <option value="">-- كافة الحالات --</option>
+                        <option value="2">في الخدمة (In Service)</option>
+                        <option value="3">تحت الإنشاء (CIP)</option>
+                        <option value="1">جديد</option>
+                        <option value="4">متوقف</option>
+                        <option value="5">مستبعد / مباع</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">مركز التكلفة</label>
+                    <select name="CostCenterId" class="form-select form-select-sm" asp-items="ViewBag.CostCenters">
+                        <option value="">-- الكل --</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary flex-fill">
+                        <i class="fas fa-search me-1"></i>تصفية
+                    </button>
+                    <a asp-action="Index" class="btn btn-sm btn-outline-secondary">إعادة تعيين</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>كود الأصل</th>
+                            <th class="text-start">اسم الأصل</th>
+                            <th>المجموعة</th>
+                            <th>الفرع</th>
+                            <th>مركز التكلفة</th>
+                            <th>الحالة</th>
+                            <th>التكلفة الحالية</th>
+                            <th>مجمع الإهلاك</th>
+                            <th>القيمة الدفترية</th>
+                            <th>طريقة الإهلاك</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model == null || !Model.Any())
+                        {
+                            <tr>
+                                <td colspan="11" class="text-muted py-5">لا توجد أصول مطابقة للبحث أو الفلتر المحدد.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var a in Model)
+                            {
+                                <tr>
+                                    <td>
+                                        <a asp-action="Details" asp-route-id="@a.Id" class="fw-bold text-decoration-none">
+                                            @a.AssetCode
+                                        </a>
+                                    </td>
+                                    <td class="text-start">
+                                        <div class="fw-bold">@a.LocalizedName</div>
+                                        @if (!string.IsNullOrWhiteSpace(a.CustodianEmployeeName))
+                                        {
+                                            <small class="text-muted"><i class="fas fa-user me-1"></i>العهدة: @a.CustodianEmployeeName</small>
+                                        }
+                                    </td>
+                                    <td><span class="badge bg-light text-dark border">@a.CategoryName</span></td>
+                                    <td>@a.BranchName</td>
+                                    <td class="small text-muted">@(a.CostCenterName ?? "—")</td>
+                                    <td>
+                                        @{
+                                            var badgeClass = a.Status switch {
+                                                ERP.Domain.Enums.AssetStatus.InService => "bg-success",
+                                                ERP.Domain.Enums.AssetStatus.UnderConstruction => "bg-warning text-dark",
+                                                ERP.Domain.Enums.AssetStatus.Disposed => "bg-danger",
+                                                ERP.Domain.Enums.AssetStatus.Suspended => "bg-secondary",
+                                                _ => "bg-info text-dark"
+                                            };
+                                        }
+                                        <span class="badge @badgeClass">@a.StatusName</span>
+                                    </td>
+                                    <td class="fw-bold">@a.CurrentCostLocal.ToString("N2")</td>
+                                    <td class="text-warning">@a.CurrentAccumulatedDepreciation.ToString("N2")</td>
+                                    <td class="fw-bold text-primary">@a.CurrentBookValue.ToString("N2")</td>
+                                    <td>
+                                        <span class="small badge bg-secondary">@a.DepreciationMethodName</span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a asp-action="Details" asp-route-id="@a.Id" class="btn btn-outline-info" title="عرض التفاصيل">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a asp-action="Edit" asp-route-id="@a.Id" class="btn btn-outline-primary" title="تعديل">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

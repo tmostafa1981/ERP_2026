@@ -1,0 +1,302 @@
+@model ERP.Domain.Entities.VoucherHeader
+@using ERP.Domain.Enums
+@{
+    Layout = null;
+    bool isReceipt = Model.VoucherType == VoucherType.Receipt;
+    string title = isReceipt ? "سند قبض نقدي / بنكي (Receipt Voucher)" : "سند صرف نقدي / بنكي (Payment Voucher)";
+    var customers = ViewBag.Customers as Dictionary<int, string> ?? new Dictionary<int, string>();
+    var vendors = ViewBag.Vendors as Dictionary<int, string> ?? new Dictionary<int, string>();
+    string companyName = Model.Branch?.Company?.NameAr ?? Model.Branch?.Company?.Name ?? "مجموعة سوي تك (Sewtec Group)";
+    string branchName = Model.Branch?.LocalizedName ?? "المركز الرئيسي";
+}
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@title - @Model.VoucherNumber</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #212529;
+        }
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 15mm;
+            margin: 10mm auto;
+            background: white;
+            border: 1px solid #dcdcdc;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        .watermark {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-30deg);
+            font-size: 5rem;
+            color: rgba(220, 53, 69, 0.12);
+            font-weight: bold;
+            text-transform: uppercase;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .header-box {
+            border-bottom: 2px solid #0d6efd;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+        .voucher-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+        }
+        .info-table td, .info-table th {
+            padding: 5px 8px;
+            font-size: 0.9rem;
+        }
+        .signature-box {
+            border: 1px dashed #6c757d;
+            height: 90px;
+            border-radius: 4px;
+            padding: 8px;
+            background: #fafafa;
+        }
+        @@media print {
+            body {
+                background: white;
+                margin: 0;
+                padding: 0;
+            }
+            .page {
+                border: none;
+                box-shadow: none;
+                margin: 0;
+                width: 100%;
+                padding: 10mm;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print text-center py-3 bg-dark text-white sticky-top">
+    <button onclick="window.print()" class="btn btn-primary px-4 me-2">
+        <i class="fa-solid fa-print me-1"></i> طباعة الآن (Print / PDF)
+    </button>
+    <button onclick="window.close()" class="btn btn-secondary px-3">
+        <i class="fa-solid fa-xmark me-1"></i> إغلاق النافذة
+    </button>
+</div>
+
+<div class="page">
+    @if (Model.Status != VoucherStatus.Posted)
+    {
+        <div class="watermark">مسودة - DRAFT</div>
+    }
+
+    <!-- Header Box -->
+    <div class="header-box">
+        <div class="row align-items-center">
+            <div class="col-8">
+                <h4 class="fw-bold mb-1 text-primary">@companyName</h4>
+                <div class="fw-semibold text-muted">@branchName</div>
+                <small class="text-muted">نظام إدارة الموارد والمؤسسات ERP 2026</small>
+            </div>
+            <div class="col-4 text-end">
+                <div class="voucher-title @(isReceipt ? "text-success" : "text-danger")">
+                    @(isReceipt ? "سند قبض" : "سند صرف")
+                </div>
+                <div class="fw-bold fs-6">@Model.VoucherNumber</div>
+                <small class="text-muted">تاريخ: @Model.VoucherDate.ToString("yyyy/MM/dd")</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Master Info Grid -->
+    <div class="card border mb-3">
+        <div class="card-body p-2">
+            <table class="table table-sm table-borderless info-table mb-0">
+                <tr>
+                    <th style="width: 18%;">طريقة الدفع:</th>
+                    <td style="width: 32%;">
+                        <strong class="text-dark">
+                            @{
+                                var prMethods = Model.Lines.Select(l => l.PaymentMethod).Distinct().ToList();
+                                string prSummary = prMethods.Count switch
+                                {
+                                    0 => "-",
+                                    1 => prMethods[0] switch {
+                                        VoucherPaymentMethod.Cash => "نقداً",
+                                        VoucherPaymentMethod.Cheque => "شيك بنكي",
+                                        VoucherPaymentMethod.BankTransfer => "تحويل بنكي",
+                                        _ => "أخرى"
+                                    },
+                                    _ => "طرق دفع متعددة"
+                                };
+                            }
+                            @prSummary
+                        </strong>
+                    </td>
+                    <th style="width: 18%;">الخزينة / البنك:</th>
+                    <td style="width: 32%;">
+                        <strong>@(Model.CashBankAccount != null ? $"{Model.CashBankAccount.Code} - {Model.CashBankAccount.LocalizedName}" : "-")</strong>
+                    </td>
+                </tr>
+                <tr>
+                    <th>العملة وسعر الصرف:</th>
+                    <td>@Model.Currency?.Code (سعر الصرف: @Model.ExchangeRate.ToString("N4"))</td>
+                    <th>رقم المرجع اليدوي:</th>
+                    <td>@(Model.ReferenceNumber ?? "-")</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Narration Box -->
+    <div class="alert alert-light border mb-3 py-2 px-3" style="font-size: 0.95rem;">
+        <div class="mb-1">
+            <strong>@(isReceipt ? "وصلنا من السادة:" : "يصرف إلى السادة:")</strong>
+            <span class="fw-bold text-dark">
+                @{
+                    var partyNames = new List<string>();
+                    foreach (var l in Model.Lines)
+                    {
+                        if (l.LineType == VoucherLineType.Customer && l.SubLedgerId.HasValue && customers.TryGetValue(l.SubLedgerId.Value, out var cn))
+                            partyNames.Add(cn);
+                        else if (l.LineType == VoucherLineType.Vendor && l.SubLedgerId.HasValue && vendors.TryGetValue(l.SubLedgerId.Value, out var vn))
+                            partyNames.Add(vn);
+                        else if (l.Account != null)
+                            partyNames.Add(l.Account.LocalizedName);
+                    }
+                }
+                @string.Join(" ، ", partyNames.Distinct())
+            </span>
+        </div>
+        <div class="mb-1">
+            <strong>مبلغ وقدره:</strong>
+            <span class="fs-6 fw-bold text-primary">@Model.TotalAmountForeign.ToString("N2") @Model.Currency?.Code</span>
+            <span class="ms-2 fw-semibold text-success">(@ViewBag.AmountInWords)</span>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Model.Notes))
+        {
+            <div>
+                <strong>وذلك عن:</strong>
+                <span>@Model.Notes</span>
+            </div>
+        }
+    </div>
+
+    <!-- Lines Breakdown -->
+    <table class="table table-bordered table-sm mb-4" style="font-size: 0.85rem;">
+        <thead class="table-light text-center">
+            <tr>
+                <th style="width: 35px;">#</th>
+                <th style="width: 100px;">نوع الطرف</th>
+                <th>اسم الطرف / الحساب المالي</th>
+                <th style="width: 220px;">طريقة الدفع والتفاصيل</th>
+                <th style="width: 120px;" class="text-end">المبلغ بالعملة</th>
+                <th style="width: 120px;" class="text-end">المبلغ بالمحلي</th>
+                <th>البيان والتفاصيل</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var line in Model.Lines.OrderBy(l => l.LineNumber))
+            {
+                string targetName = "-";
+                if (line.LineType == VoucherLineType.Customer && line.SubLedgerId.HasValue && customers.TryGetValue(line.SubLedgerId.Value, out var cn))
+                    targetName = cn;
+                else if (line.LineType == VoucherLineType.Vendor && line.SubLedgerId.HasValue && vendors.TryGetValue(line.SubLedgerId.Value, out var vn))
+                    targetName = vn;
+                else if (line.Account != null)
+                    targetName = $"{line.Account.Code} - {line.Account.LocalizedName}";
+
+                <tr>
+                    <td class="text-center fw-bold">@line.LineNumber</td>
+                    <td class="text-center">@(line.LineType == VoucherLineType.Customer ? "عميل" : (line.LineType == VoucherLineType.Vendor ? "مورد" : (line.LineType == VoucherLineType.Bank ? "بنك" : "حساب عام")))</td>
+                    <td class="fw-bold">@targetName</td>
+                    <td>
+                        @if (line.PaymentMethod == VoucherPaymentMethod.Cheque)
+                        {
+                            <div>
+                                <span class="fw-bold text-dark">شيك: @(line.ChequeNumber ?? "-")</span>
+                                <div class="text-muted" style="font-size: 0.75rem;">
+                                    @(line.Bank != null ? line.Bank.NameAr : (line.BankName ?? ""))
+                                    @(line.DueDate.HasValue ? $" | استحقاق: {line.DueDate.Value:yyyy/MM/dd}" : "")
+                                    @(!string.IsNullOrWhiteSpace(line.DrawerName) ? $" | الساحب: {line.DrawerName}" : "")
+                                </div>
+                            </div>
+                        }
+                        else if (line.PaymentMethod == VoucherPaymentMethod.Cash)
+                        {
+                            <span>نقداً</span>
+                        }
+                        else if (line.PaymentMethod == VoucherPaymentMethod.BankTransfer)
+                        {
+                            <span>تحويل بنكي</span>
+                        }
+                        else
+                        {
+                            <span>أخرى</span>
+                        }
+                    </td>
+                    <td class="text-end fw-bold">@line.AmountForeign.ToString("N2")</td>
+                    <td class="text-end fw-bold">@line.AmountLocal.ToString("N2")</td>
+                    <td class="small text-muted">@(line.Description ?? "-")</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot class="table-light fw-bold">
+            <tr>
+                <td colspan="4" class="text-end">الإجمالي الكلي:</td>
+                <td class="text-end text-primary">@Model.TotalAmountForeign.ToString("N2")</td>
+                <td class="text-end text-success">@Model.TotalAmountLocal.ToString("N2")</td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <!-- Four-Party Signature Block -->
+    <div class="row g-2 mt-4 pt-3 text-center" style="font-size: 0.85rem;">
+        <div class="col-3">
+            <div class="signature-box d-flex flex-column justify-content-between">
+                <span class="fw-bold">أمين الخزينة / الصندوق</span>
+                <span class="text-muted small">....................................</span>
+            </div>
+        </div>
+        <div class="col-3">
+            <div class="signature-box d-flex flex-column justify-content-between">
+                <span class="fw-bold">المحاسب المختص</span>
+                <span class="text-muted small">....................................</span>
+            </div>
+        </div>
+        <div class="col-3">
+            <div class="signature-box d-flex flex-column justify-content-between">
+                <span class="fw-bold">المدير المالي</span>
+                <span class="text-muted small">....................................</span>
+            </div>
+        </div>
+        <div class="col-3">
+            <div class="signature-box d-flex flex-column justify-content-between">
+                <span class="fw-bold">توقيع المستلم</span>
+                <span class="text-muted small">....................................</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Footer -->
+    <div class="text-muted text-center small mt-4 pt-3 border-top">
+        <span>طبع بواسطة: @User.Identity?.Name في: @DateTime.Now.ToString("yyyy/MM/dd HH:mm")</span>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,224 @@
+@model ERP.Application.DTOs.FixedAssets.UpdateFixedAssetDto
+@{
+    ViewData["Title"] = "تعديل أصل ثابت: " + Model.AssetCode;
+}
+
+<div class="container-fluid py-3">
+    <form asp-action="Edit" method="post" id="assetEditForm">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="RowVersion" />
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h3 class="mb-1 text-primary"><i class="fas fa-edit me-2"></i>تعديل الأصل: @Model.AssetCode</h3>
+                <p class="text-muted small mb-0">تعديل بيانات الأصل، المواقع والمسؤولية، ومعايير وحسابات الإهلاك</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary">إلغاء</a>
+                <button type="submit" class="btn btn-primary px-4"><i class="fas fa-save me-1"></i>حفظ التعديلات</button>
+            </div>
+        </div>
+
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-3"></div>
+
+        <div class="row g-3">
+            <div class="col-lg-8">
+                <!-- 1. Basic Data -->
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-light py-2 fw-bold text-dark">
+                        <i class="fas fa-info-circle me-1 text-primary"></i>1. البيانات الأساسية
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label asp-for="AssetCode" class="form-label small fw-bold">كود الأصل</label>
+                                <input asp-for="AssetCode" class="form-control form-control-sm bg-light" readonly />
+                            </div>
+                            <div class="col-md-5">
+                                <label asp-for="NameAr" class="form-label small fw-bold">اسم الأصل (عربي) <span class="text-danger">*</span></label>
+                                <input asp-for="NameAr" class="form-control form-control-sm" required />
+                                <span asp-validation-for="NameAr" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="NameEn" class="form-label small fw-bold">اسم الأصل (إنجليزي)</label>
+                                <input asp-for="NameEn" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="AssetCategoryId" class="form-label small fw-bold">تصنيف / مجموعة الأصل <span class="text-danger">*</span></label>
+                                <select asp-for="AssetCategoryId" class="form-select form-select-sm" asp-items="ViewBag.Categories" required></select>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="Status" class="form-label small fw-bold">حالة الأصل</label>
+                                <select asp-for="Status" class="form-select form-select-sm">
+                                    <option value="2">في الخدمة / قيد التشغيل (In Service)</option>
+                                    <option value="3">تحت الإنشاء / تجهيز (CIP)</option>
+                                    <option value="1">جديد</option>
+                                    <option value="4">متوقف</option>
+                                    <option value="5">مستبعد / مباع</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="SerialNumber" class="form-label small fw-bold">الرقم التسلسلي Serial Number</label>
+                                <input asp-for="SerialNumber" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="Barcode" class="form-label small fw-bold">الباركود Barcode</label>
+                                <input asp-for="Barcode" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-8">
+                                <label asp-for="Description" class="form-label small">الوصف والتفاصيل</label>
+                                <input asp-for="Description" class="form-control form-control-sm" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Location & Custody -->
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-light py-2 fw-bold text-dark">
+                        <i class="fas fa-map-marker-alt me-1 text-primary"></i>2. الموقع والعهدة والمسؤولية
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label asp-for="BranchId" class="form-label small fw-bold">الفرع المسؤول</label>
+                                <select asp-for="BranchId" class="form-select form-select-sm" asp-items="ViewBag.Branches"></select>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="WarehouseId" class="form-label small">الموقع / المخزن</label>
+                                <select asp-for="WarehouseId" class="form-select form-select-sm" asp-items="ViewBag.Warehouses">
+                                    <option value="">-- اختياري --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="CostCenterId" class="form-label small">مركز التكلفة</label>
+                                <select asp-for="CostCenterId" class="form-select form-select-sm" asp-items="ViewBag.CostCenters">
+                                    <option value="">-- اختياري --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="Department" class="form-label small">القسم أو الإدارة</label>
+                                <input asp-for="Department" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="CustodianEmployeeName" class="form-label small">الموظف المسؤول (العهدة)</label>
+                                <input asp-for="CustodianEmployeeName" class="form-control form-control-sm" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Valuation & Purchasing -->
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-light py-2 fw-bold text-dark">
+                        <i class="fas fa-dollar-sign me-1 text-primary"></i>3. بيانات الشراء والتكلفة
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label asp-for="PurchaseDate" class="form-label small fw-bold">تاريخ الشراء</label>
+                                <input asp-for="PurchaseDate" type="date" class="form-control form-control-sm" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="PlacedInServiceDate" class="form-label small fw-bold">تاريخ بدء الاستخدام / التشغيل</label>
+                                <input asp-for="PlacedInServiceDate" type="date" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="VendorId" class="form-label small">المورد</label>
+                                <select asp-for="VendorId" class="form-select form-select-sm" asp-items="ViewBag.Vendors">
+                                    <option value="">-- اختياري --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="InitialCostLocal" class="form-label small fw-bold">التكلفة التاريخية بالعملة المحلية</label>
+                                <input asp-for="InitialCostLocal" type="number" step="0.01" class="form-control form-control-sm fw-bold" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="AdditionalExpensesLocal" class="form-label small">مصاريف إضافية</label>
+                                <input asp-for="AdditionalExpensesLocal" type="number" step="0.01" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="ResidualValue" class="form-label small fw-bold">القيمة التخريدية (الخردة)</label>
+                                <input asp-for="ResidualValue" type="number" step="0.01" class="form-control form-control-sm" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-light py-2 fw-bold text-dark">
+                        <i class="fas fa-calculator me-1 text-primary"></i>طريقة ومعايير الإهلاك
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="mb-3">
+                            <label asp-for="DepreciationMethod" class="form-label small fw-bold">طريقة الإهلاك</label>
+                            <select asp-for="DepreciationMethod" class="form-select form-select-sm">
+                                <option value="1">القسط الثابت (Straight Line)</option>
+                                <option value="2">القسط المتناقص (Declining Balance)</option>
+                                <option value="3">وحدات الإنتاج (Units of Production)</option>
+                                <option value="4">بدون إهلاك (مثل الأراضي)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="UsefulLifeMonths" class="form-label small fw-bold">العمر الإنتاجي (بالأشهر)</label>
+                            <input asp-for="UsefulLifeMonths" type="number" class="form-control form-control-sm" min="0" />
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="DepreciationStartDate" class="form-label small fw-bold">تاريخ بداية الإهلاك</label>
+                            <input asp-for="DepreciationStartDate" type="date" class="form-control form-control-sm" />
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="FirstMonthPolicy" class="form-label small fw-bold">سياسة احتساب أول شهر</label>
+                            <select asp-for="FirstMonthPolicy" class="form-select form-select-sm">
+                                <option value="1">شهر كامل (Full Month)</option>
+                                <option value="2">حسب الأيام الفعلية (Pro Rata)</option>
+                                <option value="3">بداية من الشهر التالي (Next Month)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="DepreciationRate" class="form-label small">نسبة الإهلاك السنوية %</label>
+                            <input asp-for="DepreciationRate" type="number" step="0.01" class="form-control form-control-sm" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-light py-2 fw-bold text-dark">
+                        <i class="fas fa-book me-1 text-primary"></i>تخصيص الحسابات المحاسبية
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="mb-2">
+                            <label asp-for="AssetCostAccountId" class="form-label small">حساب تكلفة الأصل</label>
+                            <select asp-for="AssetCostAccountId" class="form-select form-select-sm" asp-items="ViewBag.Accounts">
+                                <option value="">-- الافتراضي من المجموعة --</option>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label asp-for="AccumulatedDepreciationAccountId" class="form-label small">حساب مجمع الإهلاك</label>
+                            <select asp-for="AccumulatedDepreciationAccountId" class="form-select form-select-sm" asp-items="ViewBag.Accounts">
+                                <option value="">-- الافتراضي من المجموعة --</option>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label asp-for="DepreciationExpenseAccountId" class="form-label small">حساب مصروف الإهلاك</label>
+                            <select asp-for="DepreciationExpenseAccountId" class="form-select form-select-sm" asp-items="ViewBag.Accounts">
+                                <option value="">-- الافتراضي من المجموعة --</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-body p-3">
+                        <label asp-for="Notes" class="form-label small fw-bold">ملاحظات إضافية</label>
+                        <textarea asp-for="Notes" class="form-control form-control-sm" rows="3"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>

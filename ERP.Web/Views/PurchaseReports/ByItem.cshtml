@@ -1,0 +1,202 @@
+@model ERP.Application.DTOs.Reports.PurchaseByItemReportDto
+@{
+    ViewData["Title"] = "المشتريات حسب الصنف";
+    Layout = "_Layout";
+    bool isRequested = ViewBag.IsRequested == true;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-boxes-stacked me-2"></i>المشتريات حسب الصنف
+            </h4>
+            <span class="text-muted small">الكميات المشتراة والمرتجعة وصافي المشتريات ومتوسط أسعار الشراء</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.PurchaseReports.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.PurchaseReports.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('purchaseByItemTable', 'PurchaseByItem')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> فهرس تقارير المشتريات
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="ByItem">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" id="branchSelect" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">المستودع</label>
+                        <select name="WarehouseId" id="warehouseSelect" class="form-select form-select-sm" asp-items="ViewBag.Warehouses">
+                            <option value="">-- كل المستودعات --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">المجموعة</label>
+                        <select name="ItemGroupId" class="form-select form-select-sm" asp-items="ViewBag.ItemGroups">
+                            <option value="">-- كل المجموعات --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">الصنف</label>
+                        <div class="erp-lookup-picker" 
+                             data-type="item" 
+                             data-input-name="ItemId" 
+                             data-value="@Model.Filter.ItemId" 
+                             data-text="@ViewBag.SelectedItemDisplay"
+                             data-placeholder="-- كافة الأصناف (كود / اسم / باركود) --"
+                             data-warehouse-selector="#warehouseSelect">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="DateFrom" class="form-control form-control-sm" value="@(Model.Filter.DateFrom?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="DateTo" class="form-control form-control-sm" value="@(Model.Filter.DateTo?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-1">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-filter"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-boxes-stacked fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث والضغط على زر العرض</h5>
+            <p class="text-muted small mb-0">اختر محددات البحث المطلوبة للاطلاع على مشتريات الأصناف وتحليلات الأسعار.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Data Table -->
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table id="purchaseByItemTable" class="table table-bordered table-hover table-striped align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>كود الصنف</th>
+                                <th class="text-start">اسم الصنف</th>
+                                <th>المجموعة</th>
+                                <th>الوحدة</th>
+                                <th>الكمية المشتراة</th>
+                                <th>الكمية المرتجعة</th>
+                                <th class="table-primary text-primary-emphasis">صافي الكمية</th>
+                                <th>إجمالي المشتريات</th>
+                                <th>إجمالي المرتجعات</th>
+                                <th class="table-success text-success-emphasis">صافي القيمة</th>
+                                <th>متوسط السعر</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Items.Any())
+                            {
+                                <tr>
+                                    <td colspan="11" class="py-4 text-muted">لا توجد مشتريات أصناف مطابقة للبحث.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in Model.Items)
+                                {
+                                    <tr>
+                                        <td class="font-monospace text-primary fw-bold">@row.ItemCode</td>
+                                        <td class="text-start fw-bold">@row.ItemName</td>
+                                        <td><span class="badge bg-light text-dark border">@row.GroupName</span></td>
+                                        <td>@row.UnitName</td>
+                                        <td class="font-monospace">@row.PurchasedQuantity.ToString("G29")</td>
+                                        <td class="font-monospace text-danger">@row.ReturnedQuantity.ToString("G29")</td>
+                                        <td class="font-monospace fw-bold table-primary">@row.NetQuantity.ToString("G29")</td>
+                                        <td class="font-monospace text-end">@row.TotalPurchasesValue.ToString("N2")</td>
+                                        <td class="font-monospace text-end text-danger">@row.TotalReturnsValue.ToString("N2")</td>
+                                        <td class="font-monospace text-end fw-bold text-success table-success">@row.NetPurchasesValue.ToString("N2")</td>
+                                        <td class="font-monospace text-end text-muted">@row.AveragePrice.ToString("N2")</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="4" class="text-center">الإجمالي</td>
+                                <td class="font-monospace">@Model.Items.Sum(x => x.PurchasedQuantity).ToString("G29")</td>
+                                <td class="font-monospace text-danger">@Model.Items.Sum(x => x.ReturnedQuantity).ToString("G29")</td>
+                                <td class="font-monospace table-primary">@Model.TotalQuantityPurchased.ToString("G29")</td>
+                                <td class="font-monospace text-end">@Model.Items.Sum(x => x.TotalPurchasesValue).ToString("N2")</td>
+                                <td class="font-monospace text-end text-danger">@Model.Items.Sum(x => x.TotalReturnsValue).ToString("N2")</td>
+                                <td class="font-monospace text-end text-success table-success fs-6">@Model.TotalValuePurchased.ToString("N2")</td>
+                                <td>-</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    document.getElementById('branchSelect')?.addEventListener('change', function() {
+        var branchId = this.value;
+        var whSelect = document.getElementById('warehouseSelect');
+        if (whSelect) {
+            fetch('@Url.Action("GetWarehousesByBranch", "PurchaseReports")?branchId=' + branchId)
+                .then(r => r.json())
+                .then(data => {
+                    whSelect.innerHTML = '<option value="">-- كل المستودعات --</option>';
+                    data.forEach(item => {
+                        var opt = document.createElement('option');
+                        opt.value = item.id;
+                        opt.textContent = item.text;
+                        whSelect.appendChild(opt);
+                    });
+                });
+        }
+    });
+</script>

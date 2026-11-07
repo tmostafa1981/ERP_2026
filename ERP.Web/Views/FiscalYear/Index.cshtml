@@ -73,6 +73,9 @@
                         </td>
                         <td class="text-center">
                             <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-erp-outline p-1 px-2 text-info" title="الأشهر والفترات المالية" onclick="openPeriodsModal(@item.Id, '@item.LocalizedName')">
+                                    <i class="fa-solid fa-calendar-week"></i>
+                                </button>
                                 <button type="button" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Edit"]" data-bs-toggle="modal" data-bs-target="#editModal_@item.Id">
                                     <i class="fa-solid fa-pen-to-square text-primary"></i>
                                 </button>
@@ -93,6 +96,7 @@
                                 <form asp-action="Edit" method="post">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="Id" value="@item.Id" />
+                                    <input type="hidden" name="RowVersion" value="@(item.RowVersion != null ? Convert.ToBase64String(item.RowVersion) : "")" />
                                     <div class="modal-header">
                                         <h5 class="modal-title fw-bold"><i class="fa-solid fa-pen-to-square text-primary me-2 ms-0"></i> @Localizer["Edit"] - @item.Year</h5>
                                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -189,3 +193,138 @@
         </div>
     </div>
 </div>
+
+<!-- Monthly Periods Modal -->
+<div class="modal fade" id="periodsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold" id="periodsModalTitle">
+                    <i class="fa-solid fa-calendar-week text-primary me-2"></i> الأشهر والفترات المالية
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="p-3 bg-light border-bottom small text-muted">
+                    <i class="fa-solid fa-shield-halved text-primary me-1"></i>
+                    <strong>قاعدة الإغلاق:</strong> عند إغلاق أي شهر مالي، يتم فوراً قفل العمليات ومنع إنشاء أو تعديل أو ترحيل أو حذف أي فواتير تقع داخل هذا الشهر حمايةً للحسابات والمخزون.
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="periodsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 50px;" class="text-center">#</th>
+                                <th>اسم الشهر / الفترة</th>
+                                <th>تاريخ البداية</th>
+                                <th>تاريخ النهاية</th>
+                                <th style="width: 110px;" class="text-center">الحالة</th>
+                                <th style="width: 140px;" class="text-center">الإجراء</th>
+                            </tr>
+                        </thead>
+                        <tbody id="periodsTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">جاري تحميل الأشهر...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-erp-outline" data-bs-dismiss="modal">إغلاق</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form id="periodAfForm" style="display:none">
+    @Html.AntiForgeryToken()
+</form>
+
+@section Scripts {
+    <script>
+        let currentFiscalYearId = 0;
+
+        async function openPeriodsModal(yearId, yearName) {
+            currentFiscalYearId = yearId;
+            document.getElementById('periodsModalTitle').innerHTML = `<i class="fa-solid fa-calendar-week text-primary me-2"></i> الأشهر والفترات المالية - ${yearName}`;
+            const tbody = document.getElementById('periodsTableBody');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span> جاري تحميل الأشهر...</td></tr>';
+
+            const modal = new bootstrap.Modal(document.getElementById('periodsModal'));
+            modal.show();
+
+            try {
+                const res = await fetch(`/FiscalYear/GetPeriods?fiscalYearId=${yearId}`);
+                const data = await res.json();
+                if (data.success && data.data && data.data.length > 0) {
+                    renderPeriodsTable(data.data);
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">لا توجد فترات معرّفة.</td></tr>';
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">فشل التحميل: ${e.message}</td></tr>`;
+            }
+        }
+
+        function renderPeriodsTable(periods) {
+            const tbody = document.getElementById('periodsTableBody');
+            tbody.innerHTML = '';
+
+            periods.forEach(p => {
+                const tr = document.createElement('tr');
+                const startStr = p.startDate ? p.startDate.substring(0, 10) : '';
+                const endStr = p.endDate ? p.endDate.substring(0, 10) : '';
+
+                const statusBadge = p.isClosed 
+                    ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-1"><i class="fa-solid fa-lock me-1"></i>مغلق</span>'
+                    : '<span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1"><i class="fa-solid fa-lock-open me-1"></i>مفتوح</span>';
+
+                const btnAction = p.isClosed
+                    ? `<button type="button" class="btn btn-sm btn-outline-success" onclick="togglePeriod(${p.id}, '${p.nameAr}', false)"><i class="fa-solid fa-lock-open me-1"></i> فتح الشهر</button>`
+                    : `<button type="button" class="btn btn-sm btn-outline-danger" onclick="togglePeriod(${p.id}, '${p.nameAr}', true)"><i class="fa-solid fa-lock me-1"></i> إغلاق الشهر</button>`;
+
+                tr.innerHTML = `
+                    <td class="text-center fw-bold text-muted">${p.periodNumber}</td>
+                    <td class="fw-semibold text-dark">${p.nameAr}</td>
+                    <td class="small text-muted font-monospace">${startStr}</td>
+                    <td class="small text-muted font-monospace">${endStr}</td>
+                    <td class="text-center">${statusBadge}</td>
+                    <td class="text-center">${btnAction}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function togglePeriod(periodId, periodName, willClose) {
+            const actionText = willClose ? 'إغلاق' : 'فتح';
+            const warnText = willClose 
+                ? `هل أنت متأكد من إغلاق شهر (${periodName})؟\nسيتم منع أي تعديل أو حذف أو ترحيل لأي مستند يقع ضمن هذا الشهر!`
+                : `هل أنت متأكد من فتح شهر (${periodName})؟`;
+
+            if (!confirm(warnText)) return;
+
+            const token = document.querySelector('#periodAfForm input[name="__RequestVerificationToken"]')?.value || '';
+
+            try {
+                const res = await fetch(`/FiscalYear/TogglePeriodClose?periodId=${periodId}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const resReload = await fetch(`/FiscalYear/GetPeriods?fiscalYearId=${currentFiscalYearId}`);
+                    const reloadData = await resReload.json();
+                    if (reloadData.success) {
+                        renderPeriodsTable(reloadData.data);
+                    }
+                } else {
+                    alert('تعذر تغيير حالة الشهر: ' + data.message);
+                }
+            } catch (e) {
+                alert('حدث خطأ: ' + e.message);
+            }
+        }
+    </script>
+}

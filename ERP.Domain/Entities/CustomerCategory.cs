@@ -4,17 +4,22 @@ using ERP.Domain.Interfaces;
 
 namespace ERP.Domain.Entities
 {
-    public class CustomerCategory : IAuditableEntity
+    public class CustomerCategory : IAuditableEntity, IMustHaveBranch, IConcurrencyAware
     {
         public int Id { get; set; }
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+        public int BranchId { get; set; }
         public string Code { get; set; } = string.Empty;
         public string NameAr { get; set; } = string.Empty;
         public string NameEn { get; set; } = string.Empty;
         public int? ControlAccountId { get; set; }
+        public bool IsDefault { get; set; } = false;
         public bool IsActive { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
 
+        public Branch? Branch { get; set; }
+        public GLAccount? ControlAccount { get; set; }
         public ICollection<Customer> Customers { get; set; } = new List<Customer>();
 
         public string LocalizedName =>

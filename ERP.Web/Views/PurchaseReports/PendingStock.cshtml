@@ -1,0 +1,172 @@
+@model ERP.Application.DTOs.Reports.PurchasesPendingStockMovementReportDto
+@{
+    ViewData["Title"] = "فواتير لم تُنشئ حركة مخزنية";
+    Layout = "_Layout";
+    bool isRequested = ViewBag.IsRequested == true;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-warehouse me-2"></i>فواتير ومستندات شراء لم تُنشئ حركة مخزنية بعد
+            </h4>
+            <span class="text-muted small">حصر مستندات الشراء التي تتطلب استلاماً مخزنياً منفصلاً أو لم تستكمل استلامها</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.PurchaseReports.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.PurchaseReports.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('pendingStockTable', 'PurchasesPendingStockMovement')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> فهرس تقارير المشتريات
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="PendingStock">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" id="branchSelect" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">المورد</label>
+                        <div class="erp-lookup-picker" 
+                             data-type="vendor" 
+                             data-input-name="VendorId" 
+                             data-value="@Model.Filter.VendorId" 
+                             data-text="@ViewBag.SelectedVendorDisplay"
+                             data-placeholder="-- كافة الموردين (بحث بالكود / الاسم) --"
+                             data-branch-selector="#branchSelect">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="DateFrom" class="form-control form-control-sm" value="@(Model.Filter.DateFrom?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="DateTo" class="form-control form-control-sm" value="@(Model.Filter.DateTo?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> عرض التقرير
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-warehouse fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث والضغط على "عرض التقرير"</h5>
+            <p class="text-muted small mb-0">اختر الفرع أو المورد والفترة الزمنية لعرض فواتير الشراء التي لم تنشئ حركة مخزنية.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Data Table -->
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table id="pendingStockTable" class="table table-bordered table-hover table-striped align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>رقم المستند</th>
+                                <th>التاريخ</th>
+                                <th>نوع الحركة</th>
+                                <th class="text-start">المورد</th>
+                                <th>الفرع</th>
+                                <th>القيمة الصافية</th>
+                                <th class="text-start">سبب عدم وجود حركة مخزنية / حالة المتابعة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Items.Any())
+                            {
+                                <tr>
+                                    <td colspan="7" class="py-4 text-muted">لا توجد فواتير شراء معلقة بدون حركة مخزنية.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in Model.Items)
+                                {
+                                    <tr>
+                                        <td class="font-monospace text-primary fw-bold">@row.DocumentNumber</td>
+                                        <td class="font-monospace">@row.DocumentDate.ToString("yyyy/MM/dd")</td>
+                                        <td><span class="badge bg-light text-dark border">@row.TransactionTypeName</span></td>
+                                        <td class="text-start fw-bold">@row.VendorName</td>
+                                        <td>@row.BranchName</td>
+                                        <td class="font-monospace text-end fw-bold">@row.TotalAmount.ToString("N2")</td>
+                                        <td class="text-start text-warning-emphasis">
+                                            <i class="fa-solid fa-circle-exclamation text-warning me-1"></i> @row.Reason
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    document.getElementById('branchSelect')?.addEventListener('change', function() {
+        var branchId = this.value;
+        var venSelect = document.getElementById('vendorSelect');
+        if (venSelect) {
+            fetch('@Url.Action("GetVendorsByBranch", "PurchaseReports")?branchId=' + branchId)
+                .then(r => r.json())
+                .then(data => {
+                    venSelect.innerHTML = '<option value="">-- كل الموردين --</option>';
+                    data.forEach(item => {
+                        var opt = document.createElement('option');
+                        opt.value = item.id;
+                        opt.textContent = item.text;
+                        venSelect.appendChild(opt);
+                    });
+                });
+        }
+    });
+</script>

@@ -1,0 +1,184 @@
+@model ERP.Application.DTOs.Reports.SalesByCustomerReportDto
+@{
+    ViewData["Title"] = "تقرير المبيعات حسب العميل";
+    Layout = "_Layout";
+    bool isRequested = ViewBag.IsRequested == true;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-users me-2"></i>تقرير المبيعات حسب العميل
+            </h4>
+            <span class="text-muted small">حجم مبيعات العملاء والخصومات والمرتجعات وصافي التعاملات</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.SalesReports.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.SalesReports.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('byCustomerTable', 'SalesByCustomer')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> فهرس تقارير المبيعات
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="ByCustomer">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" id="branchSelect" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">العميل</label>
+                        <div class="erp-lookup-picker" 
+                             data-type="customer" 
+                             data-input-name="CustomerId" 
+                             data-value="@Model.Filter.CustomerId" 
+                             data-text="@ViewBag.SelectedCustomerDisplay"
+                             data-placeholder="-- كافة العملاء (بحث بالكود / الاسم) --"
+                             data-branch-selector="#branchSelect">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="DateFrom" class="form-control form-control-sm" value="@(Model.Filter.DateFrom?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="DateTo" class="form-control form-control-sm" value="@(Model.Filter.DateTo?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> عرض التقرير
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-users fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث والضغط على "عرض التقرير"</h5>
+            <p class="text-muted small mb-0">اختر الفرع أو العميل والفترة الزمنية للاطلاع على تقرير مبيعات العملاء.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Data Table -->
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table id="byCustomerTable" class="table table-bordered table-hover table-striped align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>كود العميل</th>
+                                <th class="text-start">اسم العميل</th>
+                                <th>تصنيف العميل</th>
+                                <th>الهاتف</th>
+                                <th>عدد الفواتير</th>
+                                <th>إجمالي المبيعات</th>
+                                <th>الخصومات</th>
+                                <th>المرتجعات</th>
+                                <th class="table-success text-success-emphasis fw-bold">صافي المبيعات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Items.Any())
+                            {
+                                <tr>
+                                    <td colspan="9" class="py-4 text-muted">لا توجد تعاملات عملاء مطابقة للبحث.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in Model.Items)
+                                {
+                                    <tr>
+                                        <td class="font-monospace text-primary fw-bold">@row.CustomerCode</td>
+                                        <td class="text-start fw-bold">@row.CustomerName</td>
+                                        <td><span class="badge bg-light text-dark border">@row.CategoryName</span></td>
+                                        <td class="font-monospace">@row.Phone</td>
+                                        <td><span class="badge bg-primary-subtle text-primary border">@row.InvoiceCount</span></td>
+                                        <td class="font-monospace text-end">@row.GrossSales.ToString("N2")</td>
+                                        <td class="font-monospace text-end text-danger">@row.Discounts.ToString("N2")</td>
+                                        <td class="font-monospace text-end text-danger">@row.ReturnsAmount.ToString("N2")</td>
+                                        <td class="font-monospace text-end fw-bold text-success table-success">@row.NetSales.ToString("N2")</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="4" class="text-center">الإجمالي</td>
+                                <td>@Model.Items.Sum(x => x.InvoiceCount)</td>
+                                <td class="font-monospace text-end">@Model.Items.Sum(x => x.GrossSales).ToString("N2")</td>
+                                <td class="font-monospace text-end text-danger">@Model.Items.Sum(x => x.Discounts).ToString("N2")</td>
+                                <td class="font-monospace text-end text-danger">@Model.Items.Sum(x => x.ReturnsAmount).ToString("N2")</td>
+                                <td class="font-monospace text-end text-success table-success fs-6">@Model.GrandNetSales.ToString("N2")</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    document.getElementById('branchSelect')?.addEventListener('change', function() {
+        var branchId = this.value;
+        var custSelect = document.getElementById('customerSelect');
+        if (custSelect) {
+            fetch('@Url.Action("GetCustomersByBranch", "SalesReports")?branchId=' + branchId)
+                .then(r => r.json())
+                .then(data => {
+                    custSelect.innerHTML = '<option value="">-- كل العملاء --</option>';
+                    data.forEach(item => {
+                        var opt = document.createElement('option');
+                        opt.value = item.id;
+                        opt.textContent = item.text;
+                        custSelect.appendChild(opt);
+                    });
+                });
+        }
+    });
+</script>

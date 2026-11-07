@@ -1,0 +1,440 @@
+@model ERP.Application.DTOs.Reports.IncomeStatementDto
+@using ERP.Application.DTOs.Reports
+@{
+    ViewData["Title"] = "قائمة الدخل - الأرباح والخسائر";
+    Layout = "_Layout";
+    var filter = ViewBag.Filter as ReportFilterDto ?? new ReportFilterDto();
+    bool isRequested = ViewBag.IsRequested == true;
+    bool isForeignMode = filter.Mode == ReportDisplayMode.ForeignOnly;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-chart-line me-2 text-primary"></i>قائمة الدخل (Income Statement / P&L)
+            </h4>
+            <span class="text-muted small">تقرير الأرباح والخسائر التشغيلية وصافي نتيجة النشاط للفترة</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.IncomeStatement.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة (Print)
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.IncomeStatement.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('incomeStatementTable', 'IncomeStatement')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-list me-1"></i> فهرس التقارير
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="IncomeStatement" id="filterForm">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <!-- Fiscal Year -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">السنة المالية</label>
+                        <select name="FiscalYearId" class="form-select form-select-sm" asp-items="ViewBag.FiscalYears">
+                            <option value="">-- اختر السنة --</option>
+                        </select>
+                    </div>
+
+                    <!-- Branch -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">كافة الفروع المتاحة</option>
+                        </select>
+                    </div>
+
+                    <!-- Mode -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1 text-primary">العملة المعروضة</label>
+                        <select name="Mode" class="form-select form-select-sm fw-bold">
+                            <option value="1" selected="@(filter.Mode == ReportDisplayMode.LocalOnly)">العملة المحلية (Local Currency)</option>
+                            <option value="2" selected="@(filter.Mode == ReportDisplayMode.ForeignOnly)">العملة الأجنبية (Foreign Currency)</option>
+                        </select>
+                    </div>
+
+                    <!-- Currency Filter -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">تصفية بالعملة</label>
+                        <select name="CurrencyId" class="form-select form-select-sm" asp-items="ViewBag.Currencies">
+                            <option value="">كافة العملات</option>
+                        </select>
+                    </div>
+
+                    <!-- Date From -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="DateFrom" class="form-control form-control-sm" 
+                               value="@(filter.DateFrom?.ToString("yyyy-MM-dd"))" />
+                    </div>
+
+                    <!-- Date To -->
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="DateTo" class="form-control form-control-sm" 
+                               value="@(filter.DateTo?.ToString("yyyy-MM-dd"))" />
+                    </div>
+
+                    <!-- Only With Transactions Checkbox -->
+                    <div class="col-md-3 mt-2">
+                        <div class="form-check pt-4">
+                            <input class="form-check-input" type="checkbox" name="OnlyWithTransactions" value="true" id="chkOnlyTrans" 
+                                   @(filter.OnlyWithTransactions ? "checked" : "") />
+                            <label class="form-check-label small" for="chkOnlyTrans">
+                                إخفاء البنود الصفرية (Hide Zero Rows)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Include Drafts Checkbox -->
+                    <div class="col-md-3 mt-2">
+                        <div class="form-check pt-4">
+                            <input class="form-check-input" type="checkbox" name="IncludeDrafts" value="true" id="chkDrafts" 
+                                   @(filter.IncludeDrafts ? "checked" : "") />
+                            <label class="form-check-label small" for="chkDrafts">
+                                تضمين قيود المسودة (Drafts)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="col-md-6 mt-2 text-end">
+                        <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> استعراض قائمة الدخل
+                        </button>
+                        <a asp-action="IncomeStatement" class="btn btn-light btn-sm border px-3">
+                            إعادة تعيين
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <!-- Prompt Box when report is not yet requested -->
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-chart-line fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث ثم الضغط على "استعراض قائمة الدخل"</h5>
+            <p class="text-muted small mb-0">اختر الفرع والسنة المالية لعرض الإيرادات وتكلفة المبيعات ومجمل وصافي الربح التشغيلي للفترة.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Print Report Header -->
+        <div class="report-print-header mb-3 border p-3 rounded bg-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="fw-bold mb-1">
+                        قائمة الدخل: <span class="text-primary">@(isForeignMode ? "بالعملة الأجنبية (Foreign Currency)" : "بالعملة المحلية (Local Currency)")</span>
+                    </h5>
+                    <div class="small text-muted">
+                        <span>الفرع: <strong>@Model.BranchName</strong></span> | 
+                        <span>السنة المالية: <strong>@Model.FiscalYearName</strong></span> |
+                        @if (!string.IsNullOrEmpty(Model.CurrencyCode)) { <span>العملة المحددة: <strong>@Model.CurrencyCode</strong> | </span> }
+                        <span>الفترة من: <strong>@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? "البداية")</strong> إلى: <strong>@(Model.DateTo?.ToString("yyyy-MM-dd") ?? "الآن")</strong></span>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <span class="badge @(Model.NetIncome >= 0 ? "bg-success" : "bg-danger") p-2 fs-6">
+                        <i class="fa-solid @(Model.NetIncome >= 0 ? "fa-arrow-trend-up" : "fa-arrow-trend-down") me-1"></i>
+                        @(Model.NetIncome >= 0 ? "صافي ربح الفترة: " : "صافي خسارة الفترة: ") @Math.Abs(Model.NetIncome).ToString("N2")
+                    </span>
+                    <div class="small text-muted mt-1">تاريخ الاستخراج: @DateTime.Now.ToString("yyyy-MM-dd HH:mm")</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Executive KPI Cards -->
+        <div class="row g-3 mb-4 d-print-none">
+            <!-- 1. Total Revenues -->
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm p-3 border-start border-success border-4 bg-white">
+                    <div class="text-muted small fw-bold">إجمالي الإيرادات (Revenues)</div>
+                    <div class="fs-4 fw-bold text-success dir-ltr text-end mt-1">@Model.TotalRevenues.ToString("N2")</div>
+                    <div class="small text-muted">تشغيلي: @Model.TotalOperatingRevenues.ToString("N2")</div>
+                </div>
+            </div>
+
+            <!-- 2. Gross Profit -->
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm p-3 border-start border-primary border-4 bg-white">
+                    <div class="text-muted small fw-bold">مجمل الربح (Gross Profit)</div>
+                    <div class="fs-4 fw-bold @(Model.GrossProfit >= 0 ? "text-primary" : "text-danger") dir-ltr text-end mt-1">
+                        @Model.GrossProfit.ToString("N2")
+                    </div>
+                    <div class="small text-muted">هامش مجمل الربح: @Model.GrossProfitMargin.ToString("N1")%</div>
+                </div>
+            </div>
+
+            <!-- 3. Operating Expenses -->
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm p-3 border-start border-warning border-4 bg-white">
+                    <div class="text-muted small fw-bold">المصروفات التشغيلية (Opex)</div>
+                    <div class="fs-4 fw-bold text-warning dir-ltr text-end mt-1">@Model.TotalOperatingExpenses.ToString("N2")</div>
+                    <div class="small text-muted">عمومية وإدارية: @Model.TotalGeneralAndAdminExpenses.ToString("N2")</div>
+                </div>
+            </div>
+
+            <!-- 4. Net Income -->
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm p-3 border-start @(Model.NetIncome >= 0 ? "border-success" : "border-danger") border-4 bg-white">
+                    <div class="text-muted small fw-bold">صافي نتيجة الفترة (Net Income)</div>
+                    <div class="fs-4 fw-bold @(Model.NetIncome >= 0 ? "text-success" : "text-danger") dir-ltr text-end mt-1">
+                        @Model.NetIncome.ToString("N2")
+                    </div>
+                    <div class="small text-muted">هامش صافي الربح: @Model.NetProfitMargin.ToString("N1")%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Income Statement Table -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle mb-0" id="incomeStatementTable">
+                    <thead class="table-dark small text-center">
+                        <tr>
+                            <th style="width: 120px;">كود الحساب</th>
+                            <th>بيان الحساب / البند المالي</th>
+                            <th style="width: 130px;">المبلغ الجزئي</th>
+                            <th style="width: 140px;">المبلغ الإجمالي</th>
+                            <th style="width: 90px;">% من الإيراد</th>
+                        </tr>
+                    </thead>
+                    <tbody class="small">
+                        <!-- SECTION 1: REVENUES -->
+                        <tr class="table-primary fw-bold">
+                            <td colspan="5" class="py-2 fs-6">
+                                <i class="fa-solid fa-money-bill-trend-up me-2"></i>1. الإيرادات (Revenues)
+                            </td>
+                        </tr>
+                        @if (Model.RevenueItems.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-center text-muted py-2">لا توجد إيرادات مسجلة خلال الفترة</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var item in Model.RevenueItems)
+                            {
+                                <tr>
+                                    <td class="text-center fw-bold">
+                                        <a asp-action="AccountStatement" 
+                                           asp-route-submitted="true"
+                                           asp-route-AccountId="@item.AccountId"
+                                           asp-route-DateFrom="@(filter.DateFrom?.ToString("yyyy-MM-dd"))"
+                                           asp-route-DateTo="@(filter.DateTo?.ToString("yyyy-MM-dd"))"
+                                           asp-route-FiscalYearId="@filter.FiscalYearId"
+                                           asp-route-BranchId="@filter.BranchId"
+                                           target="_blank" class="text-decoration-none">
+                                            @item.AccountCode
+                                        </a>
+                                    </td>
+                                    <td>@item.LocalizedAccountName</td>
+                                    <td class="text-end dir-ltr">@item.AmountLocal.ToString("N2")</td>
+                                    <td class="text-end text-muted">-</td>
+                                    <td class="text-center text-muted">@item.PercentageOfRevenue.ToString("N1")%</td>
+                                </tr>
+                            }
+                        }
+                        <tr class="table-success fw-bold">
+                            <td colspan="3" class="text-end pe-4">إجمالي الإيرادات (Total Revenues)</td>
+                            <td class="text-end dir-ltr fs-6">@Model.TotalRevenues.ToString("N2")</td>
+                            <td class="text-center">100.0%</td>
+                        </tr>
+
+                        <!-- SECTION 2: COST OF SALES -->
+                        <tr class="table-secondary fw-bold">
+                            <td colspan="5" class="py-2 fs-6">
+                                <i class="fa-solid fa-boxes-packing me-2"></i>2. تكلفة المبيعات والإنتاج (Cost of Goods Sold)
+                            </td>
+                        </tr>
+                        @if (Model.CostOfSalesItems.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-center text-muted py-2">لا توجد بنود تكلفة مبيعات مسجلة</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var item in Model.CostOfSalesItems)
+                            {
+                                <tr>
+                                    <td class="text-center fw-bold">
+                                        <a asp-action="AccountStatement" 
+                                           asp-route-submitted="true"
+                                           asp-route-AccountId="@item.AccountId"
+                                           asp-route-DateFrom="@(filter.DateFrom?.ToString("yyyy-MM-dd"))"
+                                           asp-route-DateTo="@(filter.DateTo?.ToString("yyyy-MM-dd"))"
+                                           asp-route-FiscalYearId="@filter.FiscalYearId"
+                                           asp-route-BranchId="@filter.BranchId"
+                                           target="_blank" class="text-decoration-none">
+                                            @item.AccountCode
+                                        </a>
+                                    </td>
+                                    <td>@item.LocalizedAccountName</td>
+                                    <td class="text-end dir-ltr">@item.AmountLocal.ToString("N2")</td>
+                                    <td class="text-end text-muted">-</td>
+                                    <td class="text-center text-muted">@item.PercentageOfRevenue.ToString("N1")%</td>
+                                </tr>
+                            }
+                        }
+                        <tr class="table-secondary fw-bold">
+                            <td colspan="3" class="text-end pe-4">إجمالي تكلفة المبيعات (Total Cost of Sales)</td>
+                            <td class="text-end dir-ltr fs-6">@Model.TotalCostOfSales.ToString("N2")</td>
+                            <td class="text-center">@(Model.TotalRevenues > 0 ? ((Model.TotalCostOfSales / Model.TotalRevenues) * 100m).ToString("N1") + "%" : "-")</td>
+                        </tr>
+
+                        <!-- GROSS PROFIT ROW -->
+                        <tr class="table-info fw-bold border-top border-bottom border-2">
+                            <td colspan="3" class="text-end pe-4 fs-6">
+                                <i class="fa-solid fa-scale-balanced me-2"></i>مجمل الربح / الخسارة (Gross Profit / Loss)
+                            </td>
+                            <td class="text-end dir-ltr fs-5 @(Model.GrossProfit >= 0 ? "text-primary" : "text-danger")">
+                                @Model.GrossProfit.ToString("N2")
+                            </td>
+                            <td class="text-center fs-6">@Model.GrossProfitMargin.ToString("N1")%</td>
+                        </tr>
+
+                        <!-- SECTION 3: OPERATING EXPENSES -->
+                        <tr class="table-warning fw-bold">
+                            <td colspan="5" class="py-2 fs-6">
+                                <i class="fa-solid fa-briefcase me-2"></i>3. المصروفات التشغيلية والبيعية والإدارية (Operating Expenses)
+                            </td>
+                        </tr>
+                        @if (Model.OperatingExpenseItems.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-center text-muted py-2">لا توجد مصروفات تشغيلية مسجلة</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var item in Model.OperatingExpenseItems)
+                            {
+                                <tr>
+                                    <td class="text-center fw-bold">
+                                        <a asp-action="AccountStatement" 
+                                           asp-route-submitted="true"
+                                           asp-route-AccountId="@item.AccountId"
+                                           asp-route-DateFrom="@(filter.DateFrom?.ToString("yyyy-MM-dd"))"
+                                           asp-route-DateTo="@(filter.DateTo?.ToString("yyyy-MM-dd"))"
+                                           asp-route-FiscalYearId="@filter.FiscalYearId"
+                                           asp-route-BranchId="@filter.BranchId"
+                                           target="_blank" class="text-decoration-none">
+                                            @item.AccountCode
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-secondary border me-1">@item.Section</span>
+                                        @item.LocalizedAccountName
+                                    </td>
+                                    <td class="text-end dir-ltr">@item.AmountLocal.ToString("N2")</td>
+                                    <td class="text-end text-muted">-</td>
+                                    <td class="text-center text-muted">@item.PercentageOfRevenue.ToString("N1")%</td>
+                                </tr>
+                            }
+                        }
+                        <tr class="table-warning fw-bold">
+                            <td colspan="3" class="text-end pe-4">إجمالي المصروفات التشغيلية (Total Operating Expenses)</td>
+                            <td class="text-end dir-ltr fs-6">@Model.TotalOperatingExpenses.ToString("N2")</td>
+                            <td class="text-center">@(Model.TotalRevenues > 0 ? ((Model.TotalOperatingExpenses / Model.TotalRevenues) * 100m).ToString("N1") + "%" : "-")</td>
+                        </tr>
+
+                        <!-- OPERATING INCOME ROW -->
+                        <tr class="table-light fw-bold border-top border-bottom border-2">
+                            <td colspan="3" class="text-end pe-4 fs-6">
+                                <i class="fa-solid fa-chart-pie me-2"></i>صافي الربح / الخسارة التشغيلي (Operating Income / EBIT)
+                            </td>
+                            <td class="text-end dir-ltr fs-5 @(Model.OperatingIncome >= 0 ? "text-success" : "text-danger")">
+                                @Model.OperatingIncome.ToString("N2")
+                            </td>
+                            <td class="text-center fs-6">@Model.OperatingMargin.ToString("N1")%</td>
+                        </tr>
+
+                        <!-- SECTION 4: OTHER EXPENSES & FINANCING -->
+                        @if (Model.OtherExpenseItems.Count > 0)
+                        {
+                            <tr class="table-secondary fw-bold">
+                                <td colspan="5" class="py-2 fs-6">
+                                    <i class="fa-solid fa-coins me-2"></i>4. أعباء ومصروفات تمويلية وأخرى (Other / Financing Expenses)
+                                </td>
+                            </tr>
+                            foreach (var item in Model.OtherExpenseItems)
+                            {
+                                <tr>
+                                    <td class="text-center fw-bold">
+                                        <a asp-action="AccountStatement" 
+                                           asp-route-submitted="true"
+                                           asp-route-AccountId="@item.AccountId"
+                                           target="_blank" class="text-decoration-none">
+                                            @item.AccountCode
+                                        </a>
+                                    </td>
+                                    <td>@item.LocalizedAccountName</td>
+                                    <td class="text-end dir-ltr">@item.AmountLocal.ToString("N2")</td>
+                                    <td class="text-end text-muted">-</td>
+                                    <td class="text-center text-muted">@item.PercentageOfRevenue.ToString("N1")%</td>
+                                </tr>
+                            }
+                        }
+
+                        <!-- FINAL NET INCOME SUMMARY ROW -->
+                        <tr class="table-dark text-white fw-bold fs-5">
+                            <td colspan="3" class="text-end pe-4 py-3">
+                                <i class="fa-solid fa-trophy me-2 text-warning"></i>صافي نتيجة النشاط للفترة (Net Profit / Loss for Period)
+                            </td>
+                            <td class="text-end dir-ltr py-3 @(Model.NetIncome >= 0 ? "text-success" : "text-danger")">
+                                @Model.NetIncome.ToString("N2")
+                            </td>
+                            <td class="text-center py-3">@Model.NetProfitMargin.ToString("N1")%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+</script>
+
+<style>
+    .dir-ltr { direction: ltr; }
+    @@media print {
+        .d-print-none { display: none !important; }
+        .erp-sidebar, .erp-topbar, .erp-footer { display: none !important; }
+        .erp-main { margin: 0 !important; padding: 0 !important; }
+        body { font-size: 11px !important; background: #fff !important; }
+        .table { width: 100% !important; border: 1px solid #000 !important; }
+        .table th, .table td { border: 1px solid #ddd !important; padding: 4px !important; }
+    }
+</style>

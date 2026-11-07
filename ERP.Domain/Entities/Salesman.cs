@@ -3,9 +3,10 @@ using ERP.Domain.Interfaces;
 
 namespace ERP.Domain.Entities
 {
-    public class Salesman : IAuditableEntity
+    public class Salesman : IAuditableEntity, IMustHaveBranch, IConcurrencyAware
     {
         public int Id { get; set; }
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
         public int BranchId { get; set; }
         public string Code { get; set; } = string.Empty;
         public string NameAr { get; set; } = string.Empty;

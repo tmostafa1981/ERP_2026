@@ -1,0 +1,471 @@
+@{
+    ViewData["Title"] = "سندات القبض والصرف (Cash & Bank Vouchers)";
+    var fiscalYears = ViewBag.FiscalYears as List<ERP.Domain.Entities.FiscalYear> ?? new List<ERP.Domain.Entities.FiscalYear>();
+    var cashBankAccounts = ViewBag.CashBankAccounts as List<ERP.Domain.Entities.GLAccount> ?? new List<ERP.Domain.Entities.GLAccount>();
+    int initialType = ViewBag.InitialType ?? 0;
+}
+
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" />
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css" />
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0 text-primary">
+                <i class="fa-solid fa-money-bill-transfer me-2"></i> سندات القبض والصرف (Cash & Bank Vouchers)
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item">المقبوضات والمدفوعات</li>
+                    <li class="breadcrumb-item active" aria-current="page">سندات القبض والصرف</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            @if (CurrentUserContext.HasPermission("Cash.ReceiptVoucher.Add"))
+            {
+                <a asp-action="Create" asp-route-type="Receipt" class="btn btn-success">
+                    <i class="fa-solid fa-arrow-down me-1"></i> + سند قبض جديد
+                </a>
+            }
+            @if (CurrentUserContext.HasPermission("Cash.PaymentVoucher.Add"))
+            {
+                <a asp-action="Create" asp-route-type="Payment" class="btn btn-danger">
+                    <i class="fa-solid fa-arrow-up me-1"></i> + سند صرف جديد
+                </a>
+            }
+            <a asp-controller="JournalEntries" asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-book me-1"></i> قيود اليومية
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Messages -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fa-solid fa-check-circle me-1"></i> @TempData["SuccessMessage"]
+            <button type="button" data-bs-dismiss="alert" class="btn-close" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i> @TempData["ErrorMessage"]
+            <button type="button" data-bs-dismiss="alert" class="btn-close" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Filters Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <!-- Voucher Type -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold mb-1">نوع السند:</label>
+                    <select id="filterVoucherType" class="form-select form-select-sm">
+                        <option value="">-- جميع السندات --</option>
+                        <option value="1" selected="@(initialType == 1 ? "selected" : null)">سند قبض (Receipt)</option>
+                        <option value="2" selected="@(initialType == 2 ? "selected" : null)">سند صرف (Payment)</option>
+                    </select>
+                </div>
+
+                <!-- From Date -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold mb-1">من تاريخ:</label>
+                    <input type="date" id="filterFromDate" class="form-control form-control-sm">
+                </div>
+
+                <!-- To Date -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold mb-1">إلى تاريخ:</label>
+                    <input type="date" id="filterToDate" class="form-control form-control-sm">
+                </div>
+
+                <!-- Status Filter -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold mb-1">حالة السند:</label>
+                    <select id="filterStatus" class="form-select form-select-sm">
+                        <option value="">-- جميع الحالات --</option>
+                        <option value="1">مسودة (Draft)</option>
+                        <option value="2">مرحل (Posted)</option>
+                        <option value="3">ملغى (Cancelled)</option>
+                    </select>
+                </div>
+
+                <!-- Cash/Bank Account -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold mb-1">الخزينة / البنك:</label>
+                    <select id="filterAccount" class="form-select form-select-sm">
+                        <option value="">-- جميع الحسابات --</option>
+                        @foreach (var acc in cashBankAccounts)
+                        {
+                            <option value="@acc.Id">@acc.Code - @acc.LocalizedName</option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Reset / Filter Button -->
+                <div class="col-md-2 d-flex align-items-end gap-1">
+                    <button type="button" id="btnApplyFilter" class="btn btn-sm btn-primary flex-fill">
+                        <i class="fa-solid fa-filter me-1"></i> تصفية
+                    </button>
+                    <button type="button" id="btnResetFilter" class="btn btn-sm btn-outline-secondary" title="إعادة تعيين">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Table Card -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-3">
+            <div class="table-responsive">
+                <table id="vouchersTable" class="table table-hover table-striped align-middle w-100" style="font-size: 0.9rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th>رقم السند</th>
+                            <th>النوع</th>
+                            <th>التاريخ</th>
+                            <th>الخزينة / البنك</th>
+                            <th>الدفع</th>
+                            <th>العملة</th>
+                            <th>المبلغ المحلي</th>
+                            <th>المرجع</th>
+                            <th>البيان</th>
+                            <th>الحالة</th>
+                            <th>قيد اليومية</th>
+                            <th class="text-center" style="width: 140px;">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Confirm Delete -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fa-solid fa-trash me-2"></i> تأكيد حذف السند</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>هل أنت متأكد من رغبتك في حذف هذا السند؟</p>
+                <div class="alert alert-warning mb-0 small">
+                    <i class="fa-solid fa-circle-exclamation me-1"></i> لا يمكن استرجاع السند بعد الحذف.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" id="btnConfirmDelete" class="btn btn-danger">تأكيد الحذف</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        $(document).ready(function () {
+            const perms = {
+                receipt: {
+                    view: @(CurrentUserContext.HasPermission("Cash.ReceiptVoucher.View").ToString().ToLower()),
+                    edit: @(CurrentUserContext.HasPermission("Cash.ReceiptVoucher.Edit").ToString().ToLower()),
+                    delete: @(CurrentUserContext.HasPermission("Cash.ReceiptVoucher.Delete").ToString().ToLower()),
+                    post: @(CurrentUserContext.HasPermission("Cash.ReceiptVoucher.Post").ToString().ToLower()),
+                    unpost: @(CurrentUserContext.HasPermission("Cash.ReceiptVoucher.Unpost").ToString().ToLower()),
+                    cancel: @(CurrentUserContext.HasPermission("Cash.ReceiptVoucher.Cancel").ToString().ToLower()),
+                    print: @(CurrentUserContext.HasPermission("Cash.ReceiptVoucher.Print").ToString().ToLower())
+                },
+                payment: {
+                    view: @(CurrentUserContext.HasPermission("Cash.PaymentVoucher.View").ToString().ToLower()),
+                    edit: @(CurrentUserContext.HasPermission("Cash.PaymentVoucher.Edit").ToString().ToLower()),
+                    delete: @(CurrentUserContext.HasPermission("Cash.PaymentVoucher.Delete").ToString().ToLower()),
+                    post: @(CurrentUserContext.HasPermission("Cash.PaymentVoucher.Post").ToString().ToLower()),
+                    unpost: @(CurrentUserContext.HasPermission("Cash.PaymentVoucher.Unpost").ToString().ToLower()),
+                    cancel: @(CurrentUserContext.HasPermission("Cash.PaymentVoucher.Cancel").ToString().ToLower()),
+                    print: @(CurrentUserContext.HasPermission("Cash.PaymentVoucher.Print").ToString().ToLower())
+                }
+            };
+
+            const table = $('#vouchersTable').DataTable({
+                processing: true,
+                serverSide: true,
+                ordering: false,
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json'
+                },
+                ajax: {
+                    url: '@Url.Action("LoadTableData", "CashBankVouchers")',
+                    type: 'POST',
+                    data: function (d) {
+                        d.voucherType = $('#filterVoucherType').val();
+                        d.fromDate = $('#filterFromDate').val();
+                        d.toDate = $('#filterToDate').val();
+                        d.status = $('#filterStatus').val();
+                        d.cashBankAccountId = $('#filterAccount').val();
+                        d.__RequestVerificationToken = $('input[name="__RequestVerificationToken"]').val();
+                    }
+                },
+                columns: [
+                    {
+                        data: 'voucherNumber',
+                        render: function (data, type, row) {
+                            const p = row.voucherType === 1 ? perms.receipt : perms.payment;
+                            if (p.view) {
+                                return `<a href="@Url.Action("Details", "CashBankVouchers")/${row.id}" class="fw-bold text-decoration-none">${data}</a>`;
+                            }
+                            return `<span class="fw-bold">${data}</span>`;
+                        }
+                    },
+                    {
+                        data: 'voucherType',
+                        render: function (data, type, row) {
+                            if (data === 1) {
+                                return `<span class="badge bg-success-subtle text-success border border-success px-2 py-1"><i class="fa-solid fa-arrow-down me-1"></i>سند قبض</span>`;
+                            } else {
+                                return `<span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1"><i class="fa-solid fa-arrow-up me-1"></i>سند صرف</span>`;
+                            }
+                        }
+                    },
+                    { data: 'voucherDate' },
+                    { 
+                        data: 'cashBankAccountName',
+                        render: function(data) {
+                            return `<span class="fw-semibold text-truncate d-inline-block" style="max-width: 170px;" title="${data}">${data}</span>`;
+                        }
+                    },
+                    {
+                        data: 'paymentMethodText',
+                        render: function(data) {
+                            return `<span class="badge bg-light text-dark border">${data}</span>`;
+                        }
+                    },
+                    { 
+                        data: 'currencyCode',
+                        render: function(data, type, row) {
+                            return `<span class="badge bg-secondary-subtle text-secondary">${data}</span>`;
+                        }
+                    },
+                    {
+                        data: 'totalAmountLocal',
+                        className: 'fw-bold text-end',
+                        render: function (data, type, row) {
+                            return Number(data).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        }
+                    },
+                    {
+                        data: 'referenceNumber',
+                        render: function(data) { return data || '-'; }
+                    },
+                    {
+                        data: 'notes',
+                        render: function(data) {
+                            return data ? `<span class="text-truncate d-inline-block text-muted" style="max-width: 140px;" title="${data}">${data}</span>` : '-';
+                        }
+                    },
+                    {
+                        data: 'status',
+                        render: function (data, type, row) {
+                            if (data === 2) {
+                                return '<span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>معتمد / نافذ</span>';
+                            } else if (data === 3) {
+                                return '<span class="badge bg-danger">ملغى</span>';
+                            } else {
+                                return '<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>مسودة</span>';
+                            }
+                        }
+                    },
+                    {
+                        data: 'journalEntryNumber',
+                        render: function (data, type, row) {
+                            if (row.journalEntryId && data) {
+                                return `<a href="@Url.Action("Details", "JournalEntries")/${row.journalEntryId}" class="badge bg-info-subtle text-info border border-info text-decoration-none" title="عرض القيد المحاسبي">
+                                    <i class="fa-solid fa-link me-1"></i>${data}
+                                </a>`;
+                            }
+                            return '<span class="text-muted small">غير مرحل</span>';
+                        }
+                    },
+                    {
+                        data: null,
+                        className: 'text-center',
+                        render: function (data, type, row) {
+                            const p = row.voucherType === 1 ? perms.receipt : perms.payment;
+                            let actions = `<div class="btn-group btn-group-sm">`;
+
+                            if (p.view) {
+                                actions += `<a href="@Url.Action("Details", "CashBankVouchers")/${row.id}" class="btn btn-outline-primary" title="عرض التفاصيل"><i class="fa-solid fa-eye"></i></a>`;
+                            }
+                            if (p.print) {
+                                actions += `<a href="@Url.Action("Print", "CashBankVouchers")/${row.id}" target="_blank" class="btn btn-outline-secondary" title="طباعة السند"><i class="fa-solid fa-print"></i></a>`;
+                            }
+
+                            if (row.status !== 3) {
+                                if (p.edit) {
+                                    actions += `<a href="@Url.Action("Edit", "CashBankVouchers")/${row.id}" class="btn btn-outline-warning" title="تعديل"><i class="fa-solid fa-pen-to-square"></i></a>`;
+                                }
+                                if (p.cancel) {
+                                    actions += `<button type="button" class="btn btn-outline-secondary btn-cancel" data-id="${row.id}" data-num="${row.voucherNumber}" title="إلغاء السند"><i class="fa-solid fa-ban"></i></button>`;
+                                }
+                                if (p.delete) {
+                                    actions += `<button type="button" class="btn btn-outline-danger btn-delete" data-id="${row.id}" title="حذف"><i class="fa-solid fa-trash"></i></button>`;
+                                }
+                            }
+
+                            actions += `</div>`;
+                            return actions;
+                        }
+                    }
+                ]
+            });
+
+            // Apply Filters
+            $('#btnApplyFilter').on('click', function () {
+                table.ajax.reload();
+            });
+
+            $('#btnResetFilter').on('click', function () {
+                $('#filterVoucherType').val('');
+                $('#filterFromDate').val('');
+                $('#filterToDate').val('');
+                $('#filterStatus').val('');
+                $('#filterAccount').val('');
+                table.ajax.reload();
+            });
+
+            // Post Voucher
+            $(document).on('click', '.btn-post', function () {
+                const id = $(this).data('id');
+                const num = $(this).data('num');
+
+                Swal.fire({
+                    title: 'تأكيد الترحيل المحاسبي',
+                    text: `هل تريد ترحيل السند (${num}) آلياً إلى قيود اليومية العامة؟`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'نعم، قم بالترحيل',
+                    cancelButtonText: 'إلغاء',
+                    confirmButtonColor: '#198754'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $.post('@Url.Action("Post", "CashBankVouchers")', {
+                            id: id,
+                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                        }, function (res) {
+                            if (res.success) {
+                                Swal.fire('تم الترحيل!', res.message, 'success');
+                                table.ajax.reload(null, false);
+                            } else {
+                                Swal.fire('خطأ!', res.message, 'error');
+                            }
+                        }).fail(function () {
+                            Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');
+                        });
+                    }
+                });
+            });
+
+            // Unpost Voucher
+            $(document).on('click', '.btn-unpost', function () {
+                const id = $(this).data('id');
+                const num = $(this).data('num');
+
+                Swal.fire({
+                    title: 'تأكيد إلغاء الترحيل',
+                    text: `هل تريد إلغاء ترحيل السند (${num}) وحذف قيد اليومية المرتبط؟`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'نعم، إلغاء الترحيل',
+                    cancelButtonText: 'تراجع',
+                    confirmButtonColor: '#d33'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $.post('@Url.Action("Unpost", "CashBankVouchers")', {
+                            id: id,
+                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                        }, function (res) {
+                            if (res.success) {
+                                Swal.fire('تم الإلغاء!', res.message, 'success');
+                                table.ajax.reload(null, false);
+                            } else {
+                                Swal.fire('خطأ!', res.message, 'error');
+                            }
+                        }).fail(function () {
+                            Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');
+                        });
+                    }
+                });
+            });
+
+            // Cancel Voucher
+            $(document).on('click', '.btn-cancel', function () {
+                const id = $(this).data('id');
+                const num = $(this).data('num');
+
+                Swal.fire({
+                    title: 'تأكيد إلغاء السند',
+                    text: `هل تريد بالتأكيد إلغاء السند (${num})؟`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'نعم، إلغاء السند',
+                    cancelButtonText: 'تراجع',
+                    confirmButtonColor: '#6c757d'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $.post('@Url.Action("Cancel", "CashBankVouchers")', {
+                            id: id,
+                            __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                        }, function (res) {
+                            if (res.success) {
+                                Swal.fire('تم الإلغاء!', res.message, 'success');
+                                table.ajax.reload(null, false);
+                            } else {
+                                Swal.fire('خطأ!', res.message, 'error');
+                            }
+                        }).fail(function () {
+                            Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');
+                        });
+                    }
+                });
+            });
+
+            // Delete Voucher
+            let deleteId = 0;
+            $(document).on('click', '.btn-delete', function () {
+                deleteId = $(this).data('id');
+                $('#deleteModal').modal('show');
+            });
+
+            $('#btnConfirmDelete').on('click', function () {
+                if (!deleteId) return;
+                $.post('@Url.Action("Delete", "CashBankVouchers")', {
+                    id: deleteId,
+                    __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
+                }, function (res) {
+                    $('#deleteModal').modal('hide');
+                    if (res.success) {
+                        Swal.fire('تم الحذف!', res.message, 'success');
+                        table.ajax.reload(null, false);
+                    } else {
+                        Swal.fire('خطأ!', res.message, 'error');
+                    }
+                }).fail(function () {
+                    $('#deleteModal').modal('hide');
+                    Swal.fire('خطأ!', 'فشل الاتصال بالخادم.', 'error');
+                });
+            });
+        });
+    </script>
+}

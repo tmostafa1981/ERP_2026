@@ -1,0 +1,1372 @@
+@using ERP.Domain.Enums
+@{
+    var type = (VoucherType)(ViewBag.VoucherType ?? VoucherType.Receipt);
+    bool isReceipt = type == VoucherType.Receipt;
+    ViewData["Title"] = isReceipt ? "إنشاء سند قبض جديد" : "إنشاء سند صرف جديد";
+    var fiscalYear = ViewBag.CurrentFiscalYear as ERP.Domain.Entities.FiscalYear;
+    var currencies = ViewBag.Currencies as List<ERP.Domain.Entities.Currency> ?? new List<ERP.Domain.Entities.Currency>();
+    var cashBankAccounts = ViewBag.CashBankAccounts as List<ERP.Domain.Entities.GLAccount> ?? new List<ERP.Domain.Entities.GLAccount>();
+}
+
+<!-- Vue 3 Local + CDN Fallback -->
+<script src="~/lib/vue/vue.global.prod.js"></script>
+<script>
+    if (typeof Vue === 'undefined') {
+        document.write('<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"><\/script>');
+    }
+</script>
+
+<style>
+    [v-cloak] {
+        display: none !important;
+    }
+    .voucher-card {
+        border-radius: 8px;
+        transition: box-shadow 0.2s ease;
+    }
+    .grid-input-sm {
+        font-size: 0.82rem;
+        padding: 0.25rem 0.4rem;
+    }
+    .is-invalid-cell {
+        border-color: #dc3545 !important;
+        background-color: #fff8f8;
+    }
+    .invalid-cell-feedback {
+        font-size: 0.72rem;
+        color: #dc3545;
+        margin-top: 2px;
+        display: block;
+    }
+    .lookup-results-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 1050;
+        background: white;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        max-height: 220px;
+        overflow-y: auto;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .lookup-item {
+        padding: 6px 10px;
+        cursor: pointer;
+        border-bottom: 1px solid #f1f3f5;
+        font-size: 0.83rem;
+    }
+    .lookup-item:hover, .lookup-item.active {
+        background-color: #e9ecef;
+    }
+    .badge-locked {
+        background-color: #e3f2fd;
+        color: #0d47a1;
+        border: 1px solid #bbdefb;
+    }
+</style>
+
+<div id="voucherApp" v-cloak class="container-fluid py-3">
+    <!-- Header Title & Breadcrumb -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 :class="['mb-0', isReceipt ? 'text-success' : 'text-danger']">
+                <i :class="['fa-solid me-2', isReceipt ? 'fa-arrow-down' : 'fa-arrow-up']"></i>
+                {{ isReceipt ? 'إنشاء سند قبض نقدي / بنكي (Receipt Voucher)' : 'إنشاء سند صرف نقدي / بنكي (Payment Voucher)' }}
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item"><a asp-action="Index">سندات القبض والصرف</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">{{ isReceipt ? 'سند قبض جديد' : 'سند صرف جديد' }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            <!-- Mode Switcher -->
+            <button type="button" @@click="switchType(1)" :class="['btn btn-sm', isReceipt ? 'btn-success' : 'btn-outline-success']">
+                <i class="fa-solid fa-arrow-down me-1"></i> نمط القبض
+            </button>
+            <button type="button" @@click="switchType(2)" :class="['btn btn-sm', !isReceipt ? 'btn-danger' : 'btn-outline-danger']">
+                <i class="fa-solid fa-arrow-up me-1"></i> نمط الصرف
+            </button>
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert / Notifications -->
+    <div v-if="notification.show" :class="['alert', 'alert-' + notification.type, 'alert-dismissible fade show shadow-sm']" role="alert">
+        <i class="fa-solid fa-circle-info me-2"></i>
+        <span>{{ notification.message }}</span>
+        <button type="button" class="btn-close" @@click="notification.show = false"></button>
+    </div>
+
+    <!-- 1. Header Information Card -->
+    <div class="card shadow-sm border-0 mb-3 voucher-card">
+        <div :class="['card-header py-2 d-flex justify-content-between align-items-center', isReceipt ? 'bg-success text-white' : 'bg-primary text-white']">
+            <h6 class="mb-0 fw-bold">
+                <i class="fa-solid fa-receipt me-1"></i> بيانات رأس السند الأساسية
+            </h6>
+            <div>
+                <span class="badge bg-light text-dark me-2">
+                    <i class="fa-solid fa-building me-1 text-secondary"></i> @ViewBag.CurrentBranchName
+                </span>
+                <span class="badge bg-light text-dark">
+                    <i class="fa-solid fa-calendar me-1 text-secondary"></i> @(fiscalYear?.LocalizedName ?? "السنة المالية الحالية")
+                </span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <!-- Voucher Number Preview -->
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">رقم السند:</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light text-muted"><i class="fa-solid fa-hashtag"></i></span>
+                        <input type="text" class="form-control fw-bold text-primary" :value="header.voucherNumber" readonly />
+                    </div>
+                </div>
+
+                <!-- Voucher Date -->
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">تاريخ السند <span class="text-danger">*</span>:</label>
+                    <input type="date" class="form-control form-control-sm" v-model="header.voucherDate" @@change="onDateChange" required />
+                </div>
+
+                <!-- Cash / Bank Account -->
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">{{ isReceipt ? 'إيداع إلى حساب الخزينة / البنك' : 'صرف من حساب الخزينة / البنك' }} <span class="text-danger">*</span>:</label>
+                    <select class="form-select form-select-sm fw-bold" v-model.number="header.cashBankAccountId" required>
+                        <option :value="0">-- اختر الخزينة أو البنك --</option>
+                        @foreach (var acc in cashBankAccounts)
+                        {
+                            <option value="@acc.Id">@acc.Code - @acc.LocalizedName</option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Currency -->
+                <div class="col-md-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-bold mb-0">العملة <span class="text-danger">*</span>:</label>
+                        <span v-if="isCurrencyLocked" class="badge bg-warning-subtle text-dark border px-1" title="عملة السند مقيدة بعملة الطرف">
+                            <i class="fa-solid fa-lock me-1"></i> مقيدة بالطرف
+                        </span>
+                    </div>
+                    <select class="form-select form-select-sm" v-model.number="header.currencyId" :disabled="isCurrencyLocked" @@change="onCurrencyChange">
+                        @foreach (var curr in currencies)
+                        {
+                            <option value="@curr.Id" data-code="@curr.Code">
+                                @curr.Code - @curr.LocalizedName
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Exchange Rate -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">سعر الصرف:</label>
+                    <input type="number" step="0.0001" min="0.0001" class="form-control form-control-sm text-end font-monospace fw-bold" 
+                           :class="{ 'border-danger bg-danger-subtle': isRateError }"
+                           v-model.number="header.exchangeRate" readonly title="سعر الصرف المعتمد حسب تاريخ السند" />
+                    <div class="mt-1 small" v-if="rateStatusMessage">
+                        <span :class="isRateError ? 'text-danger fw-bold' : 'text-muted'" style="font-size: 11px;">
+                            {{ rateStatusMessage }}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Reference Number -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">رقم المرجع / الإيصال الورقي:</label>
+                    <input type="text" class="form-control form-control-sm" v-model="header.referenceNumber" placeholder="رقم الإيصال اليدوي" />
+                </div>
+
+                <!-- General Statement / Notes -->
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">البيان العام للسند:</label>
+                    <input type="text" class="form-control form-control-sm" v-model="header.notes" placeholder="ملاحظات أو سبب السند" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Detail Lines Card -->
+    <div class="card shadow-sm border-0 mb-3 voucher-card">
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="fa-solid fa-list-check me-1 text-primary"></i> بنود وأطراف السند (Voucher Detail Lines)
+            </h6>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-success" @@click="openExcelPaste" title="نسخ ولصق سريع للبنود من إكسيل">
+                    <i class="fa-solid fa-file-excel me-1"></i> لصق من Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @@click="copyToExcel" :disabled="!lines || lines.length === 0" title="نسخ البيانات الحالية إلى الحافظة بصيغة إكسيل">
+                    <i class="fa-solid fa-copy me-1"></i> نسخ إلى Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary" @@click="addNewLine">
+                    <i class="fa-solid fa-plus me-1"></i> إضافة سطر جديد
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm align-middle mb-0" id="voucherLinesTable" style="font-size: 0.85rem;">
+                    <thead class="table-dark text-center small">
+                        <tr>
+                            <th style="width: 35px;">#</th>
+                            <th style="min-width: 120px;">نوع الحركة</th>
+                            <th style="min-width: 200px;">الطرف / الحساب المساعد</th>
+                            <th style="min-width: 240px;">الحساب المالي (GL)</th>
+                            <th style="width: 135px;">طريقة الدفع</th>
+                            <th style="width: 120px;">المبلغ بالعملة</th>
+                            <th style="width: 120px;">المعادل المحلي</th>
+                            <th v-if="features.enableCostCenter" style="min-width: 140px;">مركز التكلفة</th>
+                            <th>البيان / ملاحظات السطر</th>
+                            <th style="width: 45px;">إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template v-for="(line, idx) in lines" :key="line.id">
+                            <!-- Main Line Row -->
+                            <tr>
+                                <!-- # -->
+                                <td class="text-center fw-bold text-muted small">{{ idx + 1 }}</td>
+
+                                <!-- Line Type Dropdown -->
+                                <td>
+                                    <select class="form-select grid-input-sm fw-bold" 
+                                            v-model.number="line.lineType" 
+                                            @@change="onLineTypeChange(line)">
+                                        <option :value="1">عميل (Customer)</option>
+                                        <option :value="2">مورد (Vendor)</option>
+                                        <option :value="3">حساب عام (Account)</option>
+                                        <option :value="4">بنك (Bank)</option>
+                                    </select>
+                                </td>
+
+                                <!-- Sub-Ledger (Dual-Mode Searchable Lookup matching JournalEntries) -->
+                                <td>
+                                    <!-- If Customer or Vendor: Searchable Lookup -->
+                                    <div v-if="line.lineType === 1 || line.lineType === 2">
+                                        <!-- Selected State -->
+                                        <div v-if="line.subLedgerId" class="d-flex align-items-center justify-content-between p-1 px-2 bg-light border rounded small">
+                                            <span class="fw-bold text-dark text-truncate" :title="line.subLedgerDisplayName">
+                                                <i :class="line.lineType === 1 ? 'fa-solid fa-user text-primary' : 'fa-solid fa-truck text-secondary'" class="me-1"></i>
+                                                {{ line.subLedgerDisplayName }}
+                                            </span>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-danger ms-1" @@click="clearSubLedger(line)" title="مسح">
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        </div>
+                                        <!-- Unselected State: Quick Search + Modal Button [...] -->
+                                        <div v-else class="input-group input-group-sm position-relative">
+                                            <input type="text" class="form-control grid-input-sm" 
+                                                   :placeholder="line.lineType === 1 ? 'كود / اسم / ضريبي العميل...' : 'كود / اسم / ضريبي المورد...'"
+                                                   v-model="line.subLedgerSearchQuery" 
+                                                   @@input="onSubLedgerQuickSearch(line)"
+                                                   @@keydown="onSearchKeydown($event, line, 'subledger')"
+                                                   @@focus="onSubLedgerQuickSearch(line)"
+                                                   :class="{ 'is-invalid-cell': !line.subLedgerId }">
+                                            <button class="btn btn-outline-secondary btn-sm px-2" type="button" 
+                                                    @@click="openSubLedgerModal(line)" title="بحث متقدم [...]">
+                                                <i class="fa-solid fa-ellipsis"></i>
+                                            </button>
+                                            <!-- Quick Search Results Dropdown -->
+                                            <div v-if="activeDropdown.show && activeDropdown.lineId === line.id && activeDropdown.field === 'subledger'" 
+                                                 class="dropdown-menu show p-0 shadow-lg border-primary" 
+                                                 style="position: absolute; top: 100%; right: 0; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                                <div v-if="activeDropdown.loading" class="text-center py-2 small text-muted">
+                                                    <span class="spinner-border spinner-border-sm me-1"></span> جاري البحث...
+                                                </div>
+                                                <div v-else-if="activeDropdown.items.length === 0" class="text-center py-2 small text-muted">
+                                                    لا توجد نتائج مطابقة
+                                                </div>
+                                                <div v-else>
+                                                    <a v-for="(item, itemIdx) in activeDropdown.items" :key="item.id" 
+                                                       href="#" class="dropdown-item py-1 px-2 border-bottom small"
+                                                       :class="{ 'active': activeDropdown.selectedIndex === itemIdx }"
+                                                       @@click.prevent="selectSubLedgerItem(line, item)">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <span class="font-monospace fw-bold">{{ item.code }}</span>
+                                                            <span v-if="item.subTitle" class="badge bg-light text-dark border">{{ item.subTitle }}</span>
+                                                        </div>
+                                                        <div class="text-truncate fw-semibold">{{ item.nameAr || item.nameEn }}</div>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <span v-if="!line.subLedgerId" class="invalid-cell-feedback">يرجى تحديد الطرف</span>
+                                    </div>
+                                    <!-- Bank -->
+                                    <div v-else-if="line.lineType === 4" class="text-center">
+                                        <span class="badge bg-secondary-subtle text-secondary border">من شجرة الحسابات</span>
+                                    </div>
+                                    <!-- General Account -->
+                                    <div v-else class="text-center text-muted small">-</div>
+                                </td>
+
+                                <!-- Financial Account (GL / Control Account) -->
+                                <td>
+                                    <!-- ReadOnly for Customer or Vendor -->
+                                    <div v-if="line.lineType === 1 || line.lineType === 2">
+                                        <div v-if="line.accountId" class="d-flex align-items-center justify-content-between p-1 px-2 bg-light border rounded small">
+                                            <span class="fw-bold text-dark font-monospace text-truncate" :title="line.accountDisplayName">
+                                                <i class="fa-solid fa-lock text-muted me-1"></i> {{ line.accountDisplayName }}
+                                            </span>
+                                            <span class="badge bg-primary-subtle text-primary border ms-1" style="font-size: 0.65rem; white-space: nowrap;">حساب رقابة</span>
+                                        </div>
+                                        <div v-else class="text-danger small py-1 px-1 bg-light border rounded">
+                                            <i class="fa-solid fa-triangle-exclamation text-danger me-1"></i>
+                                            <span v-if="line.subLedgerId">لا يوجد حساب رقابة مرتبط بالطرف!</span>
+                                            <span v-else class="text-muted">اختر الطرف أولاً...</span>
+                                        </div>
+                                    </div>
+                                    <!-- Dual-Mode Searchable Lookup for Account / Bank -->
+                                    <div v-else>
+                                        <!-- Selected State -->
+                                        <div v-if="line.accountId" class="d-flex align-items-center justify-content-between p-1 px-2 bg-light border rounded small">
+                                            <span class="fw-bold text-dark font-monospace text-truncate" :title="line.accountDisplayName">
+                                                <i :class="line.lineType === 4 ? 'fa-solid fa-building-columns text-info' : 'fa-solid fa-book-bookmark text-primary'" class="me-1"></i>
+                                                {{ line.accountDisplayName }}
+                                            </span>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-danger ms-1" @@click="clearAccount(line)" title="مسح">
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        </div>
+                                        <!-- Unselected State: Quick Search + Modal Button [...] -->
+                                        <div v-else class="input-group input-group-sm position-relative">
+                                            <input type="text" class="form-control grid-input-sm" 
+                                                   placeholder="ابحث برقم أو اسم الحساب..." 
+                                                   v-model="line.accountSearchQuery" 
+                                                   @@input="onAccountQuickSearch(line)"
+                                                   @@keydown="onSearchKeydown($event, line, 'account')"
+                                                   @@focus="onAccountQuickSearch(line)"
+                                                   :class="{ 'is-invalid-cell': !line.accountId }">
+                                            <button class="btn btn-outline-secondary btn-sm px-2" type="button" 
+                                                    @@click="openAccountModal(line)" title="بحث متقدم [...]">
+                                                <i class="fa-solid fa-ellipsis"></i>
+                                            </button>
+                                            <!-- Quick Search Results Dropdown -->
+                                            <div v-if="activeDropdown.show && activeDropdown.lineId === line.id && activeDropdown.field === 'account'" 
+                                                 class="dropdown-menu show p-0 shadow-lg border-primary" 
+                                                 style="position: absolute; top: 100%; right: 0; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                                <div v-if="activeDropdown.loading" class="text-center py-2 small text-muted">
+                                                    <span class="spinner-border spinner-border-sm me-1"></span> جاري البحث...
+                                                </div>
+                                                <div v-else-if="activeDropdown.items.length === 0" class="text-center py-2 small text-muted">
+                                                    لا توجد نتائج مطابقة
+                                                </div>
+                                                <div v-else>
+                                                    <a v-for="(item, itemIdx) in activeDropdown.items" :key="item.id" 
+                                                       href="#" class="dropdown-item py-1 px-2 border-bottom small"
+                                                       :class="{ 'active': activeDropdown.selectedIndex === itemIdx }"
+                                                       @@click.prevent="selectAccountItem(line, item)">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <span class="font-monospace fw-bold text-primary">{{ item.code }}</span>
+                                                            <span v-if="item.badgeText" class="badge bg-info-subtle text-info border" style="font-size:0.65rem;">{{ item.badgeText }}</span>
+                                                        </div>
+                                                        <div class="text-truncate fw-semibold">{{ item.nameAr || item.nameEn }}</div>
+                                                        <div v-if="item.subTitle" class="text-muted" style="font-size:0.7rem;">{{ item.subTitle }}</div>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <span v-if="!line.accountId" class="invalid-cell-feedback">يرجى تحديد الحساب</span>
+                                    </div>
+                                </td>
+
+                                <!-- Payment Method Dropdown -->
+                                <td>
+                                    <select class="form-select grid-input-sm fw-bold" 
+                                            :class="line.paymentMethod === 2 ? 'border-warning bg-warning-subtle text-dark' : ''"
+                                            v-model.number="line.paymentMethod" 
+                                            @@change="onPaymentMethodChange(line)">
+                                        <option :value="1" :disabled="!isMethodAllowed(1, 'create')">💵 نقداً (Cash)</option>
+                                        <option :value="2" :disabled="!isMethodAllowed(2, 'create')">📝 شيك (Cheque)</option>
+                                        <option :value="3" :disabled="!isMethodAllowed(3, 'create')">🏦 تحويل بنكي</option>
+                                        <option :value="4" :disabled="!isMethodAllowed(4, 'create')">🔄 أخرى (Other)</option>
+                                    </select>
+                                </td>
+
+                                <!-- Foreign Amount -->
+                                <td>
+                                    <input type="number" 
+                                           step="0.01" 
+                                           min="0.01" 
+                                           class="form-control grid-input-sm text-end fw-bold font-monospace" 
+                                           v-model.number="line.amountForeign" 
+                                           @@input="onLineAmountChange(line)" />
+                                </td>
+
+                                <!-- Local Amount (Calculated) -->
+                                <td>
+                                    <input type="number" 
+                                           step="0.01" 
+                                           class="form-control grid-input-sm text-end fw-bold bg-light font-monospace" 
+                                           :value="line.amountLocal" 
+                                           readonly />
+                                </td>
+
+                                <!-- Cost Center (Dual-Mode Searchable Lookup) -->
+                                <td v-if="features.enableCostCenter">
+                                    <!-- Selected State -->
+                                    <div v-if="line.costCenterId" class="d-flex align-items-center justify-content-between p-1 px-2 bg-light border rounded small">
+                                        <span class="fw-bold text-dark text-truncate" :title="line.costCenterDisplayName">
+                                            <i class="fa-solid fa-sitemap text-secondary me-1"></i>
+                                            {{ line.costCenterDisplayName }}
+                                        </span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-danger ms-1" @@click="clearCostCenter(line)" title="مسح">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                    <!-- Unselected State: Quick Search + Modal Button [...] -->
+                                    <div v-else class="input-group input-group-sm position-relative">
+                                        <input type="text" class="form-control grid-input-sm" 
+                                               placeholder="كود أو اسم المركز..." 
+                                               v-model="line.costCenterSearchQuery" 
+                                               @@input="onCostCenterQuickSearch(line)"
+                                               @@keydown="onSearchKeydown($event, line, 'costcenter')"
+                                               @@focus="onCostCenterQuickSearch(line)">
+                                        <button class="btn btn-outline-secondary btn-sm px-2" type="button" 
+                                                @@click="openCostCenterModal(line)" title="بحث متقدم [...]">
+                                            <i class="fa-solid fa-ellipsis"></i>
+                                        </button>
+                                        <!-- Quick Search Results Dropdown -->
+                                        <div v-if="activeDropdown.show && activeDropdown.lineId === line.id && activeDropdown.field === 'costcenter'" 
+                                             class="dropdown-menu show p-0 shadow-lg border-primary" 
+                                             style="position: absolute; top: 100%; right: 0; left: 0; z-index: 1050; max-height: 220px; overflow-y: auto;">
+                                            <div v-if="activeDropdown.loading" class="text-center py-2 small text-muted">
+                                                <span class="spinner-border spinner-border-sm me-1"></span> جاري البحث...
+                                            </div>
+                                            <div v-else-if="activeDropdown.items.length === 0" class="text-center py-2 small text-muted">
+                                                لا توجد نتائج مطابقة
+                                            </div>
+                                            <div v-else>
+                                                <a v-for="(item, itemIdx) in activeDropdown.items" :key="item.id" 
+                                                   href="#" class="dropdown-item py-1 px-2 border-bottom small"
+                                                   :class="{ 'active': activeDropdown.selectedIndex === itemIdx }"
+                                                   @@click.prevent="selectCostCenterItem(line, item)">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <span class="font-monospace fw-bold text-secondary">{{ item.code }}</span>
+                                                    </div>
+                                                    <div class="text-truncate fw-semibold">{{ item.nameAr || item.nameEn }}</div>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- Description -->
+                                <td>
+                                    <input type="text" class="form-control grid-input-sm" v-model="line.description" placeholder="بيان البند" />
+                                </td>
+
+                                <!-- Delete Action -->
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-sm text-danger p-0" @@click="removeLine(idx)" :disabled="lines.length <= 1" title="حذف السطر">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- Line Cheque Details Sub-Row (Only shown when PaymentMethod === Cheque) -->
+                            <tr v-if="line.paymentMethod === 2" class="bg-light-subtle border-start border-4 border-warning shadow-sm" :key="'chq_' + line.id">
+                                <td :colspan="features.enableCostCenter ? 10 : 9" class="p-2 bg-light">
+                                    <div class="row g-2 align-items-center">
+                                        <div class="col-auto">
+                                            <span class="badge bg-warning text-dark fw-bold px-2 py-1">
+                                                <i class="fa-solid fa-money-check-dollar me-1"></i> بيانات الشيك
+                                            </span>
+                                        </div>
+                                        <!-- رقم الشيك -->
+                                        <div class="col-md-2">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-white small fw-bold">رقم الشيك <span class="text-danger">*</span></span>
+                                                <input type="text" class="form-control form-control-sm" v-model="line.chequeNumber" placeholder="مثال: 12345" required />
+                                            </div>
+                                        </div>
+                                        <!-- تاريخ التحرير -->
+                                        <div class="col-md-2">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-white small">تاريخ التحرير</span>
+                                                <input type="date" class="form-control form-control-sm" v-model="line.chequeDate" />
+                                            </div>
+                                        </div>
+                                        <!-- تاريخ الاستحقاق -->
+                                        <div class="col-md-2">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-white small fw-bold">الاستحقاق <span class="text-danger">*</span></span>
+                                                <input type="date" class="form-control form-control-sm" v-model="line.dueDate" required />
+                                            </div>
+                                        </div>
+                                        <!-- البنك المسحوب عليه (Searchable Lookup) -->
+                                        <div class="col-md-3">
+                                            <div class="input-group input-group-sm position-relative">
+                                                <span class="input-group-text bg-white small fw-bold">البنك <span class="text-danger">*</span></span>
+                                                <!-- Selected Bank -->
+                                                <div v-if="line.bankId" class="form-control form-control-sm bg-light d-flex justify-content-between align-items-center p-1 px-2">
+                                                    <span class="fw-bold text-dark text-truncate" :title="line.bankDisplayName">
+                                                        <i class="fa-solid fa-building-columns text-primary me-1"></i>
+                                                        {{ line.bankDisplayName }}
+                                                    </span>
+                                                    <button type="button" class="btn btn-link btn-sm p-0 text-danger ms-1" @@click="clearBank(line)" title="مسح">
+                                                        <i class="fa-solid fa-xmark"></i>
+                                                    </button>
+                                                </div>
+                                                <!-- Unselected Bank: Quick Search + Modal Button -->
+                                                <input v-else type="text" class="form-control form-control-sm" 
+                                                       placeholder="كود أو اسم البنك..." 
+                                                       v-model="line.bankSearchQuery"
+                                                       @@input="onBankQuickSearch(line)"
+                                                       @@keydown="onSearchKeydown($event, line, 'bank')"
+                                                       @@focus="onBankQuickSearch(line)" />
+                                                <button v-if="!line.bankId" class="btn btn-outline-secondary btn-sm px-2" type="button" @@click="openBankModal(line)" title="بحث متقدم في البنوك [...]">
+                                                    <i class="fa-solid fa-ellipsis"></i>
+                                                </button>
+                                                <!-- Quick Search Results Dropdown -->
+                                                <div v-if="activeDropdown.show && activeDropdown.lineId === line.id && activeDropdown.field === 'bank'" 
+                                                     class="dropdown-menu show p-0 shadow-lg border-primary" 
+                                                     style="position: absolute; top: 100%; right: 0; left: 0; z-index: 1055; max-height: 200px; overflow-y: auto;">
+                                                    <div v-if="activeDropdown.loading" class="text-center py-2 small text-muted">
+                                                        <span class="spinner-border spinner-border-sm me-1"></span> جاري البحث...
+                                                    </div>
+                                                    <div v-else-if="activeDropdown.items.length === 0" class="text-center py-2 small text-muted">
+                                                        لا توجد بنوك مطابقة
+                                                    </div>
+                                                    <div v-else>
+                                                        <a v-for="(item, itemIdx) in activeDropdown.items" :key="item.id" 
+                                                           href="#" class="dropdown-item py-1 px-2 border-bottom small"
+                                                           :class="{ 'active': activeDropdown.selectedIndex === itemIdx }"
+                                                           @@click.prevent="selectBankItem(line, item)">
+                                                            <div class="d-flex justify-content-between align-items-center">
+                                                                <span class="font-monospace fw-bold text-primary">{{ item.code }}</span>
+                                                                <span v-if="item.subTitle" class="badge bg-light text-dark border">{{ item.subTitle }}</span>
+                                                            </div>
+                                                            <div class="text-truncate fw-semibold">{{ item.nameAr || item.nameEn }}</div>
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- اسم الساحب -->
+                                        <div class="col-md-2">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-white small">الساحب</span>
+                                                <input type="text" class="form-control form-control-sm" v-model="line.drawerName" placeholder="اسم محرر الشيك" />
+                                            </div>
+                                        </div>
+                                        <!-- تفاصيل إضافية: مبلغ الشيك والملاحظات -->
+                                        <div class="col-md-12 mt-1">
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-white small">مبلغ الشيك:</span>
+                                                <span class="input-group-text bg-light fw-bold text-primary">{{ formatNumber(line.amountForeign) }}</span>
+                                                <span class="input-group-text bg-white small ms-2">ملاحظات الشيك:</span>
+                                                <input type="text" class="form-control form-control-sm" v-model="line.notes" placeholder="ملاحظات تفصيلية خاصة بالشيك أو الفرع المسحوب عليه..." />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Summary Bar Footer -->
+        <div class="card-footer bg-light py-2">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <span class="small fw-bold text-muted">إجمالي البنود: </span>
+                    <span class="badge bg-secondary">{{ lines.length }} بنود</span>
+                </div>
+                <div class="col-md-4 text-end">
+                    <span class="small fw-bold me-2">الإجمالي بالعملة:</span>
+                    <span class="fw-bold fs-6 text-primary">{{ formatNumber(header.totalAmountForeign) }}</span>
+                </div>
+                <div class="col-md-4 text-end">
+                    <span class="small fw-bold me-2">الإجمالي بالمحلي (EGP):</span>
+                    <span class="fw-bold fs-5 text-success">{{ formatNumber(header.totalAmountLocal) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Toolbar Buttons -->
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-xmark me-1"></i> إلغاء
+            </a>
+        </div>
+        <div class="d-flex gap-2">
+            <button v-if="features.canSaveDraft" type="button" class="btn btn-outline-primary" @@click="saveVoucher(false)" :disabled="isSubmitting">
+                <i class="fa-solid fa-save me-1"></i> حفظ كمسودة
+            </button>
+            <button type="button" class="btn btn-success px-4 fw-bold" @@click="saveVoucher(true)" :disabled="isSubmitting">
+                <i class="fa-solid fa-check-double me-1"></i> حفظ وترحيل فوري
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/lib/sweetalert2/sweetalert2.all.min.js"></script>
+    <script>
+        if (typeof Swal === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"><\/script>');
+        }
+    </script>
+    <script src="~/js/erp-grid-paste.js" asp-append-version="true"></script>
+
+    <script>
+        const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const isReceipt = ref(@(isReceipt ? "true" : "false"));
+                const isSubmitting = ref(false);
+
+                const features = {
+                    enableCostCenter: @(ViewBag.EnableCostCenter == true ? "true" : "false"),
+                    canSaveDraft: @(ViewBag.CanSaveDraft == true ? "true" : "false")
+                };
+
+                const pmPerms = @Html.Raw(ViewBag.PaymentMethodPermissionsJson ?? "{}");
+
+                function isMethodAllowed(methodNum, action = 'create') {
+                    if (!pmPerms || Object.keys(pmPerms).length === 0) return true;
+
+                    const map = { 1: 'Cash', 2: 'Cheque', 3: 'BankTransfer', 4: 'Other' };
+                    const key = map[methodNum];
+                    const keyLower = key ? (key.charAt(0).toLowerCase() + key.slice(1)) : '';
+
+                    const perm = pmPerms[methodNum]
+                              || pmPerms[String(methodNum)]
+                              || (key ? pmPerms[key] : null)
+                              || (keyLower ? pmPerms[keyLower] : null);
+
+                    if (!perm) return true;
+
+                    const canCreate = (perm.canCreate !== undefined) ? perm.canCreate : ((perm.CanCreate !== undefined) ? perm.CanCreate : true);
+                    const canEdit   = (perm.canEdit !== undefined)   ? perm.canEdit   : ((perm.CanEdit !== undefined)   ? perm.CanEdit   : true);
+                    const canView   = (perm.canView !== undefined)   ? perm.canView   : ((perm.CanView !== undefined)   ? perm.CanView   : true);
+
+                    if (action === 'create') return Boolean(canCreate);
+                    if (action === 'edit')   return Boolean(canEdit);
+                    if (action === 'view')   return Boolean(canView);
+                    return true;
+                }
+
+                function getFirstAllowedMethod() {
+                    for (let m = 1; m <= 4; m++) {
+                        if (isMethodAllowed(m, 'create')) return m;
+                    }
+                    return 1;
+                }
+
+                const notification = reactive({
+                    show: false,
+                    type: 'info',
+                    message: ''
+                });
+
+                const header = reactive({
+                    voucherType: @((int)type),
+                    voucherNumber: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.NextVoucherNumber ?? "")),
+                    voucherDate: new Date().toISOString().split('T')[0],
+                    fiscalYearId: @(fiscalYear?.Id ?? 0),
+                    branchId: @(ViewBag.CurrentBranchId ?? 0),
+                    cashBankAccountId: 0,
+                    paymentMethod: 1,
+                    chequeNumber: '',
+                    chequeDate: '',
+                    chequeDueDate: '',
+                    bankName: '',
+                    currencyId: 1,
+                    exchangeRate: 1.000000,
+                    totalAmountForeign: 0,
+                    totalAmountLocal: 0,
+                    referenceNumber: '',
+                    notes: ''
+                });
+
+                const activeDropdown = reactive({
+                    show: false,
+                    lineId: null,
+                    field: null, // 'subledger', 'account', or 'costcenter'
+                    items: [],
+                    loading: false,
+                    selectedIndex: -1
+                });
+                let quickSearchTimer = null;
+
+                const lines = ref([
+                    createDefaultLine()
+                ]);
+
+                function createDefaultLine() {
+                    return {
+                        id: 'line_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                        lineType: isReceipt.value ? 1 : 2, // 1: Customer (Receipt), 2: Vendor (Payment)
+                        paymentMethod: getFirstAllowedMethod(), // 1: Cash, 2: Cheque, 3: BankTransfer, 4: Other
+                        chequeNumber: '',
+                        chequeDate: '',
+                        dueDate: '',
+                        bankId: null,
+                        bankCode: '',
+                        bankName: '',
+                        bankDisplayName: '',
+                        bankSearchQuery: '',
+                        drawerName: '',
+                        subLedgerId: null,
+                        subLedgerDisplayName: '',
+                        subLedgerSearchQuery: '',
+                        accountId: 0,
+                        accountCode: '',
+                        accountName: '',
+                        accountDisplayName: '',
+                        accountSearchQuery: '',
+                        amountForeign: 0,
+                        amountLocal: 0,
+                        costCenterId: null,
+                        costCenterDisplayName: '',
+                        costCenterSearchQuery: '',
+                        description: '',
+                        notes: '',
+                        errors: {
+                            controlAccountMissing: false
+                        }
+                    };
+                }
+
+                function addNewLine() {
+                    lines.value.push(createDefaultLine());
+                }
+
+                function removeLine(idx) {
+                    if (lines.value.length > 1) {
+                        lines.value.splice(idx, 1);
+                        recalcTotals();
+                    }
+                }
+
+                function switchType(t) {
+                    isReceipt.value = (t === 1);
+                    header.voucherType = t;
+                    window.location.href = `@Url.Action("Create", "CashBankVouchers")?type=${t === 1 ? 'Receipt' : 'Payment'}`;
+                }
+
+                function onPaymentMethodChange(line) {
+                    if (line.paymentMethod === 2) {
+                        if (!line.dueDate) line.dueDate = header.voucherDate;
+                        if (!line.chequeDate) line.chequeDate = header.voucherDate;
+                    } else {
+                        line.chequeNumber = '';
+                        line.chequeDate = '';
+                        line.dueDate = '';
+                        line.bankId = null;
+                        line.bankCode = '';
+                        line.bankName = '';
+                        line.bankDisplayName = '';
+                        line.drawerName = '';
+                    }
+                }
+
+                function openExcelPaste() {
+                    if (typeof ErpGridPaste === 'undefined') {
+                        Swal.fire('خطأ', 'محرك النسخ واللصق غير محمل.', 'error');
+                        return;
+                    }
+
+                    ErpGridPaste.open({
+                        schema: ErpGridPaste.voucherLinePasteSchema,
+                        currentRows: lines.value,
+                        onApply: (parsedRows, mode) => {
+                            const mappedRows = parsedRows.map(r => {
+                                const line = createDefaultLine();
+                                line.paymentMethod = r.paymentMethod || getFirstAllowedMethod();
+                                line.amountForeign = r.amountForeign || 0;
+                                line.amountLocal = Math.round((line.amountForeign * (header.exchangeRate || 1)) * 10000) / 10000;
+                                line.description = r.description || '';
+                                line.notes = r.notes || '';
+
+                                if (line.paymentMethod === 2) { // Cheque
+                                    line.chequeNumber = r.chequeNumber || '';
+                                    line.chequeDate = r.chequeDate || header.voucherDate;
+                                    line.dueDate = r.dueDate || header.voucherDate;
+                                    line.drawerName = r.drawerName || '';
+                                    line.bankId = r.bankId || null;
+                                    line.bankCode = r.bankCode || '';
+                                    line.bankName = r.bankName || '';
+                                    line.bankDisplayName = r.bankDisplayName || (r.bankCode ? `${r.bankCode} - ${r.bankName}` : r.bankName || '');
+                                }
+
+                                if (r.subLedgerId) {
+                                    line.subLedgerId = r.subLedgerId;
+                                    line.subLedgerDisplayName = r.subLedgerDisplayName || '';
+                                    line.lineType = r.lineType || (isReceipt.value ? 1 : 2);
+                                    if (r.accountId) {
+                                        line.accountId = r.accountId;
+                                        line.accountDisplayName = r.accountDisplayName || '';
+                                    }
+                                } else if (r.accountId) {
+                                    line.accountId = r.accountId;
+                                    line.accountDisplayName = r.accountDisplayName || '';
+                                    line.lineType = 3;
+                                }
+
+                                return line;
+                            });
+
+                            if (mode === 'replace') {
+                                lines.value = mappedRows.length > 0 ? mappedRows : [createDefaultLine()];
+                            } else {
+                                if (lines.value.length === 1 && lines.value[0].amountForeign === 0 && !lines.value[0].chequeNumber) {
+                                    lines.value = mappedRows;
+                                } else {
+                                    lines.value.push(...mappedRows);
+                                }
+                            }
+                            recalcTotals();
+                        }
+                    });
+                }
+
+                function copyToExcel() {
+                    if (typeof ErpGridPaste === 'undefined') {
+                        return;
+                    }
+                    const exportData = lines.value.map(l => ({
+                        paymentMethod: l.paymentMethod === 2 ? 'Cheque' : (l.paymentMethod === 3 ? 'BankTransfer' : (l.paymentMethod === 4 ? 'Other' : 'Cash')),
+                        chequeNumber: l.chequeNumber || '',
+                        amountForeign: l.amountForeign || 0,
+                        dueDate: l.dueDate || '',
+                        bankCode: l.bankCode || l.bankName || '',
+                        drawerName: l.drawerName || '',
+                        notes: l.notes || l.description || ''
+                    }));
+                    ErpGridPaste.copyToClipboard(exportData, ['paymentMethod', 'chequeNumber', 'amountForeign', 'dueDate', 'bankCode', 'drawerName', 'notes']);
+                }
+
+                const isCurrencyLocked = ref(false);
+                const rateStatusMessage = ref('');
+                const isRateError = ref(false);
+
+                function fetchRateForCurrency(currencyId, date) {
+                    if (!currencyId || !date) return;
+                    fetch(`@Url.Action("GetRate", "CurrencyRates")?currencyId=${currencyId}&documentDate=${date}`)
+                        .then(r => r.json())
+                        .then(res => {
+                            if (res.success) {
+                                header.exchangeRate = res.rate;
+                                isRateError.value = false;
+                                rateStatusMessage.value = res.isBaseCurrency
+                                    ? 'العملة الأساسية (1.0000)'
+                                    : `سعر الصرف المعتمد حتى (${res.rateDate}): ${res.rate}`;
+                                recalcTotals();
+                            } else {
+                                header.exchangeRate = 0;
+                                isRateError.value = true;
+                                rateStatusMessage.value = res.message || 'لا يوجد سعر صرف مسجل حتى تاريخ السند!';
+                                recalcTotals();
+                            }
+                        })
+                        .catch(() => {
+                            isRateError.value = true;
+                            rateStatusMessage.value = 'تعذر الاتصال للتحقق من سعر الصرف.';
+                        });
+                }
+
+                function onDateChange() {
+                    if (header.currencyId) {
+                        fetchRateForCurrency(header.currencyId, header.voucherDate);
+                    }
+                }
+
+                function onCurrencyChange() {
+                    fetchRateForCurrency(header.currencyId, header.voucherDate);
+                }
+
+                function onLineAmountChange(line) {
+                    line.amountLocal = Math.round((line.amountForeign * header.exchangeRate) * 10000) / 10000;
+                    recalcTotals();
+                }
+
+                function recalcTotals() {
+                    let totalF = 0;
+                    lines.value.forEach(l => {
+                        l.amountLocal = Math.round((l.amountForeign * header.exchangeRate) * 10000) / 10000;
+                        totalF += (l.amountForeign || 0);
+                    });
+                    header.totalAmountForeign = Math.round(totalF * 10000) / 10000;
+                    header.totalAmountLocal = Math.round((totalF * header.exchangeRate) * 10000) / 10000;
+                }
+
+                function onLineTypeChange(line) {
+                    clearSubLedger(line);
+                    clearAccount(line);
+                    activeDropdown.show = false;
+                }
+
+                // ============================================================
+                // Dual-Mode Searchable Lookups (Quick Search & Modal Popup)
+                // ============================================================
+                function onSubLedgerQuickSearch(line) {
+                    const q = (line.subLedgerSearchQuery || '').trim();
+                    const type = line.lineType === 1 ? 'customer' : 'vendor';
+                    activeDropdown.show = true;
+                    activeDropdown.lineId = line.id;
+                    activeDropdown.field = 'subledger';
+                    activeDropdown.items = [];
+                    activeDropdown.loading = true;
+                    activeDropdown.selectedIndex = -1;
+
+                    clearTimeout(quickSearchTimer);
+                    quickSearchTimer = setTimeout(() => {
+                        window.ErpLookup.search(type, q, 1, 10).done(res => {
+                            if (activeDropdown.lineId === line.id && activeDropdown.field === 'subledger') {
+                                activeDropdown.items = res.items || [];
+                                activeDropdown.loading = false;
+                            }
+                        }).fail(() => {
+                            if (activeDropdown.lineId === line.id) {
+                                activeDropdown.loading = false;
+                            }
+                        });
+                    }, 250);
+                }
+
+                function onAccountQuickSearch(line) {
+                    const q = (line.accountSearchQuery || '').trim();
+                    activeDropdown.show = true;
+                    activeDropdown.lineId = line.id;
+                    activeDropdown.field = 'account';
+                    activeDropdown.items = [];
+                    activeDropdown.loading = true;
+                    activeDropdown.selectedIndex = -1;
+
+                    clearTimeout(quickSearchTimer);
+                    quickSearchTimer = setTimeout(() => {
+                        window.ErpLookup.search('account', q, 1, 10, { transactionalOnly: 'true' }).done(res => {
+                            if (activeDropdown.lineId === line.id && activeDropdown.field === 'account') {
+                                activeDropdown.items = res.items || [];
+                                activeDropdown.loading = false;
+                            }
+                        }).fail(() => {
+                            if (activeDropdown.lineId === line.id) {
+                                activeDropdown.loading = false;
+                            }
+                        });
+                    }, 250);
+                }
+
+                function onCostCenterQuickSearch(line) {
+                    const q = (line.costCenterSearchQuery || '').trim();
+                    activeDropdown.show = true;
+                    activeDropdown.lineId = line.id;
+                    activeDropdown.field = 'costcenter';
+                    activeDropdown.items = [];
+                    activeDropdown.loading = true;
+                    activeDropdown.selectedIndex = -1;
+
+                    clearTimeout(quickSearchTimer);
+                    quickSearchTimer = setTimeout(() => {
+                        window.ErpLookup.search('costcenter', q, 1, 10).done(res => {
+                            if (activeDropdown.lineId === line.id && activeDropdown.field === 'costcenter') {
+                                activeDropdown.items = res.items || [];
+                                activeDropdown.loading = false;
+                            }
+                        }).fail(() => {
+                            if (activeDropdown.lineId === line.id) {
+                                activeDropdown.loading = false;
+                            }
+                        });
+                    }, 250);
+                }
+
+                function onBankQuickSearch(line) {
+                    const q = (line.bankSearchQuery || '').trim();
+                    activeDropdown.show = true;
+                    activeDropdown.lineId = line.id;
+                    activeDropdown.field = 'bank';
+                    activeDropdown.items = [];
+                    activeDropdown.loading = true;
+                    activeDropdown.selectedIndex = -1;
+
+                    clearTimeout(quickSearchTimer);
+                    quickSearchTimer = setTimeout(() => {
+                        window.ErpLookup.search('bank', q, 1, 15).done(res => {
+                            if (activeDropdown.lineId === line.id && activeDropdown.field === 'bank') {
+                                activeDropdown.items = res.items || [];
+                                activeDropdown.loading = false;
+                            }
+                        }).fail(() => {
+                            if (activeDropdown.lineId === line.id) {
+                                activeDropdown.loading = false;
+                            }
+                        });
+                    }, 250);
+                }
+
+                function onSearchKeydown(event, line, field) {
+                    if (!activeDropdown.show || activeDropdown.lineId !== line.id || activeDropdown.field !== field) return;
+
+                    if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        if (activeDropdown.selectedIndex < activeDropdown.items.length - 1) {
+                            activeDropdown.selectedIndex++;
+                        }
+                    } else if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        if (activeDropdown.selectedIndex > 0) {
+                            activeDropdown.selectedIndex--;
+                        }
+                    } else if (event.key === 'Enter') {
+                        event.preventDefault();
+                        if (activeDropdown.selectedIndex >= 0 && activeDropdown.items[activeDropdown.selectedIndex]) {
+                            const item = activeDropdown.items[activeDropdown.selectedIndex];
+                            if (field === 'subledger') selectSubLedgerItem(line, item);
+                            else if (field === 'costcenter') selectCostCenterItem(line, item);
+                            else if (field === 'bank') selectBankItem(line, item);
+                            else selectAccountItem(line, item);
+                        } else {
+                            const q = (field === 'subledger' ? line.subLedgerSearchQuery : (field === 'costcenter' ? line.costCenterSearchQuery : (field === 'bank' ? line.bankSearchQuery : line.accountSearchQuery))) || '';
+                            const type = field === 'subledger' ? (line.lineType === 1 ? 'customer' : 'vendor') : (field === 'costcenter' ? 'costcenter' : (field === 'bank' ? 'bank' : 'account'));
+                            if (q.trim()) {
+                                window.ErpLookup.getByCode(type, q.trim()).done(res => {
+                                    if (res) {
+                                        if (field === 'subledger') selectSubLedgerItem(line, res);
+                                        else if (field === 'costcenter') selectCostCenterItem(line, res);
+                                        else if (field === 'bank') selectBankItem(line, res);
+                                        else selectAccountItem(line, res);
+                                    }
+                                });
+                            }
+                        }
+                    } else if (event.key === 'Escape') {
+                        activeDropdown.show = false;
+                    }
+                }
+
+                function openSubLedgerModal(line) {
+                    const type = line.lineType === 1 ? 'customer' : 'vendor';
+                    window.ErpLookup.openModal({
+                        type: type,
+                        initialQuery: line.subLedgerSearchQuery || '',
+                        onSelect: (item) => {
+                            selectSubLedgerItem(line, item);
+                        }
+                    });
+                }
+
+                function openAccountModal(line) {
+                    window.ErpLookup.openModal({
+                        type: 'account',
+                        initialQuery: line.accountSearchQuery || '',
+                        filters: { transactionalOnly: 'true' },
+                        onSelect: (item) => {
+                            selectAccountItem(line, item);
+                        }
+                    });
+                }
+
+                function openCostCenterModal(line) {
+                    window.ErpLookup.openModal({
+                        type: 'costcenter',
+                        initialQuery: line.costCenterSearchQuery || '',
+                        onSelect: (item) => {
+                            selectCostCenterItem(line, item);
+                        }
+                    });
+                }
+
+                function openBankModal(line) {
+                    window.ErpLookup.openModal({
+                        type: 'bank',
+                        initialQuery: line.bankSearchQuery || '',
+                        onSelect: (item) => {
+                            selectBankItem(line, item);
+                        }
+                    });
+                }
+
+                function selectSubLedgerItem(line, item) {
+                    line.subLedgerId = item.id;
+                    line.subLedgerDisplayName = `${item.code} - ${item.nameAr || item.nameEn}`;
+                    line.subLedgerSearchQuery = '';
+                    activeDropdown.show = false;
+                    line.errors.controlAccountMissing = false;
+
+                    // Lock and sync currency from party
+                    const pType = line.lineType === 1 ? 'Customer' : (line.lineType === 2 ? 'Vendor' : null);
+                    if (pType) {
+                        fetch(`@Url.Action("GetPartyCurrency", "CurrencyRates")?partyType=${pType}&partyId=${item.id}`)
+                            .then(r => r.json())
+                            .then(res => {
+                                if (res.success && res.currencyId) {
+                                    header.currencyId = res.currencyId;
+                                    isCurrencyLocked.value = true;
+                                    fetchRateForCurrency(res.currencyId, header.voucherDate);
+                                }
+                            });
+                    }
+
+                    const ctrlId = (item.extraData && item.extraData.controlAccountId) ? item.extraData.controlAccountId : item.controlAccountId;
+                    if (ctrlId) {
+                        line.accountId = ctrlId;
+                        window.ErpLookup.getById('account', ctrlId).done(acc => {
+                            if (acc) {
+                                line.accountDisplayName = `${acc.code} - ${acc.nameAr || acc.nameEn}`;
+                                line.accountCode = acc.code;
+                                line.accountName = acc.nameAr || acc.nameEn;
+                            }
+                        });
+                    } else {
+                        line.accountId = 0;
+                        line.accountDisplayName = '';
+                        line.accountCode = '';
+                        line.accountName = '';
+                        line.errors.controlAccountMissing = true;
+                    }
+                }
+
+                function selectAccountItem(line, item) {
+                    line.accountId = item.id;
+                    line.accountDisplayName = `${item.code} - ${item.nameAr || item.nameEn}`;
+                    line.accountCode = item.code;
+                    line.accountName = item.nameAr || item.nameEn;
+                    line.accountSearchQuery = '';
+                    activeDropdown.show = false;
+                }
+
+                function selectCostCenterItem(line, item) {
+                    line.costCenterId = item.id;
+                    line.costCenterDisplayName = `${item.code} - ${item.nameAr || item.nameEn}`;
+                    line.costCenterSearchQuery = '';
+                    activeDropdown.show = false;
+                }
+
+                function selectBankItem(line, item) {
+                    line.bankId = item.id;
+                    line.bankCode = item.code;
+                    line.bankName = item.nameAr || item.nameEn;
+                    line.bankDisplayName = `${item.code} - ${line.bankName}`;
+                    line.bankSearchQuery = '';
+                    activeDropdown.show = false;
+                }
+
+                function clearSubLedger(line) {
+                    line.subLedgerId = null;
+                    line.subLedgerDisplayName = '';
+                    line.subLedgerSearchQuery = '';
+                    line.accountId = 0;
+                    line.accountDisplayName = '';
+                    line.accountCode = '';
+                    line.accountName = '';
+                    line.errors.controlAccountMissing = false;
+                }
+
+                function clearAccount(line) {
+                    line.accountId = 0;
+                    line.accountDisplayName = '';
+                    line.accountCode = '';
+                    line.accountName = '';
+                    line.accountSearchQuery = '';
+                }
+
+                function clearCostCenter(line) {
+                    line.costCenterId = null;
+                    line.costCenterDisplayName = '';
+                    line.costCenterSearchQuery = '';
+                }
+
+                function clearBank(line) {
+                    line.bankId = null;
+                    line.bankCode = '';
+                    line.bankName = '';
+                    line.bankDisplayName = '';
+                    line.bankSearchQuery = '';
+                }
+
+                function formatNumber(n) {
+                    return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+
+                function saveVoucher(postImmediately) {
+                    // Validations
+                    if (!header.cashBankAccountId) {
+                        Swal.fire('خطأ في البيانات', 'يرجى تحديد حساب الخزينة أو البنك.', 'error');
+                        return;
+                    }
+
+                    if (lines.value.length === 0) {
+                        Swal.fire('خطأ في البيانات', 'يجب إدخال سطر واحد على الأقل.', 'error');
+                        return;
+                    }
+
+                    for (let i = 0; i < lines.value.length; i++) {
+                        const l = lines.value[i];
+                        if (l.amountForeign <= 0) {
+                            Swal.fire('خطأ في البيانات', `السطر ${i + 1}: المبلغ يجب أن يكون أكبر من الصفر.`, 'error');
+                            return;
+                        }
+                        if (isRateError.value || !header.exchangeRate || header.exchangeRate <= 0) {
+                            Swal.fire('خطأ في سعر الصرف', rateStatusMessage.value || 'لا يوجد سعر صرف مسجل لهذه العملة حتى تاريخ السند. يرجى تسجيل سعر الصرف بسجل أسعار الصرف أولاً للمتابعة.', 'error');
+                            return;
+                        }
+                        if ((l.lineType === 1 || l.lineType === 2) && !l.subLedgerId) {
+                            Swal.fire('خطأ في البيانات', `السطر ${i + 1}: يرجى تحديد الطرف (العميل أو المورد).`, 'error');
+                            return;
+                        }
+                        if (!l.accountId) {
+                            Swal.fire('خطأ في البيانات', `السطر ${i + 1}: لم يتم تحديد أو جلب الحساب المالي المرتبط.`, 'error');
+                            return;
+                        }
+                        if (l.paymentMethod === 2) {
+                            if (!l.chequeNumber || !l.chequeNumber.trim()) {
+                                Swal.fire('خطأ في البيانات', `السطر ${i + 1}: يرجى إدخال رقم الشيك.`, 'error');
+                                return;
+                            }
+                            if (!l.dueDate) {
+                                Swal.fire('خطأ في البيانات', `السطر ${i + 1}: يرجى تحديد تاريخ استحقاق الشيك.`, 'error');
+                                return;
+                            }
+                            if (!l.bankId && !l.bankName) {
+                                Swal.fire('خطأ في البيانات', `السطر ${i + 1}: يرجى اختيار البنك المسحوب عليه الشيك.`, 'error');
+                                return;
+                            }
+                        }
+                    }
+
+                    isSubmitting.value = true;
+
+                    const payload = {
+                        branchId: header.branchId,
+                        fiscalYearId: header.fiscalYearId,
+                        voucherType: header.voucherType,
+                        voucherNumber: header.voucherNumber,
+                        voucherDate: header.voucherDate,
+                        cashBankAccountId: header.cashBankAccountId,
+                        paymentMethod: lines.value[0]?.paymentMethod || 1,
+                        currencyId: header.currencyId,
+                        exchangeRate: header.exchangeRate,
+                        totalAmountForeign: header.totalAmountForeign,
+                        totalAmountLocal: header.totalAmountLocal,
+                        referenceNumber: header.referenceNumber,
+                        notes: header.notes,
+                        lines: lines.value.map((l, index) => ({
+                            lineNumber: index + 1,
+                            lineType: l.lineType,
+                            subLedgerId: l.subLedgerId,
+                            accountId: l.accountId,
+                            costCenterId: l.costCenterId,
+                            paymentMethod: l.paymentMethod,
+                            chequeNumber: l.paymentMethod === 2 ? l.chequeNumber : null,
+                            chequeDate: (l.paymentMethod === 2 && l.chequeDate) ? l.chequeDate : null,
+                            dueDate: (l.paymentMethod === 2 && l.dueDate) ? l.dueDate : null,
+                            bankId: l.paymentMethod === 2 ? l.bankId : null,
+                            bankName: l.paymentMethod === 2 ? (l.bankName || l.bankDisplayName) : null,
+                            drawerName: l.paymentMethod === 2 ? l.drawerName : null,
+                            amountForeign: l.amountForeign,
+                            amountLocal: l.amountLocal,
+                            description: l.description,
+                            notes: l.notes
+                        }))
+                    };
+
+                    $.ajax({
+                        url: `@Url.Action("Create", "CashBankVouchers")?postImmediately=${postImmediately}`,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        data: JSON.stringify(payload),
+                        success: function (res) {
+                            isSubmitting.value = false;
+                            if (res.success) {
+                                Swal.fire({
+                                    title: 'تم بنجاح!',
+                                    text: res.message,
+                                    icon: res.warning ? 'warning' : 'success',
+                                    confirmButtonText: 'حسناً'
+                                }).then(() => {
+                                    window.location.href = `@Url.Action("Index", "CashBankVouchers")`;
+                                });
+                            } else {
+                                Swal.fire('فشل الحفظ', res.message, 'error');
+                            }
+                        },
+                        error: function (xhr) {
+                            isSubmitting.value = false;
+                            Swal.fire('خطأ في الاتصال', 'حدث خطأ أثناء إرسال البيانات إلى الخادم.', 'error');
+                        }
+                    });
+                }
+
+                onMounted(() => {
+                    document.addEventListener('click', (e) => {
+                        if (!e.target.closest('.position-relative')) {
+                            activeDropdown.show = false;
+                        }
+                    });
+                });
+
+                onMounted(() => {
+                    if (header.currencyId) {
+                        fetchRateForCurrency(header.currencyId, header.voucherDate);
+                    }
+                });
+
+                return {
+                    isReceipt,
+                    isSubmitting,
+                    features,
+                    notification,
+                    header,
+                    lines,
+                    activeDropdown,
+                    addNewLine,
+                    removeLine,
+                    switchType,
+                    onPaymentMethodChange,
+                    onDateChange,
+                    onCurrencyChange,
+                    isCurrencyLocked,
+                    rateStatusMessage,
+                    isRateError,
+                    onLineAmountChange,
+                    recalcTotals,
+                    onLineTypeChange,
+                    onSubLedgerQuickSearch,
+                    onAccountQuickSearch,
+                    onCostCenterQuickSearch,
+                    onBankQuickSearch,
+                    onSearchKeydown,
+                    openSubLedgerModal,
+                    openAccountModal,
+                    openCostCenterModal,
+                    openBankModal,
+                    selectSubLedgerItem,
+                    selectAccountItem,
+                    selectCostCenterItem,
+                    selectBankItem,
+                    clearSubLedger,
+                    clearAccount,
+                    clearCostCenter,
+                    clearBank,
+                    formatNumber,
+                    saveVoucher,
+                    isMethodAllowed,
+                    openExcelPaste,
+                    copyToExcel
+                };
+            }
+        }).mount('#voucherApp');
+    </script>
+}

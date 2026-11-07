@@ -61,6 +61,13 @@ namespace ERP.Infrastructure.Services
         {
             if (!IsAuthenticated) return false;
             if (User?.IsInRole("Admin") == true || User?.IsInRole("System Administrator") == true) return true;
+            if (string.IsNullOrWhiteSpace(permissionCode)) return false;
+
+            if (permissionCode.Contains(','))
+            {
+                var perms = permissionCode.Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries);
+                return perms.Any(p => User?.HasClaim("Permission", p) == true);
+            }
 
             return User?.HasClaim("Permission", permissionCode) ?? false;
         }

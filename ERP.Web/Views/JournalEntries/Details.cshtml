@@ -1,0 +1,262 @@
+@model ERP.Domain.Entities.JournalEntryHeader
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = "قيد يومية رقم: " + Model.EntryNumber;
+    var customers = ViewBag.Customers as Dictionary<int, string> ?? new Dictionary<int, string>();
+    var vendors = ViewBag.Vendors as Dictionary<int, string> ?? new Dictionary<int, string>();
+    bool isPosted = Model.Status == JournalEntryStatus.Posted;
+}
+
+<style>
+    @@media print {
+        .no-print { display: none !important; }
+        .erp-header, .erp-sidebar, .erp-footer { display: none !important; }
+        body { background: white !important; font-size: 12px; }
+        .card { border: 1px solid #000 !important; box-shadow: none !important; }
+        .table-dark { background-color: #333 !important; color: white !important; -webkit-print-color-adjust: exact; }
+    }
+</style>
+
+<div class="container-fluid py-3">
+    <!-- Breadcrumb & Top Actions -->
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <div>
+            <h4 class="mb-0 text-primary">
+                <i class="fa-solid fa-file-invoice-dollar me-2"></i> قيد يومية: <span class="font-monospace">@Model.EntryNumber</span>
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item"><a asp-action="Index">قيود اليومية</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">تفاصيل القيد</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-dark" onclick="window.print()">
+                <i class="fa-solid fa-print me-1"></i> طباعة السند
+            </button>
+            @if (Model.SourceDocumentType == SourceDocumentType.ManualJV)
+            {
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-primary">
+                    <i class="fa-solid fa-pen-to-square me-1"></i> تعديل القيد
+                </a>
+                <button type="button" class="btn btn-outline-danger" onclick="deleteCurrentEntry(@Model.Id, '@Model.EntryNumber')">
+                    <i class="fa-solid fa-trash-can me-1"></i> حذف القيد
+                </button>
+            }
+            <a asp-action="Create" class="btn btn-primary">
+                <i class="fa-solid fa-plus me-1"></i> قيد جديد
+            </a>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    <!-- Voucher Card -->
+    <div class="card shadow-sm border-0 mb-4">
+        <!-- Header Info -->
+        <div class="card-header bg-white py-3 border-bottom">
+            <div class="row align-items-center">
+                <div class="col-sm-6">
+                    <h5 class="fw-bold mb-1 text-primary">سند قيد يومية عامة (Journal Voucher)</h5>
+                    <div class="text-muted small">
+                        <span>الفرع: <strong>@(Model.Branch?.LocalizedName ?? "الفرع الرئيسي")</strong></span> &bull;
+                        <span>السنة المالية: <strong>@(Model.FiscalYear?.LocalizedName ?? "-")</strong></span>
+                    </div>
+                </div>
+                <div class="col-sm-6 text-sm-end mt-2 mt-sm-0">
+                    <div class="mb-1">
+                        <span class="fs-5 font-monospace fw-bold text-dark">@Model.EntryNumber</span>
+                    </div>
+                    <div>
+                        <span class="badge bg-success fs-6"><i class="fa-solid fa-check-circle me-1"></i>معتمد / نافذ</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body">
+            <!-- Metadata Row -->
+            <div class="row g-3 mb-4 bg-light p-3 rounded">
+                <div class="col-md-3 col-6">
+                    <label class="text-muted small d-block">تاريخ القيد:</label>
+                    <span class="fw-bold">@Model.EntryDate.ToString("yyyy-MM-dd")</span>
+                </div>
+                <div class="col-md-3 col-6">
+                    <label class="text-muted small d-block">الرقم المرجعي:</label>
+                    <span class="font-monospace fw-bold">@(Model.ReferenceNumber ?? "-")</span>
+                </div>
+                <div class="col-md-3 col-6">
+                    <label class="text-muted small d-block">مصدر القيد:</label>
+                    <span class="badge bg-secondary">@Model.SourceDocumentType</span>
+                    @if (Model.SourceDocumentId.HasValue)
+                    {
+                        <span class="text-muted small ms-1">(#@Model.SourceDocumentId)</span>
+                    }
+                </div>
+                <div class="col-md-3 col-6">
+                    <label class="text-muted small d-block">تاريخ الإنشاء:</label>
+                    <span class="small text-muted">@Model.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                </div>
+                <div class="col-12">
+                    <label class="text-muted small d-block">البيان العام:</label>
+                    <span class="fw-bold fs-6 text-dark">@Model.Description</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.Notes))
+                {
+                    <div class="col-12">
+                        <label class="text-muted small d-block">ملاحظات تفصيلية:</label>
+                        <span class="text-muted small">@Model.Notes</span>
+                    </div>
+                }
+            </div>
+
+            <!-- Lines Table -->
+            @{
+                bool showCostCenter = (ViewBag.EnableCostCenter == true) || Model.Lines.Any(l => l.CostCenterId.HasValue);
+            }
+            <div class="table-responsive mb-3">
+                <table class="table table-bordered align-middle">
+                    <thead class="table-dark text-center small">
+                        <tr>
+                            <th style="width: 40px;">#</th>
+                            <th style="min-width: 120px;">كود الحساب</th>
+                            <th style="min-width: 250px;">اسم الحساب المالي</th>
+                            <th style="min-width: 180px;">الحساب المساعد (Sub-Ledger)</th>
+                            <th style="width: 120px;" class="text-end">مدين (محلي)</th>
+                            <th style="width: 120px;" class="text-end">دائن (محلي)</th>
+                            <th style="width: 100px;">العملة والصرف</th>
+                            @if (showCostCenter)
+                            {
+                                <th style="min-width: 150px;">مركز التكلفة</th>
+                            }
+                            <th>بيان السطر</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in Model.Lines.OrderBy(l => l.LineNumber))
+                        {
+                            string subLedgerText = "-";
+                            if (line.SubLedgerType == SubLedgerType.Customer && line.SubLedgerId.HasValue && customers.ContainsKey(line.SubLedgerId.Value))
+                            {
+                                subLedgerText = $"عميل: {customers[line.SubLedgerId.Value]}";
+                            }
+                            else if (line.SubLedgerType == SubLedgerType.Vendor && line.SubLedgerId.HasValue && vendors.ContainsKey(line.SubLedgerId.Value))
+                            {
+                                subLedgerText = $"مورد: {vendors[line.SubLedgerId.Value]}";
+                            }
+
+                            <tr>
+                                <td class="text-center text-muted small">@line.LineNumber</td>
+                                <td class="font-monospace fw-bold text-primary">@line.Account?.Code</td>
+                                <td>
+                                    <div class="fw-bold">@line.Account?.LocalizedName</div>
+                                    @if (!string.IsNullOrWhiteSpace(line.Account?.NameEn) && line.Account?.NameEn != line.Account?.NameAr)
+                                    {
+                                        <small class="text-muted">@line.Account?.NameEn</small>
+                                    }
+                                </td>
+                                <td>
+                                    @if (subLedgerText != "-")
+                                    {
+                                        <span class="badge bg-light text-dark border">@subLedgerText</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
+                                <td class="text-end font-monospace fw-bold text-primary">
+                                    @(line.DebitLocal > 0 ? line.DebitLocal.ToString("N2") : "-")
+                                </td>
+                                <td class="text-end font-monospace fw-bold text-danger">
+                                    @(line.CreditLocal > 0 ? line.CreditLocal.ToString("N2") : "-")
+                                </td>
+                                <td class="text-center small">
+                                    <span class="badge bg-light text-dark border">@(line.Currency?.Code ?? "EGP")</span>
+                                    @if (line.ExchangeRate != 1.000000m)
+                                    {
+                                        <div class="text-muted" style="font-size: 0.72rem;">x @line.ExchangeRate.ToString("0.0000")</div>
+                                    }
+                                </td>
+                                @if (showCostCenter)
+                                {
+                                    <td>
+                                        @if (line.CostCenter != null)
+                                        {
+                                            <span class="badge bg-light text-dark border">
+                                                <i class="fa-solid fa-bullseye text-success me-1"></i> @line.CostCenter.LocalizedName
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">-</span>
+                                        }
+                                    </td>
+                                }
+                                <td class="small">@line.Description</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light fw-bold fs-6">
+                        <tr>
+                            <td colspan="4" class="text-end">الإجمالي العام (Total Local):</td>
+                            <td class="text-end text-primary font-monospace">@Model.TotalDebitLocal.ToString("N2")</td>
+                            <td class="text-end text-danger font-monospace">@Model.TotalCreditLocal.ToString("N2")</td>
+                            <td colspan="@(showCostCenter ? 3 : 2)" class="text-center">
+                                @if (Model.TotalDebitLocal == Model.TotalCreditLocal)
+                                {
+                                    <span class="badge bg-success p-2"><i class="fa-solid fa-check-circle me-1"></i>القيد متوازن</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger p-2"><i class="fa-solid fa-triangle-exclamation me-1"></i>غير متوازن</span>
+                                }
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <!-- Signatures / Footer for Print -->
+            <div class="row pt-5 mt-4 border-top text-center">
+                <div class="col-4">
+                    <span class="fw-bold d-block mb-4">المحاسب المسؤول</span>
+                    <span class="text-muted small">...................................</span>
+                </div>
+                <div class="col-4">
+                    <span class="fw-bold d-block mb-4">المراجع المالي</span>
+                    <span class="text-muted small">...................................</span>
+                </div>
+                <div class="col-4">
+                    <span class="fw-bold d-block mb-4">المدير المالي / الاعتماد</span>
+                    <span class="text-muted small">...................................</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+    <script>
+        function postCurrentEntry(id, num) {
+            if (!confirm(`هل أنت متأكد من ترحيل القيد (${num})؟\nلن يمكن تعديله أو حذفه بعد الترحيل.`)) return;
+
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            $.post('@Url.Action("Post", "JournalEntries")', { id: id, __RequestVerificationToken: token }, function (res) {
+                if (res.success) {
+                    location.reload();
+                } else {
+                    alert(res.message);
+                }
+            }).fail(function () {
+                alert('حدث خطأ أثناء محاولة ترحيل القيد.');
+            });
+        }
+    </script>
+}

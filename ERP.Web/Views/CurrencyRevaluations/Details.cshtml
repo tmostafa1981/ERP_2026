@@ -1,0 +1,405 @@
+@model ERP.Application.DTOs.Revaluation.RevaluationDetailsDto
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = $"تفاصيل إعادة التقييم - {Model.RevaluationNumber}";
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h4 class="fw-bold mb-0" style="color: var(--erp-text-dark); font-size: 19px;">
+                <i class="fa-solid fa-scale-balanced text-primary me-2 ms-0"></i> عملية تقييم رقم: <span class="text-primary">@Model.RevaluationNumber</span>
+            </h4>
+            @if (Model.Status == RevaluationStatus.Approved)
+            {
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fs-6">
+                    <i class="fa-solid fa-check me-1"></i> معتمدة ومرحلة
+                </span>
+            }
+            else if (Model.Status == RevaluationStatus.Reversed)
+            {
+                <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 fs-6">
+                    <i class="fa-solid fa-arrows-rotate me-1"></i> معكوسة
+                </span>
+            }
+            else
+            {
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 fs-6">
+                    <i class="fa-regular fa-clock me-1"></i> مسودة
+                </span>
+            }
+        </div>
+        <span class="text-muted small">
+            تاريخ التقييم: <strong>@Model.RevaluationDate.ToString("yyyy/MM/dd")</strong> | الفرع: <strong>@Model.BranchName</strong> | الشركة: <strong>@Model.CompanyName</strong>
+        </span>
+    </div>
+
+    <div class="d-flex gap-2">
+        <a asp-action="Index" class="btn btn-erp-outline btn-sm">
+            <i class="fa-solid fa-arrow-right me-1"></i> سجل العمليات
+        </a>
+        <a asp-action="Print" asp-route-id="@Model.Id" target="_blank" class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-print me-1"></i> طباعة التقرير
+        </a>
+        <a asp-action="ExportExcel" asp-route-id="@Model.Id" class="btn btn-outline-success btn-sm">
+            <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+        </a>
+
+        @if (Model.Status == RevaluationStatus.Approved && Model.ReversalJournalEntryId == null)
+        {
+            <button type="button" class="btn btn-warning btn-sm fw-bold px-3" onclick="reverseRevaluation(@Model.Id, '@Model.RevaluationNumber', '@Model.RevaluationDate.AddDays(1).ToString("yyyy-MM-dd")')">
+                <i class="fa-solid fa-rotate-left me-1"></i> عكس القيد المحاسبي
+            </button>
+        }
+
+        @if (Model.Status == RevaluationStatus.Draft)
+        {
+            <button type="button" class="btn btn-success btn-sm fw-bold px-3" onclick="approveRevaluation(@Model.Id, '@Model.RevaluationNumber')">
+                <i class="fa-solid fa-check-double me-1"></i> اعتماد وترحيل القيد
+            </button>
+            <button type="button" class="btn btn-outline-danger btn-sm px-2" onclick="deleteRevaluation(@Model.Id, '@Model.RevaluationNumber')">
+                <i class="fa-solid fa-trash me-1"></i> حذف
+            </button>
+        }
+    </div>
+</div>
+
+<!-- Header Info & Linked Entries Card -->
+<div class="row g-3 mb-3">
+    <div class="col-lg-8">
+        <div class="erp-card shadow-sm border-0 h-100">
+            <div class="erp-card-header bg-light py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+                <span class="fw-bold small text-dark"><i class="fa-solid fa-circle-info text-secondary me-2"></i> بيانات وتوجيه العملية المحاسبي</span>
+                <span class="badge bg-light text-dark border">نطاق التقييم: @Model.ScopeName</span>
+            </div>
+            <div class="erp-card-body p-3">
+                <div class="row g-2" style="font-size: 13.5px;">
+                    <div class="col-md-6">
+                        <div class="text-muted small">حساب أرباح فروق العملة غير المحققة:</div>
+                        <div class="fw-bold text-success">
+                            <i class="fa-solid fa-arrow-trend-up me-1"></i> @Model.UnrealizedGainAccountCode - @Model.UnrealizedGainAccountName
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">حساب خسائر فروق العملة غير المحققة:</div>
+                        <div class="fw-bold text-danger">
+                            <i class="fa-solid fa-arrow-trend-down me-1"></i> @Model.UnrealizedLossAccountCode - @Model.UnrealizedLossAccountName
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(Model.Notes))
+                    {
+                        <div class="col-12 mt-2 pt-2 border-top">
+                            <div class="text-muted small">ملاحظات:</div>
+                            <div>@Model.Notes</div>
+                        </div>
+                    }
+
+                    <div class="col-12 mt-2 pt-2 border-top d-flex gap-4 text-muted small">
+                        <span><i class="fa-regular fa-clock me-1"></i> تاريخ الإنشاء: @Model.CreatedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                        @if (Model.ApprovedAt.HasValue)
+                        {
+                            <span class="text-success"><i class="fa-solid fa-check me-1"></i> تاريخ الاعتماد: @Model.ApprovedAt.Value.ToString("yyyy/MM/dd HH:mm")</span>
+                        }
+                        @if (Model.ReversedAt.HasValue)
+                        {
+                            <span class="text-info"><i class="fa-solid fa-rotate-left me-1"></i> تاريخ العكس: @Model.ReversedAt.Value.ToString("yyyy/MM/dd HH:mm") (لتاريخ @Model.ReversalDate?.ToString("yyyy/MM/dd"))</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Linked Journal Entries Card (Section 9 & 10) -->
+    <div class="col-lg-4">
+        <div class="erp-card shadow-sm border-0 h-100">
+            <div class="erp-card-header bg-light py-2 px-3 border-bottom">
+                <span class="fw-bold small text-dark"><i class="fa-solid fa-link text-primary me-2"></i> القيود المحاسبية المرتبطة</span>
+            </div>
+            <div class="erp-card-body p-3 d-flex flex-column justify-content-center gap-3">
+                <!-- Original Entry -->
+                <div class="p-2 rounded bg-light border">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold small text-dark">قيد إعادة التقييم الأصلي:</span>
+                        @if (Model.JournalEntryId.HasValue)
+                        {
+                            <span class="badge bg-success">مرحل</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">غير مولد</span>
+                        }
+                    </div>
+                    @if (Model.JournalEntryId.HasValue && !string.IsNullOrEmpty(Model.JournalEntryNumber))
+                    {
+                        <a asp-controller="JournalEntries" asp-action="Details" asp-route-id="@Model.JournalEntryId" class="btn btn-erp-primary btn-sm w-100 text-center fw-bold">
+                            <i class="fa-solid fa-file-invoice me-1"></i> @Model.JournalEntryNumber
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="text-muted small">يتم إنشاء القيد آلياً عند الاعتماد.</span>
+                    }
+                </div>
+
+                <!-- Reversal Entry -->
+                <div class="p-2 rounded bg-light border">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold small text-dark">القيد العكسي (Reversal JV):</span>
+                        @if (Model.ReversalJournalEntryId.HasValue)
+                        {
+                            <span class="badge bg-info">معكوس</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-light text-muted border">لم ينشأ</span>
+                        }
+                    </div>
+                    @if (Model.ReversalJournalEntryId.HasValue && !string.IsNullOrEmpty(Model.ReversalJournalEntryNumber))
+                    {
+                        <a asp-controller="JournalEntries" asp-action="Details" asp-route-id="@Model.ReversalJournalEntryId" class="btn btn-outline-info btn-sm w-100 text-center fw-bold">
+                            <i class="fa-solid fa-rotate-left me-1"></i> @Model.ReversalJournalEntryNumber
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="text-muted small">يمكن إنشاء القيد العكسي في بداية الفترة التالية.</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-2 mb-3">
+    <div class="col-md-4">
+        <div class="p-3 bg-white rounded border shadow-sm border-start border-4 border-success">
+            <div class="text-muted small fw-bold">إجمالي أرباح فروق العملة</div>
+            <div class="fs-4 fw-bold text-success">+@Model.TotalGain.ToString("N2") <span class="fs-6 text-muted">ج.م</span></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="p-3 bg-white rounded border shadow-sm border-start border-4 border-danger">
+            <div class="text-muted small fw-bold">إجمالي خسائر فروق العملة</div>
+            <div class="fs-4 fw-bold text-danger">-@Model.TotalLoss.ToString("N2") <span class="fs-6 text-muted">ج.م</span></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="p-3 bg-white rounded border shadow-sm border-start border-4 @(Model.NetDifference >= 0 ? "border-success" : "border-danger")">
+            <div class="text-muted small fw-bold">صافي فرق إعادة التقييم</div>
+            <div class="fs-4 fw-bold @(Model.NetDifference >= 0 ? "text-success" : "text-danger")">
+                @(Model.NetDifference >= 0 ? "+" : "")@Model.NetDifference.ToString("N2") <span class="fs-6 text-muted">ج.م</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Table -->
+<div class="erp-card shadow-sm border-0 mb-4">
+    <div class="erp-card-header bg-light py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+        <span class="fw-bold small text-dark"><i class="fa-solid fa-table text-primary me-2"></i> تفاصيل الأرصدة وفروق التقييم (@Model.Lines.Count رصيد)</span>
+    </div>
+    <div class="erp-card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle mb-0 text-nowrap" style="font-size: 13px;">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center" style="width: 40px;">#</th>
+                        <th>النوع</th>
+                        <th>الكود</th>
+                        <th>الاسم</th>
+                        <th>الفرع</th>
+                        <th class="text-center">العملة</th>
+                        <th class="text-end">الرصيد الأجنبي</th>
+                        <th class="text-end">القيمة الدفترية (ج.م)</th>
+                        <th class="text-end">السعر المسجل</th>
+                        <th class="text-end">سعر التقييم</th>
+                        <th class="text-end">القيمة بعد التقييم (ج.م)</th>
+                        <th class="text-end">فرق التقييم</th>
+                        <th class="text-center">النوع</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in Model.Lines)
+                    {
+                        <tr>
+                            <td class="text-center text-muted small">@l.LineNumber</td>
+                            <td>
+                                @if (l.SourceType == RevaluationSourceType.Customer)
+                                {
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">عميل</span>
+                                }
+                                else if (l.SourceType == RevaluationSourceType.Vendor)
+                                {
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle">مورد</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">حساب عام</span>
+                                }
+                            </td>
+                            <td class="fw-bold font-monospace">@l.SourceCode</td>
+                            <td class="fw-semibold">@l.SourceName</td>
+                            <td>@l.BranchName</td>
+                            <td class="text-center">
+                                <span class="badge bg-light text-dark border">@l.CurrencyCode</span>
+                            </td>
+                            <td class="text-end fw-bold font-monospace">@l.ForeignBalance.ToString("N4")</td>
+                            <td class="text-end font-monospace text-muted">@l.CarryingLocalAmount.ToString("N4")</td>
+                            <td class="text-end font-monospace small text-muted">@l.CurrentRecordedRate.ToString("N4")</td>
+                            <td class="text-end font-monospace fw-bold text-primary">@l.ExchangeRate.ToString("N6")</td>
+                            <td class="text-end font-monospace fw-semibold">@l.RevaluedLocalAmount.ToString("N4")</td>
+                            <td class="text-end font-monospace fw-bold @(l.DifferenceType == RevaluationDifferenceType.Gain ? "text-success" : (l.DifferenceType == RevaluationDifferenceType.Loss ? "text-danger" : "text-muted"))">
+                                @(l.DifferenceType == RevaluationDifferenceType.Gain ? "+" : (l.DifferenceType == RevaluationDifferenceType.Loss ? "-" : ""))@l.DifferenceAmount.ToString("N4")
+                            </td>
+                            <td class="text-center">
+                                @if (l.DifferenceType == RevaluationDifferenceType.Gain)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                        <i class="fa-solid fa-arrow-trend-up me-1"></i> ربح
+                                    </span>
+                                }
+                                else if (l.DifferenceType == RevaluationDifferenceType.Loss)
+                                {
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                        <i class="fa-solid fa-arrow-trend-down me-1"></i> خسارة
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-muted border px-2 py-1">لا يوجد</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script src="~/lib/sweetalert2/sweetalert2.all.min.js"></script>
+<script>
+    function getAntiForgeryToken() {
+        return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    }
+
+    function approveRevaluation(id, num) {
+        Swal.fire({
+            title: 'اعتماد وترحيل القيد؟',
+            text: `سيتم اعتماد عملية التقييم (${num}) وتوليد وترحيل قيد اليومية العام في الدفاتر.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'نعم، اعتماد',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#198754'
+        }).then((res) => {
+            if (res.isConfirmed) {
+                Swal.showLoading();
+                fetch('@Url.Action("Approve")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'RequestVerificationToken': getAntiForgeryToken()
+                    },
+                    body: `id=${id}`
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire('تم الاعتماد!', data.message, 'success').then(() => location.reload());
+                    } else {
+                        Swal.fire('خطأ!', data.message, 'error');
+                    }
+                })
+                .catch(err => Swal.fire('خطأ!', 'فشل الاتصال: ' + err, 'error'));
+            }
+        });
+    }
+
+    function reverseRevaluation(id, num, defaultRevDate) {
+        Swal.fire({
+            title: 'عكس قيد إعادة التقييم',
+            html: `
+                <div class="text-start mb-2 small text-muted">سيتم إنشاء قيد يومية عكسي بالكامل لإلغاء فروق التقييم السابقة في بداية الفترة التالية.</div>
+                <div class="mb-3 text-start">
+                    <label class="form-label fw-bold small">تاريخ القيد العكسي:</label>
+                    <input type="date" id="swal-rev-date" class="form-control" value="${defaultRevDate}">
+                </div>
+            `,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'تأكيد إنشاء القيد العكسي',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#ffc107',
+            preConfirm: () => {
+                const dateVal = document.getElementById('swal-rev-date').value;
+                if (!dateVal) {
+                    Swal.showValidationMessage('يرجى تحديد تاريخ صالح للقيد العكسي');
+                }
+                return dateVal;
+            }
+        }).then((res) => {
+            if (res.isConfirmed) {
+                const revDate = res.value;
+                Swal.showLoading();
+                fetch('@Url.Action("Reverse")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'RequestVerificationToken': getAntiForgeryToken()
+                    },
+                    body: `id=${id}&reversalDate=${encodeURIComponent(revDate)}`
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire('تم العكس بنجاح!', data.message, 'success').then(() => location.reload());
+                    } else {
+                        Swal.fire('خطأ!', data.message, 'error');
+                    }
+                })
+                .catch(err => Swal.fire('خطأ!', 'فشل الاتصال بالخادم: ' + err, 'error'));
+            }
+        });
+    }
+
+    function deleteRevaluation(id, num) {
+        Swal.fire({
+            title: 'حذف مسودة إعادة التقييم؟',
+            text: `هل أنت متأكد من حذف العملية (${num})؟`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'نعم، حذف',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#dc3545'
+        }).then((res) => {
+            if (res.isConfirmed) {
+                Swal.showLoading();
+                fetch('@Url.Action("Delete")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'RequestVerificationToken': getAntiForgeryToken()
+                    },
+                    body: `id=${id}`
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire('تم الحذف!', data.message, 'success').then(() => window.location.href = '@Url.Action("Index")');
+                    } else {
+                        Swal.fire('خطأ!', data.message, 'error');
+                    }
+                })
+                .catch(err => Swal.fire('خطأ!', 'فشل الاتصال: ' + err, 'error'));
+            }
+        });
+    }
+</script>
+}

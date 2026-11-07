@@ -4,6 +4,7 @@
 
 @{
     ViewData["Title"] = Localizer["VendorCategories"];
+    var branches = ViewBag.Branches as IEnumerable<ERP.Domain.Entities.Branch> ?? Enumerable.Empty<ERP.Domain.Entities.Branch>();
 }
 
 <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
@@ -35,11 +36,24 @@
     </div>
 }
 
-<!-- Search Toolbar -->
+<!-- Search & Filter Toolbar -->
 <div class="erp-card mb-3">
     <div class="erp-card-body p-2">
         <form method="get" asp-action="Index" class="row g-2 align-items-center">
-            <div class="col-md-6 col-lg-5">
+                <div class="col-md-3">
+                    <select name="branchId" class="form-select form-select-sm erp-select2" data-lookup-entity="branch" data-placeholder="-- @Localizer["AllBranches"] --" onchange="this.form.submit()">
+                        <option value="">-- @Localizer["AllBranches"] --</option>
+                        @if (ViewBag.BranchId != null)
+                        {
+                            var selB = branches.FirstOrDefault(b => b.Id == (int)ViewBag.BranchId);
+                            if (selB != null)
+                            {
+                                <option value="@selB.Id" selected="selected">@selB.Code - @selB.LocalizedName</option>
+                            }
+                        }
+                    </select>
+                </div>
+            <div class="col-md-5">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
                     <input type="text" name="searchString" value="@ViewBag.SearchString" class="form-control erp-form-control" placeholder="@Localizer["Search"]..." />
@@ -47,7 +61,7 @@
             </div>
             <div class="col-auto">
                 <button type="submit" class="btn btn-erp-primary btn-sm px-3">@Localizer["Search"]</button>
-                @if (!string.IsNullOrEmpty(ViewBag.SearchString as string))
+                @if (!string.IsNullOrEmpty(ViewBag.SearchString as string) || ViewBag.BranchId != null)
                 {
                     <a asp-action="Index" class="btn btn-erp-outline btn-sm">@Localizer["Cancel"]</a>
                 }
@@ -61,11 +75,12 @@
     <table class="erp-table">
         <thead>
             <tr>
-                <th style="width: 100px;">@Localizer["Code"]</th>
+                <th style="width: 120px;">@Localizer["Code"]</th>
                 <th>@Localizer["NameAr"]</th>
                 <th>@Localizer["NameEn"]</th>
-                <th style="width: 120px;" class="text-center">@Localizer["Vendors"]</th>
-                <th style="width: 140px;">@Localizer["ControlAccount"]</th>
+                <th style="width: 140px;">@Localizer["Branch"]</th>
+                <th style="width: 100px;" class="text-center">@Localizer["Vendors"]</th>
+                <th style="width: 180px;">@Localizer["ControlAccount"]</th>
                 <th style="width: 100px;" class="text-center">@Localizer["Status"]</th>
                 <th style="width: 140px;" class="text-center">@Localizer["Actions"]</th>
             </tr>
@@ -76,16 +91,33 @@
                 foreach (var item in Model)
                 {
                     <tr>
-                        <td class="fw-bold text-primary">@item.Code</td>
+                        <td class="fw-bold text-primary">
+                            @item.Code
+                            @if (item.IsDefault)
+                            {
+                                <span class="badge bg-warning bg-opacity-10 text-dark border border-warning-subtle px-1 ms-1" style="font-size: 10px;">@Localizer["Default"]</span>
+                            }
+                        </td>
                         <td>@item.NameAr</td>
                         <td>@item.NameEn</td>
+                        <td>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-1" style="font-size: 11px;">
+                                @(item.Branch?.LocalizedName ?? $"Branch {item.BranchId}")
+                            </span>
+                        </td>
                         <td class="text-center">
                             <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle px-2 py-1">
                                 @(item.Vendors?.Count ?? 0)
                             </span>
                         </td>
                         <td>
-                            @if (item.ControlAccountId.HasValue)
+                            @if (item.ControlAccount != null)
+                            {
+                                <span class="badge bg-light text-primary border px-2 py-1" style="font-size: 11px;">
+                                    <i class="fa-solid fa-book-bookmark me-1"></i>@item.ControlAccount.Code - @item.ControlAccount.LocalizedName
+                                </span>
+                            }
+                            else if (item.ControlAccountId.HasValue)
                             {
                                 <span class="badge bg-light text-secondary border px-2 py-1">#@item.ControlAccountId</span>
                             }
@@ -115,54 +147,15 @@
                                         <i class="fa-solid @(item.IsActive ? "fa-ban text-warning" : "fa-check text-success")"></i>
                                     </button>
                                 </form>
-                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline m-0" onsubmit="return confirm('@Localizer["ConfirmDelete"]');">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Delete"]">
-                                        <i class="fa-solid fa-trash text-danger"></i>
-                                    </button>
-                                </form>
-                            </div>
-
-                            <!-- Edit Modal -->
-                            <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content border-0 shadow">
-                                        <form asp-action="Edit" method="post">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="Id" value="@item.Id" />
-                                            <div class="modal-header bg-light py-2">
-                                                <h6 class="modal-title fw-bold"><i class="fa-solid fa-pen text-primary me-2"></i> @Localizer["Edit"] - @item.LocalizedName</h6>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                            </div>
-                                            <div class="modal-body p-3">
-                                                <div class="mb-2">
-                                                    <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                                                    <input type="text" name="Code" value="@item.Code" class="form-control form-control-sm" required maxlength="50" />
-                                                </div>
-                                                <div class="mb-2">
-                                                    <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
-                                                    <input type="text" name="NameAr" value="@item.NameAr" class="form-control form-control-sm" required maxlength="200" dir="rtl" />
-                                                </div>
-                                                <div class="mb-2">
-                                                    <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
-                                                    <input type="text" name="NameEn" value="@item.NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" />
-                                                </div>
-                                                <div class="mb-2">
-                                                    <label class="form-label small fw-bold">@Localizer["ControlAccount"] (ID)</label>
-                                                    <input type="number" name="ControlAccountId" value="@item.ControlAccountId" class="form-control form-control-sm" placeholder="Optional" />
-                                                </div>
-                                                <div class="form-check form-switch mt-2">
-                                                    <input class="form-check-input" type="checkbox" name="IsActive" value="true" @(item.IsActive ? "checked" : "") id="editCatActive_@item.Id" />
-                                                    <label class="form-check-label small" for="editCatActive_@item.Id">@Localizer["Active"]</label>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer py-2 bg-light">
-                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
-                                                <button type="submit" class="btn btn-sm btn-erp-primary">@Localizer["Save"]</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
+                                @if (!item.IsDefault)
+                                {
+                                    <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline m-0" onsubmit="return confirm('@Localizer["ConfirmDelete"]');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Delete"]">
+                                            <i class="fa-solid fa-trash text-danger"></i>
+                                        </button>
+                                    </form>
+                                }
                             </div>
                         </td>
                     </tr>
@@ -171,12 +164,73 @@
             else
             {
                 <tr>
-                    <td colspan="7" class="text-center py-4 text-muted">@Localizer["NoDataFound"]</td>
+                    <td colspan="8" class="text-center py-4 text-muted">@Localizer["NoDataFound"]</td>
                 </tr>
             }
         </tbody>
     </table>
 </div>
+
+@if (Model != null && Model.Any())
+{
+    foreach (var item in Model)
+    {
+        <!-- Edit Modal -->
+        <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true" data-bs-focus="false">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <form asp-action="Edit" method="post" class="erp-modal-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="Id" value="@item.Id" />
+                        <input type="hidden" name="BranchId" value="@item.BranchId" />
+                        <div class="modal-header bg-light py-2">
+                            <h6 class="modal-title fw-bold"><i class="fa-solid fa-pen text-primary me-2"></i> @Localizer["Edit"] - @item.LocalizedName</h6>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-3">
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">@Localizer["Branch"]</label>
+                                <input type="text" class="form-control form-control-sm" value="@(item.Branch?.LocalizedName ?? $"Branch {item.BranchId}")" readonly disabled />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
+                                <input type="text" name="Code" value="@item.Code" class="form-control form-control-sm" required maxlength="50" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
+                                <input type="text" name="NameAr" value="@item.NameAr" class="form-control form-control-sm" required maxlength="200" dir="rtl" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
+                                <input type="text" name="NameEn" value="@item.NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">حساب الرقابة (دليل الحسابات)</label>
+                                <div class="erp-lookup-picker"
+                                     data-type="account"
+                                     data-input-name="ControlAccountId"
+                                     data-value="@item.ControlAccountId"
+                                     data-text="@(item.ControlAccount != null ? $"{item.ControlAccount.Code} - {item.ControlAccount.LocalizedName}" : "")"
+                                     data-placeholder="-- اختر حساب الرقابة (ابحث بالكود أو الاسم) --"
+                                     data-extra-filters='{"transactionalOnly":"true"}'>
+                                </div>
+                            </div>
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" name="IsActive" value="true" @(item.IsActive ? "checked" : "") id="editCatActive_@item.Id" />
+                                <input type="hidden" name="IsActive" value="false" />
+                                <label class="form-check-label small" for="editCatActive_@item.Id">@Localizer["Active"]</label>
+                            </div>
+                        </div>
+                        <div class="modal-footer py-2 bg-light">
+                            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                            <button type="submit" class="btn btn-sm btn-erp-primary">@Localizer["Save"]</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    }
+}
 
 <!-- Pagination -->
 @if (ViewBag.TotalPages > 1)
@@ -186,7 +240,7 @@
             @for (int i = 1; i <= ViewBag.TotalPages; i++)
             {
                 <li class="page-item @(i == ViewBag.CurrentPage ? "active" : "")">
-                    <a class="page-link" asp-action="Index" asp-route-page="@i" asp-route-searchString="@ViewBag.SearchString">@i</a>
+                    <a class="page-link" asp-action="Index" asp-route-page="@i" asp-route-searchString="@ViewBag.SearchString" asp-route-branchId="@ViewBag.BranchId">@i</a>
                 </li>
             }
         </ul>
@@ -194,10 +248,10 @@
 }
 
 <!-- Create Modal -->
-<div class="modal fade" id="createCategoryModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="createCategoryModal" tabindex="-1" aria-hidden="true" data-bs-focus="false">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-light py-2">
                     <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2"></i> @Localizer["AddNewVendorCategory"]</h6>
@@ -205,8 +259,35 @@
                 </div>
                 <div class="modal-body p-3">
                     <div class="mb-2">
+                        <label class="form-label small fw-bold">@Localizer["Branch"] <span class="text-danger">*</span></label>
+                        <select name="BranchId" class="form-select form-select-sm erp-select2" id="createVendCatBranch" required data-lookup-entity="branch" data-placeholder="-- @Localizer["SelectOption"] --">
+                            <option value="">-- @Localizer["SelectOption"] --</option>
+                            @if (ViewBag.DefaultBranchId != null || ViewBag.BranchId != null)
+                            {
+                                var defId = (int)(ViewBag.DefaultBranchId ?? ViewBag.BranchId);
+                                var defB = branches.FirstOrDefault(b => b.Id == defId);
+                                if (defB != null)
+                                {
+                                    <option value="@defB.Id" selected="selected">@defB.Code - @defB.LocalizedName</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                        <input type="text" name="Code" class="form-control form-control-sm" required maxlength="50" placeholder="VCAT-01" />
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="Code" id="createVCatCode" value="@ViewBag.NextCode" class="form-control form-control-sm" required maxlength="50" @(ViewBag.IsAutoCode == true ? "readonly" : "") />
+                            @if (ViewBag.IsManualAllowed == true && ViewBag.IsAutoCode == true)
+                            {
+                                <button type="button" class="btn btn-outline-secondary" id="btnToggleManualVCatCode" onclick="toggleManualVCatCode()" title="@Localizer["ManualEntry"]">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            }
+                        </div>
+                        @if (ViewBag.IsAutoCode == true)
+                        {
+                            <span class="text-muted small" id="autoVCatCodeBadge" style="font-size: 11px;">@Localizer["AutoGeneratedCode"]</span>
+                        }
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
@@ -217,11 +298,17 @@
                         <input type="text" name="NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" placeholder="Local Vendors" />
                     </div>
                     <div class="mb-2">
-                        <label class="form-label small fw-bold">@Localizer["ControlAccount"] (ID)</label>
-                        <input type="number" name="ControlAccountId" class="form-control form-control-sm" placeholder="Optional Chart of Account ID" />
+                        <label class="form-label small fw-bold">حساب الرقابة (دليل الحسابات)</label>
+                        <div class="erp-lookup-picker"
+                             data-type="account"
+                             data-input-name="ControlAccountId"
+                             data-placeholder="-- اختر حساب الرقابة (ابحث بالكود أو الاسم) --"
+                             data-extra-filters='{"transactionalOnly":"true"}'>
+                        </div>
                     </div>
                     <div class="form-check form-switch mt-2">
                         <input class="form-check-input" type="checkbox" name="IsActive" value="true" checked id="createVCatActive" />
+                        <input type="hidden" name="IsActive" value="false" />
                         <label class="form-check-label small" for="createVCatActive">@Localizer["Active"]</label>
                     </div>
                 </div>
@@ -233,3 +320,31 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    function onVendCatBranchChanged() {
+        var branchId = $('#createVendCatBranch').val();
+        if (!branchId) return;
+
+        $.getJSON('/api/sequence/preview', { entity: 'VendorCategory', branchId: branchId }, function (data) {
+            if (data && data.code) {
+                var codeInput = $('#createVCatCode');
+                if (codeInput.prop('readonly')) {
+                    codeInput.val(data.code);
+                }
+            }
+        });
+    }
+
+    function toggleManualVCatCode() {
+        $('#createVCatCode').removeAttr('readonly').focus();
+        $('#btnToggleManualVCatCode').hide();
+        $('#autoVCatCodeBadge').hide();
+    }
+
+    $(function () {
+        $('#createVendCatBranch').on('change', onVendCatBranchChanged);
+    });
+</script>
+}

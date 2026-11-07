@@ -1,13 +1,15 @@
 @model IEnumerable<ERP.Domain.Entities.Customer>
 @using Microsoft.Extensions.Localization
 @inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+@inject ERP.Application.Interfaces.ICurrentUserContext CurrentUserContext
 
 @{
     ViewData["Title"] = Localizer["Customers"];
-    var branches     = ViewBag.Branches as IEnumerable<ERP.Domain.Entities.Branch> ?? new List<ERP.Domain.Entities.Branch>();
-    var categories   = ViewBag.Categories as IEnumerable<ERP.Domain.Entities.CustomerCategory> ?? new List<ERP.Domain.Entities.CustomerCategory>();
-    var governorates = ViewBag.Governorates as IEnumerable<ERP.Domain.Entities.Governorate> ?? new List<ERP.Domain.Entities.Governorate>();
-    var currencies   = ViewBag.Currencies as IEnumerable<ERP.Domain.Entities.Currency> ?? new List<ERP.Domain.Entities.Currency>();
+    var branches         = ViewBag.Branches as IEnumerable<ERP.Domain.Entities.Branch> ?? new List<ERP.Domain.Entities.Branch>();
+    var categories       = ViewBag.Categories as IEnumerable<ERP.Domain.Entities.CustomerCategory> ?? new List<ERP.Domain.Entities.CustomerCategory>();
+    var vendorCategories = ViewBag.VendorCategories as IEnumerable<ERP.Domain.Entities.VendorCategory> ?? new List<ERP.Domain.Entities.VendorCategory>();
+    var governorates     = ViewBag.Governorates as IEnumerable<ERP.Domain.Entities.Governorate> ?? new List<ERP.Domain.Entities.Governorate>();
+    var currencies       = ViewBag.Currencies as IEnumerable<ERP.Domain.Entities.Currency> ?? new List<ERP.Domain.Entities.Currency>();
 }
 
 <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
@@ -18,9 +20,20 @@
         <span class="text-muted" style="font-size: 12.5px;">@Localizer["ManageCustomers"] (@ViewBag.TotalCount)</span>
     </div>
 
-    <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#createCustomerModal">
-        <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewCustomer"]
-    </button>
+    <div class="d-flex flex-wrap gap-2">
+        <a asp-action="DownloadTemplate" class="btn btn-outline-success btn-sm">
+            <i class="fa-solid fa-file-excel me-1 ms-0"></i> تحميل نموذج Excel
+        </a>
+        @if (CurrentUserContext.HasPermission("MasterData.Customers.Add"))
+        {
+            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#importCustomerExcelModal">
+                <i class="fa-solid fa-file-import me-1 ms-0"></i> استيراد من Excel
+            </button>
+            <button type="button" class="btn btn-erp-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createCustomerModal">
+                <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewCustomer"]
+            </button>
+        }
+    </div>
 </div>
 
 @if (TempData["SuccessMessage"] != null)
@@ -50,20 +63,22 @@
                 </div>
             </div>
             <div class="col-md-3 col-lg-3">
-                <select name="branchId" class="form-select form-select-sm erp-form-control" onchange="this.form.submit()">
+                <select name="branchId" class="form-select form-select-sm erp-select2 erp-form-control" data-lookup-entity="branch" data-placeholder="-- @Localizer["Branch"] (الكل) --" data-allow-clear="true" onchange="this.form.submit()">
                     <option value="">-- @Localizer["Branch"] (الكل) --</option>
-                    @foreach (var b in branches)
+                    @if (ViewBag.BranchId != null && branches.Any(b => b.Id == (int)ViewBag.BranchId))
                     {
-                        <option value="@b.Id" selected="@(ViewBag.BranchId == b.Id ? "selected" : null)">@b.Code - @b.LocalizedName</option>
+                        var selB = branches.First(b => b.Id == (int)ViewBag.BranchId);
+                        <option value="@selB.Id" selected>@selB.Code - @selB.LocalizedName</option>
                     }
                 </select>
             </div>
             <div class="col-md-3 col-lg-3">
-                <select name="categoryId" class="form-select form-select-sm erp-form-control" onchange="this.form.submit()">
+                <select name="categoryId" class="form-select form-select-sm erp-select2 erp-form-control" data-lookup-entity="customerCategory" data-placeholder="-- @Localizer["CustomerCategory"] (الكل) --" data-allow-clear="true" onchange="this.form.submit()">
                     <option value="">-- @Localizer["CustomerCategory"] (الكل) --</option>
-                    @foreach (var c in categories)
+                    @if (ViewBag.CategoryId != null && categories.Any(c => c.Id == (int)ViewBag.CategoryId))
                     {
-                        <option value="@c.Id" selected="@(ViewBag.CategoryId == c.Id ? "selected" : null)">@c.Code - @c.LocalizedName</option>
+                        var selC = categories.First(c => c.Id == (int)ViewBag.CategoryId);
+                        <option value="@selC.Id" selected>@selC.Code - @selC.LocalizedName</option>
                     }
                 </select>
             </div>
@@ -100,9 +115,29 @@
                 foreach (var item in Model)
                 {
                     <tr>
-                        <td class="fw-bold text-primary">@item.Code</td>
+                        <td class="fw-bold text-primary">
+                            <div>@item.Code</div>
+                            @if (item.Currency != null)
+                            {
+                                <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle px-1 py-0 mt-1" style="font-size: 10px;">
+                                    @item.Currency.Code
+                                </span>
+                            }
+                        </td>
                         <td>
-                            <div class="fw-bold">@item.LocalizedName</div>
+                            <div class="fw-bold d-flex align-items-center gap-1 flex-wrap">
+                                <span>@item.LocalizedName</span>
+                                @if (item.PartyGroupId != null)
+                                {
+                                    <button type="button"
+                                            class="badge bg-warning bg-opacity-15 text-dark border border-warning-subtle px-2 py-1 btn btn-sm"
+                                            style="font-size: 10.5px;"
+                                            title="مجموعة السجلات المرتبطة (@(item.PartyGroup?.Code ?? $"PG-{item.PartyGroupId}")) - اضغط لعرض الحسابات المرتبطة وأرصدة العملات"
+                                            onclick="openRelatedRecordsModal('Customer', @item.Id, '@Html.Raw((item.NameAr ?? "").Replace("'", "\\'"))', @item.BranchId)">
+                                        <i class="fa-solid fa-diagram-project text-primary me-1"></i>@(item.PartyGroup?.Code ?? $"PG-{item.PartyGroupId}")
+                                    </button>
+                                }
+                            </div>
                             <div class="text-muted small" style="font-size: 11px;">@item.NameAr &bull; @item.NameEn</div>
                         </td>
                         <td>
@@ -110,9 +145,50 @@
                                 @(item.Branch?.LocalizedName ?? $"Branch {item.BranchId}")
                             </span>
                         </td>
-                        <td>@(item.CustomerCategory?.LocalizedName ?? "—")</td>
+                        <td>
+                            <div>@(item.CustomerCategory?.LocalizedName ?? "—")</div>
+                            @if (item.FinancialAccount != null)
+                            {
+                                <div class="mt-1">
+                                    <span class="badge bg-light text-primary border" title="الحساب المالي في دليل الحسابات" style="font-size: 11px;">
+                                        <i class="fa-solid fa-book-bookmark me-1"></i>@item.FinancialAccount.Code - @item.FinancialAccount.LocalizedName
+                                    </span>
+                                </div>
+                            }
+                            else if (item.CustomerCategory?.ControlAccount != null)
+                            {
+                                <div class="mt-1">
+                                    <span class="badge bg-light text-secondary border" title="حساب الفئة الافتراضي" style="font-size: 11px;">
+                                        <i class="fa-solid fa-sitemap me-1"></i>@item.CustomerCategory.ControlAccount.Code - @item.CustomerCategory.ControlAccount.LocalizedName (حساب الفئة)
+                                    </span>
+                                </div>
+                            }
+                        </td>
                         <td>@(item.Salesman?.LocalizedName ?? "—")</td>
-                        <td>@(item.Mobile ?? item.Phone ?? "—")</td>
+                        <td>
+                            <div>
+                                <i class="fa-solid fa-mobile-screen text-primary me-1 ms-0"></i>
+                                <span>@(item.Mobile ?? item.Phone ?? "—")</span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(item.Mobile2))
+                            {
+                                <div class="text-muted small" style="font-size: 11px;">
+                                    <i class="fa-solid fa-phone-flip text-secondary me-1 ms-0"></i>@item.Mobile2
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(item.Email))
+                            {
+                                <div class="text-muted small" style="font-size: 11px;">
+                                    <i class="fa-solid fa-envelope text-info me-1 ms-0"></i>@item.Email
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(item.Notes))
+                            {
+                                <div class="text-muted small text-truncate" style="max-width: 150px; font-size: 10.5px;" title="@item.Notes">
+                                    <i class="fa-solid fa-note-sticky text-warning me-1 ms-0"></i>@item.Notes
+                                </div>
+                            }
+                        </td>
                         <td>@(item.City?.LocalizedName ?? item.Governorate?.LocalizedName ?? "—")</td>
                         <td class="text-center">
                             @if (item.IsActive)
@@ -126,153 +202,30 @@
                         </td>
                         <td class="text-center">
                             <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Edit"]" data-bs-toggle="modal" data-bs-target="#editCustomerModal_@item.Id">
-                                    <i class="fa-solid fa-pen-to-square text-primary"></i>
+                                <button type="button" class="btn btn-erp-outline p-1 px-2" title="السجلات المرتبطة وتعدد العملات (Related Records)" onclick="openRelatedRecordsModal('Customer', @item.Id, '@Html.Raw((item.NameAr ?? "").Replace("'", "\\'"))', @item.BranchId)">
+                                    <i class="fa-solid fa-link text-info"></i>
                                 </button>
-                                <form asp-action="ToggleStatus" asp-route-id="@item.Id" method="post" class="d-inline m-0">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@(item.IsActive ? Localizer["Inactive"] : Localizer["Active"])">
-                                        <i class="fa-solid @(item.IsActive ? "fa-ban text-warning" : "fa-check text-success")"></i>
+                                @if (CurrentUserContext.HasPermission("MasterData.Customers.Edit"))
+                                {
+                                    <button type="button" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Edit"]" data-bs-toggle="modal" data-bs-target="#editCustomerModal_@item.Id">
+                                        <i class="fa-solid fa-pen-to-square text-primary"></i>
                                     </button>
-                                </form>
-                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline m-0" onsubmit="return confirm('@Localizer["ConfirmDelete"]');">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Delete"]">
-                                        <i class="fa-solid fa-trash text-danger"></i>
-                                    </button>
-                                </form>
-                            </div>
-
-                            <!-- Edit Modal -->
-                            <div class="modal fade text-start" id="editCustomerModal_@item.Id" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog modal-lg modal-dialog-centered">
-                                    <div class="modal-content border-0 shadow">
-                                        <form asp-action="Edit" method="post">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="Id" value="@item.Id" />
-                                            <div class="modal-header bg-light py-2">
-                                                <h6 class="modal-title fw-bold"><i class="fa-solid fa-pen text-primary me-2"></i> @Localizer["Edit"] - @item.LocalizedName</h6>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                            </div>
-                                            <div class="modal-body p-3">
-                                                <div class="row g-2">
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Branch"] <span class="text-danger">*</span></label>
-                                                        <select name="BranchId" class="form-select form-select-sm" id="editBranchSelect_@item.Id" required onchange="loadSalesmen('editBranchSelect_@item.Id', 'editSalesmanSelect_@item.Id', @(item.SalesmanId ?? 0))">
-                                                            @foreach (var b in branches)
-                                                            {
-                                                                <option value="@b.Id" selected="@(item.BranchId == b.Id ? "selected" : null)">@b.Code - @b.LocalizedName</option>
-                                                            }
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                                                        <input type="text" name="Code" value="@item.Code" class="form-control form-control-sm" required maxlength="50" />
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["CustomerCategory"] <span class="text-danger">*</span></label>
-                                                        <select name="CustomerCategoryId" class="form-select form-select-sm" required>
-                                                            @foreach (var c in categories)
-                                                            {
-                                                                <option value="@c.Id" selected="@(item.CustomerCategoryId == c.Id ? "selected" : null)">@c.Code - @c.LocalizedName</option>
-                                                            }
-                                                        </select>
-                                                    </div>
-
-                                                    <div class="col-md-6">
-                                                        <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
-                                                        <input type="text" name="NameAr" value="@item.NameAr" class="form-control form-control-sm" required maxlength="200" dir="rtl" />
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
-                                                        <input type="text" name="NameEn" value="@item.NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" />
-                                                    </div>
-
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Salesman"]</label>
-                                                        <select name="SalesmanId" class="form-select form-select-sm" id="editSalesmanSelect_@item.Id">
-                                                            <option value="">-- @Localizer["SelectOption"] --</option>
-                                                            @if (item.Salesman != null)
-                                                            {
-                                                                <option value="@item.SalesmanId" selected>@item.Salesman.Code - @item.Salesman.LocalizedName</option>
-                                                            }
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Currency"]</label>
-                                                        <select name="CurrencyId" class="form-select form-select-sm">
-                                                            <option value="">-- @Localizer["SelectOption"] --</option>
-                                                            @foreach (var cur in currencies)
-                                                            {
-                                                                <option value="@cur.Id" selected="@(item.CurrencyId == cur.Id ? "selected" : null)">@cur.Code - @cur.LocalizedName</option>
-                                                            }
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["TaxPayerType"]</label>
-                                                        <input type="text" name="TaxPayerType" value="@item.TaxPayerType" class="form-control form-control-sm" maxlength="50" placeholder="Corporate / Individual" />
-                                                    </div>
-
-                                                    <div class="col-md-6">
-                                                        <label class="form-label small fw-bold">@Localizer["TaxNumber"]</label>
-                                                        <input type="text" name="TaxNumber" value="@item.TaxNumber" class="form-control form-control-sm" maxlength="50" />
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label small fw-bold">@Localizer["CommercialRegister"]</label>
-                                                        <input type="text" name="CommercialRegister" value="@item.CommercialRegister" class="form-control form-control-sm" maxlength="50" />
-                                                    </div>
-
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Governorate"]</label>
-                                                        <select name="GovernorateId" class="form-select form-select-sm" id="editGovSelect_@item.Id" onchange="loadCities('editGovSelect_@item.Id', 'editCitySelect_@item.Id', @(item.CityId ?? 0))">
-                                                            <option value="">-- @Localizer["SelectOption"] --</option>
-                                                            @foreach (var g in governorates)
-                                                            {
-                                                                <option value="@g.Id" selected="@(item.GovernorateId == g.Id ? "selected" : null)">@g.Code - @g.LocalizedName</option>
-                                                            }
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["City"]</label>
-                                                        <select name="CityId" class="form-select form-select-sm" id="editCitySelect_@item.Id">
-                                                            <option value="">-- @Localizer["SelectOption"] --</option>
-                                                            @if (item.City != null)
-                                                            {
-                                                                <option value="@item.CityId" selected>@item.City.Code - @item.City.LocalizedName</option>
-                                                            }
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Address"]</label>
-                                                        <input type="text" name="Address" value="@item.Address" class="form-control form-control-sm" maxlength="500" />
-                                                    </div>
-
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Mobile"]</label>
-                                                        <input type="text" name="Mobile" value="@item.Mobile" class="form-control form-control-sm" maxlength="50" />
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Phone"]</label>
-                                                        <input type="text" name="Phone" value="@item.Phone" class="form-control form-control-sm" maxlength="50" />
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold">@Localizer["Email"]</label>
-                                                        <input type="email" name="Email" value="@item.Email" class="form-control form-control-sm" maxlength="100" />
-                                                    </div>
-                                                </div>
-
-                                                <div class="form-check form-switch mt-3">
-                                                    <input class="form-check-input" type="checkbox" name="IsActive" value="true" @(item.IsActive ? "checked" : "") id="editCustActive_@item.Id" />
-                                                    <label class="form-check-label small" for="editCustActive_@item.Id">@Localizer["Active"]</label>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer py-2 bg-light">
-                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
-                                                <button type="submit" class="btn btn-sm btn-erp-primary">@Localizer["Save"]</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
+                                    <form asp-action="ToggleStatus" asp-route-id="@item.Id" method="post" class="d-inline m-0">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@(item.IsActive ? Localizer["Inactive"] : Localizer["Active"])">
+                                            <i class="fa-solid @(item.IsActive ? "fa-ban text-warning" : "fa-check text-success")"></i>
+                                        </button>
+                                    </form>
+                                }
+                                @if (CurrentUserContext.HasPermission("MasterData.Customers.Delete"))
+                                {
+                                    <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline m-0" onsubmit="return confirm('@Localizer["ConfirmDelete"]');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Delete"]">
+                                            <i class="fa-solid fa-trash text-danger"></i>
+                                        </button>
+                                    </form>
+                                }
                             </div>
                         </td>
                     </tr>
@@ -287,6 +240,196 @@
         </tbody>
     </table>
 </div>
+
+@if (Model != null && Model.Any() && CurrentUserContext.HasPermission("MasterData.Customers.Edit"))
+{
+    foreach (var item in Model)
+    {
+        var editAccId = item.FinancialAccountId ?? item.CustomerCategory?.ControlAccountId;
+        var editAccText = item.FinancialAccount != null
+            ? $"{item.FinancialAccount.Code} - {item.FinancialAccount.LocalizedName}"
+            : (item.CustomerCategory?.ControlAccount != null ? $"{item.CustomerCategory.ControlAccount.Code} - {item.CustomerCategory.ControlAccount.LocalizedName}" : "");
+
+        <!-- Edit Modal -->
+        <div class="modal fade text-start" id="editCustomerModal_@item.Id" tabindex="-1" aria-hidden="true" data-bs-focus="false">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <form asp-action="Edit" method="post" class="erp-modal-form cust-vendor-account-required-form">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="Id" value="@item.Id" />
+                        <input type="hidden" name="RowVersion" value="@(item.RowVersion != null ? Convert.ToBase64String(item.RowVersion) : "")" />
+                        <div class="modal-header bg-light py-2">
+                            <h6 class="modal-title fw-bold"><i class="fa-solid fa-pen text-primary me-2"></i> @Localizer["Edit"] - @item.LocalizedName</h6>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-3">
+                             <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["Branch"] <span class="text-danger">*</span></label>
+                                    <select name="BranchId" class="form-select form-select-sm erp-select2" id="editBranchSelect_@item.Id" required data-lookup-entity="branch">
+                                        @if (item.Branch != null)
+                                        {
+                                            <option value="@item.BranchId" selected>@item.Branch.Code - @item.Branch.LocalizedName</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
+                                    <input type="text" name="Code" value="@item.Code" class="form-control form-control-sm" required maxlength="50" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["CustomerCategory"] <span class="text-danger">*</span></label>
+                                    <select name="CustomerCategoryId" class="form-select form-select-sm erp-select2" id="editCustCatSelect_@item.Id" required data-lookup-entity="customerCategory" data-branch-selector="#editBranchSelect_@item.Id">
+                                        @if (item.CustomerCategory != null)
+                                        {
+                                            <option value="@item.CustomerCategoryId" selected>@item.CustomerCategory.Code - @item.CustomerCategory.LocalizedName</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
+                                    <input type="text" name="NameAr" value="@item.NameAr" class="form-control form-control-sm" required maxlength="200" dir="rtl" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
+                                    <input type="text" name="NameEn" value="@item.NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" />
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["Salesman"]</label>
+                                    <select name="SalesmanId" class="form-select form-select-sm erp-select2" id="editSalesmanSelect_@item.Id" data-lookup-entity="salesman" data-branch-selector="#editBranchSelect_@item.Id" data-allow-clear="true" data-placeholder="-- @Localizer["SelectOption"] --">
+                                        <option value="">-- @Localizer["SelectOption"] --</option>
+                                        @if (item.Salesman != null)
+                                        {
+                                            <option value="@item.SalesmanId" selected>@item.Salesman.Code - @item.Salesman.LocalizedName</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["Currency"]</label>
+                                    <select name="CurrencyId" class="form-select form-select-sm erp-select2" data-lookup-entity="currency" data-allow-clear="true" data-placeholder="-- @Localizer["SelectOption"] --">
+                                        <option value="">-- @Localizer["SelectOption"] --</option>
+                                        @if (item.Currency != null)
+                                        {
+                                            <option value="@item.CurrencyId" selected>@item.Currency.Code - @item.Currency.LocalizedName</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">الحساب المالي (دليل الحسابات) <span class="text-danger">*</span></label>
+                                    <div class="erp-lookup-picker"
+                                         id="editCustFinancialAccountPicker_@item.Id"
+                                         data-type="account"
+                                         data-input-name="FinancialAccountId"
+                                         data-value="@editAccId"
+                                         data-text="@editAccText"
+                                         data-placeholder="-- اختر الحساب المالي للعميل (إلزامي) --"
+                                         data-extra-filters='{"transactionalOnly":"true"}'>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["TaxPayerType"]</label>
+                                    <input type="text" name="TaxPayerType" value="@item.TaxPayerType" class="form-control form-control-sm" maxlength="50" placeholder="Corporate / Individual" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["TaxNumber"]</label>
+                                    <input type="text" name="TaxNumber" value="@item.TaxNumber" class="form-control form-control-sm" maxlength="50" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["CommercialRegister"]</label>
+                                    <input type="text" name="CommercialRegister" value="@item.CommercialRegister" class="form-control form-control-sm" maxlength="50" />
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["Governorate"]</label>
+                                    <select name="GovernorateId" class="form-select form-select-sm erp-select2" id="editGovSelect_@item.Id" data-lookup-entity="governorate" data-allow-clear="true" data-placeholder="-- @Localizer["SelectOption"] --">
+                                        <option value="">-- @Localizer["SelectOption"] --</option>
+                                        @if (item.Governorate != null)
+                                        {
+                                            <option value="@item.GovernorateId" selected>@item.Governorate.Code - @item.Governorate.LocalizedName</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["City"]</label>
+                                    <select name="CityId" class="form-select form-select-sm erp-select2" id="editCitySelect_@item.Id" data-lookup-entity="city" data-gov-selector="#editGovSelect_@item.Id" data-allow-clear="true" data-placeholder="-- @Localizer["SelectOption"] --">
+                                        <option value="">-- @Localizer["SelectOption"] --</option>
+                                        @if (item.City != null)
+                                        {
+                                            <option value="@item.CityId" selected>@item.City.Code - @item.City.LocalizedName</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">@Localizer["Address"]</label>
+                                    <input type="text" name="Address" value="@item.Address" class="form-control form-control-sm" maxlength="500" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">@Localizer["Mobile1"]</label>
+                                    <input type="text" name="Mobile" value="@item.Mobile" class="form-control form-control-sm" maxlength="50" placeholder="01xxxxxxxxx" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">@Localizer["Mobile2"]</label>
+                                    <input type="text" name="Mobile2" value="@item.Mobile2" class="form-control form-control-sm" maxlength="50" placeholder="01xxxxxxxxx" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">@Localizer["Phone"]</label>
+                                    <input type="text" name="Phone" value="@item.Phone" class="form-control form-control-sm" maxlength="50" placeholder="02xxxxxxx" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold">@Localizer["Email"]</label>
+                                    <input type="email" name="Email" value="@item.Email" class="form-control form-control-sm" maxlength="100" placeholder="info@example.com" />
+                                </div>
+
+                                <div class="col-12 mt-2">
+                                    <label class="form-label small fw-bold">@Localizer["Notes"]</label>
+                                    <textarea name="Notes" class="form-control form-control-sm" rows="2" maxlength="1000" placeholder="@Localizer["Notes"]...">@item.Notes</textarea>
+                                </div>
+                            </div>
+
+                            <div class="form-check form-switch mt-3">
+                                <input class="form-check-input" type="checkbox" name="IsActive" value="true" @(item.IsActive ? "checked" : "") id="editCustActive_@item.Id" />
+                                <label class="form-check-label small" for="editCustActive_@item.Id">@Localizer["Active"]</label>
+                            </div>
+
+                            <!-- السجلات المرتبطة – Related Records Section inside Edit Customer Modal -->
+                            <div class="card border-info border-opacity-50 bg-light bg-opacity-50 mt-3">
+                                <div class="card-header bg-info bg-opacity-10 py-2 d-flex justify-content-between align-items-center">
+                                    <div class="fw-bold small text-dark">
+                                        <i class="fa-solid fa-diagram-project text-primary me-1"></i>
+                                        السجلات المرتبطة – Related Records
+                                        @if (item.PartyGroupId != null)
+                                        {
+                                            <span class="badge bg-primary ms-1">@(item.PartyGroup?.Code ?? $"PG-{item.PartyGroupId}")</span>
+                                        }
+                                    </div>
+                                    <button type="button"
+                                            class="btn btn-xs btn-primary py-1 px-2"
+                                            style="font-size: 11.5px;"
+                                            onclick="openRelatedRecordsModal('Customer', @item.Id, '@Html.Raw((item.NameAr ?? "").Replace("'", "\\'"))', @item.BranchId)">
+                                        <i class="fa-solid fa-up-right-from-square me-1"></i> إدارة الربط اليدوي وعرض أرصدة العملات
+                                    </button>
+                                </div>
+                                <div class="card-body p-2 small">
+                                    <div class="text-muted" style="font-size: 11.5px;">
+                                        يمكنك ربط هذا العميل بسجلات عملاء أخرى بعملات مختلفة أو بسجلات موردين مرتبطة بنفس المجموعة، أو فك الارتباط دون حذف السجل أو التأثير على الحركات السابقة.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer py-2 bg-light">
+                            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">@Localizer["Cancel"]</button>
+                            <button type="submit" class="btn btn-sm btn-erp-primary">@Localizer["Save"]</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    }
+}
 
 <!-- Pagination -->
 @if (ViewBag.TotalPages > 1)
@@ -303,95 +446,123 @@
     </nav>
 }
 
-<!-- Create Modal -->
-<div class="modal fade" id="createCustomerModal" tabindex="-1" aria-hidden="true">
+@if (CurrentUserContext.HasPermission("MasterData.Customers.Add"))
+{
+    var defCustCat = categories.FirstOrDefault(c => c.IsDefault) ?? categories.FirstOrDefault();
+    var defCustAccId = defCustCat?.ControlAccountId;
+    var defCustAccText = defCustCat?.ControlAccount != null ? $"{defCustCat.ControlAccount.Code} - {defCustCat.ControlAccount.LocalizedName}" : "";
+
+    <!-- Create Modal -->
+    <div class="modal fade" id="createCustomerModal" tabindex="-1" aria-hidden="true" data-bs-focus="false">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" class="erp-modal-form cust-vendor-account-required-form">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-light py-2">
                     <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2"></i> @Localizer["AddNewCustomer"]</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-3">
+                    <input type="hidden" name="isManualCode" id="createCustIsManualCode" value="false" />
                     <div class="row g-2">
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["Branch"] <span class="text-danger">*</span></label>
-                            <select name="BranchId" class="form-select form-select-sm" id="createCustBranch" required onchange="loadSalesmen('createCustBranch', 'createCustSalesman', 0)">
-                                <option value="">-- @Localizer["SelectOption"] --</option>
-                                @foreach (var b in branches)
+                            <select name="BranchId" class="form-select form-select-sm erp-select2" id="createCustBranch" required data-lookup-entity="branch" onchange="onCustBranchChanged()">
+                                @if (ViewBag.DefaultBranchId != null && branches.Any(b => b.Id == (int)ViewBag.DefaultBranchId))
                                 {
-                                    <option value="@b.Id" selected="@(ViewBag.BranchId == b.Id ? "selected" : null)">@b.Code - @b.LocalizedName</option>
+                                    var defB = branches.First(b => b.Id == (int)ViewBag.DefaultBranchId);
+                                    <option value="@defB.Id" selected>@defB.Code - @defB.LocalizedName</option>
+                                }
+                                else if (ViewBag.BranchId != null && branches.Any(b => b.Id == (int)ViewBag.BranchId))
+                                {
+                                    var defB = branches.First(b => b.Id == (int)ViewBag.BranchId);
+                                    <option value="@defB.Id" selected>@defB.Code - @defB.LocalizedName</option>
                                 }
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                            <input type="text" name="Code" class="form-control form-control-sm" required maxlength="50" placeholder="1001" />
+                            <div class="input-group input-group-sm">
+                                <input type="text" name="Code" id="createCustCode" value="@ViewBag.NextCode" class="form-control form-control-sm" required maxlength="50" @(ViewBag.IsAutoCode == true ? "readonly" : "") />
+                                @if (ViewBag.IsManualAllowed == true && ViewBag.IsAutoCode == true)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary" id="btnToggleManualCustCode" onclick="toggleManualCustCode()" title="@Localizer["ManualEntry"]">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                }
+                            </div>
+                            @if (ViewBag.IsAutoCode == true)
+                            {
+                                <span class="text-muted small" id="autoCustCodeBadge" style="font-size: 11px;">@Localizer["AutoGeneratedCode"]</span>
+                            }
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["CustomerCategory"] <span class="text-danger">*</span></label>
-                            <select name="CustomerCategoryId" class="form-select form-select-sm" required>
+                            <select name="CustomerCategoryId" class="form-select form-select-sm erp-select2" id="createCustCategory" required data-lookup-entity="customerCategory" data-branch-selector="#createCustBranch" data-placeholder="-- @Localizer["SelectOption"] --">
                                 <option value="">-- @Localizer["SelectOption"] --</option>
-                                @foreach (var c in categories)
+                                @if (defCustCat != null)
                                 {
-                                    <option value="@c.Id" selected="@(ViewBag.CategoryId == c.Id ? "selected" : null)">@c.Code - @c.LocalizedName</option>
+                                    <option value="@defCustCat.Id" selected>@defCustCat.Code - @defCustCat.LocalizedName @(defCustCat.IsDefault ? "(افتراضي)" : "")</option>
                                 }
                             </select>
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
-                            <input type="text" name="NameAr" class="form-control form-control-sm" required maxlength="200" dir="rtl" placeholder="شركة الأمل للتجارة" />
+                            <input type="text" name="NameAr" id="createCustNameAr" class="form-control form-control-sm" required maxlength="200" dir="rtl" placeholder="شركة النور" oninput="updateMultiCurrencyNamePreview()" />
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
-                            <input type="text" name="NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" placeholder="Al-Amal Trading Co." />
+                            <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-muted fw-normal" style="font-size:10.5px;">(إذا تُرك فارغاً يستخدم الاسم العربي تلقائياً)</span></label>
+                            <input type="text" name="NameEn" id="createCustNameEn" class="form-control form-control-sm" maxlength="200" dir="ltr" placeholder="Al-Noor Co." oninput="updateMultiCurrencyNamePreview()" />
                         </div>
 
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["Salesman"]</label>
-                            <select name="SalesmanId" class="form-select form-select-sm" id="createCustSalesman">
+                            <select name="SalesmanId" class="form-select form-select-sm erp-select2" id="createCustSalesman" data-lookup-entity="salesman" data-branch-selector="#createCustBranch" data-allow-clear="true" data-placeholder="-- @Localizer["SelectOption"] --">
                                 <option value="">-- @Localizer["SelectOption"] --</option>
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["Currency"]</label>
-                            <select name="CurrencyId" class="form-select form-select-sm">
+                            <select name="CurrencyId" class="form-select form-select-sm erp-select2" data-lookup-entity="currency" data-allow-clear="true" data-placeholder="-- @Localizer["SelectOption"] --">
                                 <option value="">-- @Localizer["SelectOption"] --</option>
-                                @foreach (var cur in currencies)
-                                {
-                                    <option value="@cur.Id">@cur.Code - @cur.LocalizedName</option>
-                                }
                             </select>
                         </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">الحساب المالي (دليل الحسابات) <span class="text-danger">*</span></label>
+                            <div class="erp-lookup-picker"
+                                 id="createCustFinancialAccountPicker"
+                                 data-type="account"
+                                 data-input-name="FinancialAccountId"
+                                 data-value="@defCustAccId"
+                                 data-text="@defCustAccText"
+                                 data-placeholder="-- اختر الحساب المالي للعميل (إلزامي) --"
+                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                            </div>
+                        </div>
+
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["TaxPayerType"]</label>
                             <input type="text" name="TaxPayerType" class="form-control form-control-sm" maxlength="50" placeholder="Corporate / Individual" />
                         </div>
-
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["TaxNumber"]</label>
                             <input type="text" name="TaxNumber" class="form-control form-control-sm" maxlength="50" placeholder="123-456-789" />
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["CommercialRegister"]</label>
                             <input type="text" name="CommercialRegister" class="form-control form-control-sm" maxlength="50" />
                         </div>
 
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["Governorate"]</label>
-                            <select name="GovernorateId" class="form-select form-select-sm" id="createCustGov" onchange="loadCities('createCustGov', 'createCustCity', 0)">
+                            <select name="GovernorateId" class="form-select form-select-sm erp-select2" id="createCustGov" data-lookup-entity="governorate" data-allow-clear="true" data-placeholder="-- @Localizer["SelectOption"] --">
                                 <option value="">-- @Localizer["SelectOption"] --</option>
-                                @foreach (var g in governorates)
-                                {
-                                    <option value="@g.Id">@g.Code - @g.LocalizedName</option>
-                                }
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small fw-bold">@Localizer["City"]</label>
-                            <select name="CityId" class="form-select form-select-sm" id="createCustCity">
+                            <select name="CityId" class="form-select form-select-sm erp-select2" id="createCustCity" data-lookup-entity="city" data-gov-selector="#createCustGov" data-allow-clear="true" data-placeholder="-- @Localizer["SelectOption"] --">
                                 <option value="">-- @Localizer["SelectOption"] --</option>
                             </select>
                         </div>
@@ -400,17 +571,157 @@
                             <input type="text" name="Address" class="form-control form-control-sm" maxlength="500" />
                         </div>
 
-                        <div class="col-md-4">
-                            <label class="form-label small fw-bold">@Localizer["Mobile"]</label>
-                            <input type="text" name="Mobile" class="form-control form-control-sm" maxlength="50" />
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">@Localizer["Mobile1"]</label>
+                            <input type="text" name="Mobile" class="form-control form-control-sm" maxlength="50" placeholder="01xxxxxxxxx" />
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">@Localizer["Mobile2"]</label>
+                            <input type="text" name="Mobile2" class="form-control form-control-sm" maxlength="50" placeholder="01xxxxxxxxx" />
+                        </div>
+                        <div class="col-md-3">
                             <label class="form-label small fw-bold">@Localizer["Phone"]</label>
-                            <input type="text" name="Phone" class="form-control form-control-sm" maxlength="50" />
+                            <input type="text" name="Phone" class="form-control form-control-sm" maxlength="50" placeholder="02xxxxxxx" />
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label small fw-bold">@Localizer["Email"]</label>
-                            <input type="email" name="Email" class="form-control form-control-sm" maxlength="100" />
+                            <input type="email" name="Email" class="form-control form-control-sm" maxlength="100" placeholder="info@example.com" />
+                        </div>
+
+                        <div class="col-12 mt-2">
+                            <label class="form-label small fw-bold">@Localizer["Notes"]</label>
+                            <textarea name="Notes" class="form-control form-control-sm" rows="2" maxlength="1000" placeholder="@Localizer["Notes"]..."></textarea>
+                        </div>
+
+                        <!-- أولًا: إنشاء حسابات إضافية للعميل – Multiple Currency Accounts -->
+                        <div class="col-12 mt-3">
+                            <div class="card border-primary border-opacity-25 bg-light">
+                                <div class="card-header bg-primary bg-opacity-10 py-2 d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold small text-primary">
+                                        <i class="fa-solid fa-coins me-1"></i> إنشاء حسابات إضافية للعميل – Multiple Currency Accounts
+                                    </span>
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary py-0 px-2" style="font-size: 11px;" onclick="selectAllCustomerCurrencies(true)">تحديد العملات الـ 4</button>
+                                        <button type="button" class="btn btn-outline-secondary py-0 px-2" style="font-size: 11px;" onclick="selectAllCustomerCurrencies(false)">مسح التحديد</button>
+                                    </div>
+                                </div>
+                                <div class="card-body p-2">
+                                    <div class="text-muted small mb-2" style="font-size: 11.5px;">
+                                        اختر العملات المطلوبة لإنشاء سجلات عملاء مستقلة بنفس البيانات الأساسية (مع كود مستقل وتسمية تلقائية بالعملة لكل سجل وربطها في مجموعة واحدة):
+                                    </div>
+                                    <div class="row g-2" id="custMultiCurrencyCheckboxes">
+                                        @{
+                                            var preferredOrder = new[] { "EGP", "USD", "EUR", "CNY" };
+                                            var orderedCurrencies = currencies
+                                                .OrderBy(c => {
+                                                    var idx = Array.FindIndex(preferredOrder, p => p.Equals(c.Code, StringComparison.OrdinalIgnoreCase));
+                                                    return idx >= 0 ? idx : 99;
+                                                })
+                                                .ThenBy(c => c.Code)
+                                                .ToList();
+                                        }
+                                        @foreach (var curr in orderedCurrencies)
+                                        {
+                                            var isCore4 = preferredOrder.Any(p => p.Equals(curr.Code, StringComparison.OrdinalIgnoreCase));
+                                            <div class="col-md-3 col-6">
+                                                <div class="form-check border rounded bg-white px-2 py-1 d-flex align-items-center gap-2 @(isCore4 ? "border-primary-subtle" : "")">
+                                                    <input class="form-check-input m-0 cust-multi-curr-chk"
+                                                           type="checkbox"
+                                                           name="selectedCustomerCurrencyIds"
+                                                           value="@curr.Id"
+                                                           data-code="@curr.Code"
+                                                           data-name-ar="@curr.NameAr"
+                                                           id="chkCustCurr_@curr.Id"
+                                                           onchange="updateMultiCurrencyNamePreview()" />
+                                                    <label class="form-check-label small fw-bold w-100" for="chkCustCurr_@curr.Id" style="cursor:pointer; font-size: 12px;">
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary me-1">@curr.Code</span>
+                                                        @curr.NameAr
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+
+                                    <!-- Live Naming Preview -->
+                                    <div id="multiCurrencyNamingPreview" class="mt-2 p-2 rounded bg-white border d-none">
+                                        <div class="fw-bold text-secondary mb-1" style="font-size: 11px;">
+                                            <i class="fa-solid fa-eye text-info me-1"></i> معاينة السجلات التي سيتم إنشاؤها وربطها تلقائياً:
+                                        </div>
+                                        <div id="multiCurrencyNamingPreviewList" class="d-flex flex-wrap gap-1"></div>
+                                    </div>
+
+                                    <!-- رابعًا: خيار إنشاء العميل كمورد في نفس الوقت -->
+                                    @if (CurrentUserContext.HasPermission("MasterData.Vendors.Add"))
+                                    {
+                                        var defVewCat = vendorCategories.FirstOrDefault(vc => vc.IsDefault) ?? vendorCategories.FirstOrDefault();
+                                        <hr class="my-2" />
+                                        <div class="form-check">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   name="createLinkedVendor"
+                                                   value="true"
+                                                   id="chkCreateLinkedVendor"
+                                                   onchange="toggleLinkedVendorPanel()" />
+                                            <label class="form-check-label fw-bold small text-success" for="chkCreateLinkedVendor" style="cursor:pointer;">
+                                                <i class="fa-solid fa-truck-field me-1"></i> إنشاء مورد مرتبط بهذا العميل (في نفس المجموعة)
+                                            </label>
+                                        </div>
+
+                                        <div id="linkedVendorOptionsPanel" class="mt-2 p-2 rounded border border-success border-opacity-25 bg-white d-none">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <span class="small fw-bold text-dark" style="font-size: 11.5px;">عملات حسابات المورد المرتبط المطلوب إنشاؤها:</span>
+                                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-2" style="font-size: 11px;" onclick="copyCustomerCurrenciesToVendor()">
+                                                    <i class="fa-solid fa-copy me-1"></i> مطابقة عملات العميل
+                                                </button>
+                                            </div>
+                                            <div class="row g-2 mb-2">
+                                                @foreach (var curr in orderedCurrencies)
+                                                {
+                                                    <div class="col-md-3 col-6">
+                                                        <div class="form-check border rounded bg-light px-2 py-1 d-flex align-items-center gap-2">
+                                                            <input class="form-check-input m-0 vend-multi-curr-chk"
+                                                                   type="checkbox"
+                                                                   name="selectedVendorCurrencyIds"
+                                                                   value="@curr.Id"
+                                                                   data-code="@curr.Code"
+                                                                   id="chkVendCurr_@curr.Id"
+                                                                   onchange="updateMultiCurrencyNamePreview()" />
+                                                            <label class="form-check-label small fw-bold w-100" for="chkVendCurr_@curr.Id" style="cursor:pointer; font-size: 11.5px;">
+                                                                <span class="badge bg-success bg-opacity-10 text-success me-1">@curr.Code</span>
+                                                                @curr.NameAr
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                            <div class="row g-2 align-items-center">
+                                                <div class="col-md-6">
+                                                    <label class="form-label small fw-bold mb-1" style="font-size: 11px;">فئة المورد المرتبط (اختياري - يستخدم الفئة الافتراضية تلقائياً):</label>
+                                                    <select name="linkedVendorCategoryId" class="form-select form-select-sm">
+                                                        @foreach (var vc in vendorCategories)
+                                                        {
+                                                            if (defVewCat != null && vc.Id == defVewCat.Id)
+                                                            {
+                                                                <option value="@vc.Id" selected>@vc.Code - @vc.LocalizedName @(vc.IsDefault ? "(افتراضي)" : "")</option>
+                                                            }
+                                                            else
+                                                            {
+                                                                <option value="@vc.Id">@vc.Code - @vc.LocalizedName</option>
+                                                            }
+                                                        }
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="text-muted small mt-3" style="font-size: 11px;">
+                                                        <i class="fa-solid fa-shield-halved text-success me-1"></i>
+                                                        سيتم إنشاء سجلات الموردين بأكواد مستقلة وربطها بحساب مراقبة الموردين الافتراضي للفرع داخل نفس الـ Transaction.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -428,41 +739,820 @@
     </div>
 </div>
 
+<!-- Excel Import Modal for Customers -->
+<div class="modal fade" id="importCustomerExcelModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white py-2">
+                <h6 class="modal-title fw-bold">
+                    <i class="fa-solid fa-file-excel me-2"></i> استيراد بيانات العملاء من ملف Excel / CSV
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info d-flex align-items-center mb-3 py-2 small">
+                    <i class="fa-solid fa-circle-info fs-5 me-2"></i>
+                    <div>
+                        يرجى استخدام النموذج القياسي المعتمد لاستيراد العملاء. يمكنك تحميله مباشرة بالضغط على:
+                        <a asp-action="DownloadTemplate" class="alert-link fw-bold text-decoration-underline ms-1">تحميل نموذج استيراد العملاء (.xlsx)</a>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm mb-3 bg-light">
+                    <div class="card-body py-2">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-7">
+                                <label class="form-label fw-bold small mb-1">اختر ملف Excel أو CSV (.xlsx / .csv):</label>
+                                <input type="file" id="custExcelFileInput" class="form-control form-control-sm" accept=".xlsx,.csv" />
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check form-switch mt-3">
+                                    <input class="form-check-input" type="checkbox" id="chkCustUpdateExisting" checked>
+                                    <label class="form-check-label small" for="chkCustUpdateExisting">تحديث العملاء الموجودين مسبقاً</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="button" id="btnPreviewCustExcel" class="btn btn-primary btn-sm w-100 mt-3" disabled>
+                                    <i class="fa-solid fa-magnifying-glass me-1"></i> فحص ومعاينة
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="custImportSpinner" class="text-center py-4 d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="mt-2 fw-bold text-muted small" id="custSpinnerText">جاري فحص بيانات العملاء...</div>
+                </div>
+
+                <div id="custImportPreviewContainer" class="d-none">
+                    <div class="row g-2 mb-3 text-center">
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 rounded bg-primary bg-opacity-10 text-primary">
+                                <div class="fs-5 fw-bold" id="custMetricTotal">0</div>
+                                <div class="small">إجمالي السطور</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 rounded bg-success bg-opacity-10 text-success">
+                                <div class="fs-5 fw-bold" id="custMetricValid">0</div>
+                                <div class="small">سطور صالحة</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 rounded bg-danger bg-opacity-10 text-danger">
+                                <div class="fs-5 fw-bold" id="custMetricErrors">0</div>
+                                <div class="small">سطور بها أخطاء</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 rounded bg-warning bg-opacity-10 text-dark">
+                                <div class="fs-5 fw-bold" id="custMetricUpdates">0</div>
+                                <div class="small">موجود مسبقاً (تحديث)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive border rounded" style="max-height: 340px;">
+                        <table class="table table-sm table-striped table-hover mb-0 align-middle small">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>#</th>
+                                    <th>الفرع</th>
+                                    <th>الكود</th>
+                                    <th>اسم العميل</th>
+                                    <th>الفئة</th>
+                                    <th>الحساب المالي</th>
+                                    <th>العملة</th>
+                                    <th>الموبايل</th>
+                                    <th>الحالة</th>
+                                    <th>ملاحظات الفحص</th>
+                                </tr>
+                            </thead>
+                            <tbody id="custPreviewTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="custImportResultAlert" class="alert d-none mt-3 mb-0 small" role="alert"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                <button type="button" id="btnExecuteCustImport" class="btn btn-sm btn-success" disabled>
+                    <i class="fa-solid fa-cloud-arrow-up me-1"></i> تنفيذ الاستيراد وحفظ العملاء
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal for Related Records & Group Balances (Multi-Currency Customer/Vendor Groups) -->
+<div class="modal fade" id="relatedRecordsModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title fw-bold" id="relatedModalTitle">
+                    <i class="fa-solid fa-diagram-project me-2"></i> السجلات المرتبطة وتعدد العملات – Related Records
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="hidden" id="relatedModalCurrentPartyType" value="Customer" />
+                <input type="hidden" id="relatedModalCurrentPartyId" value="0" />
+                <input type="hidden" id="relatedModalBranchId" value="0" />
+
+                <!-- Group Header Info Banner -->
+                <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 px-3 mb-3">
+                    <div>
+                        <span class="text-muted small">المجموعة:</span>
+                        <span class="fw-bold text-primary fs-6 ms-1" id="relatedModalGroupName">—</span>
+                        <span class="badge bg-secondary ms-2" id="relatedModalGroupCode">—</span>
+                    </div>
+                    <div class="small text-muted">
+                        <i class="fa-solid fa-code-branch me-1"></i> الفرع: <span class="fw-bold text-dark" id="relatedModalBranchName">—</span>
+                    </div>
+                </div>
+
+                <!-- Section 1: Balances by Currency (Independent per Currency) -->
+                <div class="card border-0 shadow-sm mb-3 bg-light">
+                    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold small text-dark">
+                            <i class="fa-solid fa-scale-balanced text-primary me-1"></i>
+                            أرصدة المجموعة المستقلة لكل عملة (Currency Balances)
+                        </span>
+                        <span class="badge bg-light text-muted border small">لا يتم دمج عملات مختلفة</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="row g-2" id="relatedModalCurrencyCards">
+                            <div class="col-12 text-center text-muted py-2 small">جاري تحميل الأرصدة...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Table of Linked Customer & Vendor Records -->
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold small text-dark">
+                            <i class="fa-solid fa-list-check text-success me-1"></i>
+                            الحسابات المسجلة في هذه المجموعة (عملاء وموردين)
+                        </span>
+                        <span class="badge bg-primary rounded-pill px-2" id="relatedModalRecordsCount">0</span>
+                    </div>
+                    <div class="table-responsive border-top" style="max-height: 260px;">
+                        <table class="table table-sm table-hover align-middle mb-0 small">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 80px;">النوع</th>
+                                    <th>الكود</th>
+                                    <th>الاسم</th>
+                                    <th>العملة</th>
+                                    <th class="text-end">مدين</th>
+                                    <th class="text-end">دائن</th>
+                                    <th class="text-end">الرصيد</th>
+                                    <th class="text-center" style="width: 80px;">الحركات</th>
+                                    <th class="text-center" style="width: 90px;">الإجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="relatedModalRecordsTableBody">
+                                <tr><td colspan="9" class="text-center py-3 text-muted">جاري التحميل...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Section 3: Link an Existing Customer or Vendor to Group -->
+                @if (CurrentUserContext.HasPermission("MasterData.Customers.Edit"))
+                {
+                    <div class="card border-primary border-opacity-25 shadow-sm mb-3">
+                        <div class="card-header bg-primary bg-opacity-10 py-2">
+                            <span class="fw-bold small text-primary">
+                                <i class="fa-solid fa-link me-1"></i> ربط سجل عميل أو مورد قديم بهذه المجموعة (Manual Linking)
+                            </span>
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="row g-2 align-items-center">
+                                <div class="col-md-3">
+                                    <select class="form-select form-select-sm" id="searchLinkPartyType">
+                                        <option value="Customer">عميل (Customer)</option>
+                                        <option value="Vendor">مورد (Vendor)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-7">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                        <input type="text" class="form-control form-control-sm" id="searchLinkPartyTerm" placeholder="ابحث باسم العميل/المورد أو الكود لربطه..." onkeyup="if(event.key==='Enter') executePartySearchForLink();" />
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="executePartySearchForLink()">
+                                        <i class="fa-solid fa-search me-1"></i> بحث
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="searchLinkPartyResults" class="mt-2 border rounded p-2 bg-light d-none" style="max-height: 180px; overflow-y: auto;">
+                                <div class="small fw-bold text-muted mb-1">نتائج البحث:</div>
+                                <div id="searchLinkPartyList" class="d-flex flex-column gap-1"></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <!-- Section 4: Optional Unified Currency Valuation -->
+                <div class="card border-0 bg-light">
+                    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold small text-secondary">
+                            <i class="fa-solid fa-calculator text-warning me-1"></i> تقييم موحد اختياري للرصيد الصافي (Unified Currency Evaluation)
+                        </span>
+                        <span class="text-muted small" style="font-size: 11px;">لأغراض العرض والتقارير فقط دون المساس بالأرصدة الأصلية</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-md-4">
+                                <select class="form-select form-select-sm" id="evalTargetCurrency">
+                                    @foreach (var c in currencies)
+                                    {
+                                        <option value="@c.Id" data-code="@c.Code">@c.Code - @c.NameAr</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <button type="button" class="btn btn-sm btn-secondary w-100" onclick="evaluateUnifiedGroupBalance()">
+                                    <i class="fa-solid fa-coins me-1"></i> حساب التقييم الموحد
+                                </button>
+                            </div>
+                            <div class="col-md-5" id="evalUnifiedResultContainer">
+                                <span class="text-muted small">اختر عملة واضغط حساب لمعاينة صافي رصيد المجموعة بالعملة المختارة.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="relatedModalAlert" class="alert alert-dismissible fade show d-none mt-3 mb-0 small" role="alert"></div>
+            </div>
+            <div class="modal-footer py-2 bg-light">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+@Html.AntiForgeryToken()
+
 @section Scripts {
 <script>
-    function loadCities(govSelectId, citySelectId, selectedCityId) {
-        var govId = $('#' + govSelectId).val();
-        var citySelect = $('#' + citySelectId);
-        citySelect.empty().append('<option value="">-- @Localizer["SelectOption"] --</option>');
-        if (!govId) return;
-
-        $.getJSON('@Url.Action("GetByGovernorate", "City")', { governorateId: govId }, function (data) {
-            $.each(data, function (i, item) {
-                var selected = (item.id === selectedCityId) ? ' selected' : '';
-                citySelect.append('<option value="' + item.id + '"' + selected + '>' + item.code + ' - ' + item.name + '</option>');
-            });
-        });
-    }
-
-    function loadSalesmen(branchSelectId, salesmanSelectId, selectedSalesmanId) {
-        var branchId = $('#' + branchSelectId).val();
-        var smSelect = $('#' + salesmanSelectId);
-        smSelect.empty().append('<option value="">-- @Localizer["SelectOption"] --</option>');
+    function onCustBranchChanged() {
+        var branchId = $('#createCustBranch').val();
         if (!branchId) return;
 
-        $.getJSON('@Url.Action("GetByBranch", "Salesman")', { branchId: branchId }, function (data) {
-            $.each(data, function (i, item) {
-                var selected = (item.id === selectedSalesmanId) ? ' selected' : '';
-                smSelect.append('<option value="' + item.id + '"' + selected + '>' + item.code + ' - ' + item.name + '</option>');
-            });
+        $.getJSON('/api/sequence/preview', { entity: 'Customer', branchId: branchId }, function (data) {
+            if (data && data.code) {
+                var codeInput = $('#createCustCode');
+                if (codeInput.prop('readonly')) {
+                    codeInput.val(data.code);
+                }
+            }
+        });
+
+        $.getJSON('/CustomerCategory/GetByBranch', { branchId: branchId }, function (cats) {
+            if (Array.isArray(cats) && cats.length > 0) {
+                var defCat = cats.find(function (c) { return c.isDefault; }) || cats[0];
+                if (defCat) {
+                    var $catSelect = $('#createCustCategory');
+                    var label = defCat.code + ' - ' + defCat.name + (defCat.isDefault ? ' (افتراضي)' : '');
+                    var newOpt = new Option(label, defCat.id, true, true);
+                    $catSelect.empty().append('<option value="">-- @Localizer["SelectOption"] --</option>').append(newOpt).trigger('change');
+
+                    var pickerEl = document.getElementById('createCustFinancialAccountPicker');
+                    if (pickerEl && window.ErpLookup && typeof window.ErpLookup.setPickerValue === 'function') {
+                        window.ErpLookup.setPickerValue(pickerEl, defCat.controlAccountId || '', defCat.controlAccountDisplay || '');
+                    }
+                }
+            }
         });
     }
 
-    $(document).ready(function() {
-        // Trigger initial salesmen load for create modal if branch is pre-selected
-        if ($('#createCustBranch').val()) {
-            loadSalesmen('createCustBranch', 'createCustSalesman', 0);
+    function toggleManualCustCode() {
+        $('#createCustIsManualCode').val('true');
+        $('#createCustCode').removeAttr('readonly').focus();
+        $('#btnToggleManualCustCode').hide();
+        $('#autoCustCodeBadge').hide();
+    }
+
+    $('#createCustomerModal').on('show.bs.modal', function () {
+        $('#createCustIsManualCode').val('false');
+        $('#createCustCode').prop('readonly', true);
+        $('#btnToggleManualCustCode').show();
+        $('#autoCustCodeBadge').show();
+        onCustBranchChanged();
+    });
+
+    // When Customer Category is selected in Create or Edit modal, auto-fill the category's default ControlAccount
+    $(document).on('select2:select', 'select[name="CustomerCategoryId"]', function (e) {
+        var data = e.params && e.params.data ? e.params.data : null;
+        var $form = $(this).closest('form');
+        var pickerEl = $form.find('.erp-lookup-picker[data-input-name="FinancialAccountId"]')[0];
+        if (!pickerEl || !window.ErpLookup || typeof window.ErpLookup.setPickerValue !== 'function') return;
+
+        if (data && data.controlAccountId) {
+            window.ErpLookup.setPickerValue(pickerEl, data.controlAccountId, data.controlAccountDisplay || '');
         }
     });
+
+    // Enforce FinancialAccountId before submitting Create/Edit Customer form
+    $(document).on('submit', '.cust-vendor-account-required-form', function (e) {
+        var $form = $(this);
+        var accVal = $form.find('input[name="FinancialAccountId"]').val();
+        if (!accVal || parseInt(accVal, 10) <= 0) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            alert('يرجى تحديد الحساب المالي للعميل في دليل الحسابات (لا يمكن حفظ العميل بدون تسجيل الحساب).');
+            return false;
+        }
+    });
+
+    // Customer Excel Import JS
+    $('#custExcelFileInput').on('change', function () {
+        $('#btnPreviewCustExcel').prop('disabled', !(this.files && this.files.length > 0));
+        $('#btnExecuteCustImport').prop('disabled', true);
+        $('#custImportPreviewContainer').addClass('d-none');
+        $('#custImportResultAlert').addClass('d-none');
+    });
+
+    $('#btnPreviewCustExcel').on('click', function () {
+        var fileInput = document.getElementById('custExcelFileInput');
+        if (!fileInput.files || !fileInput.files.length) return;
+
+        var fd = new FormData();
+        fd.append('excelFile', fileInput.files[0]);
+        fd.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').first().val());
+
+        $('#custImportSpinner').removeClass('d-none');
+        $('#custImportPreviewContainer').addClass('d-none');
+        $('#custImportResultAlert').addClass('d-none');
+        $('#btnPreviewCustExcel').prop('disabled', true);
+        $('#btnExecuteCustImport').prop('disabled', true);
+
+        $.ajax({
+            url: '@Url.Action("PreviewExcelImport", "Customer")',
+            type: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            success: function (res) {
+                $('#custImportSpinner').addClass('d-none');
+                $('#btnPreviewCustExcel').prop('disabled', false);
+                if (res.success && res.data) {
+                    var p = res.data;
+                    $('#custMetricTotal').text(p.totalRows);
+                    $('#custMetricValid').text(p.validCount);
+                    $('#custMetricErrors').text(p.errorCount);
+                    $('#custMetricUpdates').text(p.updateCount);
+
+                    var tbody = $('#custPreviewTableBody');
+                    tbody.empty();
+                    p.rows.forEach(function (r) {
+                        var trClass = !r.isValid ? 'table-danger' : (r.existsInDb ? 'table-warning' : '');
+                        var badge = !r.isValid
+                            ? '<span class="badge bg-danger">خطأ</span>'
+                            : (r.existsInDb ? '<span class="badge bg-warning text-dark">تحديث</span>' : '<span class="badge bg-success">جديد</span>');
+                        var notes = [];
+                        (r.errors || []).forEach(function (e) { notes.push('<div class="text-danger fw-bold">' + e + '</div>'); });
+                        (r.warnings || []).forEach(function (w) { notes.push('<div class="text-muted">' + w + '</div>'); });
+
+                        tbody.append(
+                            '<tr class="' + trClass + '">' +
+                            '<td>' + r.rowNumber + '</td>' +
+                            '<td>' + (r.branchName || '-') + '</td>' +
+                            '<td class="font-monospace fw-bold">' + (r.code || '<span class="text-muted">تلقائي</span>') + '</td>' +
+                            '<td><div class="fw-bold">' + (r.nameAr || '') + '</div><small class="text-muted">' + (r.nameEn || '') + '</small></td>' +
+                            '<td>' + (r.categoryName || '-') + '</td>' +
+                            '<td class="font-monospace">' + (r.financialAccountCode || '-') + '</td>' +
+                            '<td>' + (r.currencyCode || 'EGP') + '</td>' +
+                            '<td>' + (r.mobile || r.phone || '-') + '</td>' +
+                            '<td>' + badge + '</td>' +
+                            '<td>' + (notes.join('') || '<span class="text-success">صالح</span>') + '</td>' +
+                            '</tr>'
+                        );
+                    });
+                    $('#custImportPreviewContainer').removeClass('d-none');
+                    if (p.validCount > 0 && p.errorCount === 0) {
+                        $('#btnExecuteCustImport').prop('disabled', false);
+                    }
+                } else {
+                    alert(res.message || 'حدث خطأ أثناء معاينة الملف.');
+                }
+            },
+            error: function () {
+                $('#custImportSpinner').addClass('d-none');
+                $('#btnPreviewCustExcel').prop('disabled', false);
+                alert('حدث خطأ في الاتصال بالخادم.');
+            }
+        });
+    });
+
+    $('#btnExecuteCustImport').on('click', function () {
+        var fileInput = document.getElementById('custExcelFileInput');
+        if (!fileInput.files || !fileInput.files.length) return;
+
+        var fd = new FormData();
+        fd.append('excelFile', fileInput.files[0]);
+        fd.append('updateExisting', $('#chkCustUpdateExisting').is(':checked'));
+        fd.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').first().val());
+
+        $('#custSpinnerText').text('جاري حفظ واستيراد بيانات العملاء...');
+        $('#custImportSpinner').removeClass('d-none');
+        $('#btnExecuteCustImport').prop('disabled', true);
+
+        $.ajax({
+            url: '@Url.Action("ConfirmExcelImport", "Customer")',
+            type: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            success: function (res) {
+                $('#custImportSpinner').addClass('d-none');
+                var alertBox = $('#custImportResultAlert');
+                alertBox.removeClass('d-none alert-success alert-danger');
+                if (res.success) {
+                    alertBox.addClass('alert-success').html('<i class="fa-solid fa-circle-check me-1"></i> ' + res.message);
+                    setTimeout(function () { window.location.reload(); }, 1200);
+                } else {
+                    alertBox.addClass('alert-danger').html('<i class="fa-solid fa-triangle-exclamation me-1"></i> ' + (res.message || 'فشل الاستيراد'));
+                    $('#btnExecuteCustImport').prop('disabled', false);
+                }
+            },
+            error: function () {
+                $('#custImportSpinner').addClass('d-none');
+                $('#btnExecuteCustImport').prop('disabled', false);
+                alert('حدث خطأ أثناء تنفيذ الاستيراد.');
+            }
+        });
+    });
+
+    // ─── Multi-Currency Customer & Vendor Group JS Helpers ─────────────────────────
+
+    var currencySuffixLabels = {
+        'EGP': { ar: 'مصري', en: 'EGP' },
+        'USD': { ar: 'دولار', en: 'Dollar' },
+        'EUR': { ar: 'يورو', en: 'Euro' },
+        'CNY': { ar: 'يوان صيني', en: 'Chinese Yuan' },
+        'SAR': { ar: 'ريال سعودي', en: 'SAR' },
+        'AED': { ar: 'درهم إماراتي', en: 'AED' },
+        'GBP': { ar: 'جنيه إسترليني', en: 'GBP' }
+    };
+
+    function selectAllCustomerCurrencies(checkAll) {
+        var coreCodes = ['EGP', 'USD', 'EUR', 'CNY'];
+        $('.cust-multi-curr-chk').each(function () {
+            var code = $(this).data('code');
+            if (checkAll) {
+                if (coreCodes.indexOf(code) !== -1) {
+                    $(this).prop('checked', true);
+                }
+            } else {
+                $(this).prop('checked', false);
+            }
+        });
+        updateMultiCurrencyNamePreview();
+    }
+
+    function toggleLinkedVendorPanel() {
+        var isChecked = $('#chkCreateLinkedVendor').is(':checked');
+        if (isChecked) {
+            $('#linkedVendorOptionsPanel').removeClass('d-none');
+            // If vendor checkboxes empty, copy customer checkboxes
+            if ($('.vend-multi-curr-chk:checked').length === 0) {
+                copyCustomerCurrenciesToVendor();
+            }
+        } else {
+            $('#linkedVendorOptionsPanel').addClass('d-none');
+        }
+        updateMultiCurrencyNamePreview();
+    }
+
+    function copyCustomerCurrenciesToVendor() {
+        $('.vend-multi-curr-chk').prop('checked', false);
+        $('.cust-multi-curr-chk:checked').each(function () {
+            var val = $(this).val();
+            $('.vend-multi-curr-chk[value="' + val + '"]').prop('checked', true);
+        });
+        updateMultiCurrencyNamePreview();
+    }
+
+    function updateMultiCurrencyNamePreview() {
+        var baseAr = ($('#createCustNameAr').val() || '').trim();
+        var baseEn = ($('#createCustNameEn').val() || '').trim();
+        if (!baseEn) baseEn = baseAr;
+
+        var selectedCust = [];
+        $('.cust-multi-curr-chk:checked').each(function () {
+            var code = $(this).data('code');
+            selectedCust.push(code);
+        });
+
+        var selectedVend = [];
+        if ($('#chkCreateLinkedVendor').is(':checked')) {
+            $('.vend-multi-curr-chk:checked').each(function () {
+                var code = $(this).data('code');
+                selectedVend.push(code);
+            });
+        }
+
+        var $previewContainer = $('#multiCurrencyNamingPreview');
+        var $previewList = $('#multiCurrencyNamingPreviewList');
+        $previewList.empty();
+
+        if (!baseAr || (selectedCust.length === 0 && selectedVend.length === 0)) {
+            $previewContainer.addClass('d-none');
+            return;
+        }
+
+        $previewContainer.removeClass('d-none');
+
+        selectedCust.forEach(function (code) {
+            var s = currencySuffixLabels[code] || { ar: code, en: code };
+            var arName = baseAr + ' - ' + s.ar;
+            var enName = baseEn + ' - ' + s.en;
+            $previewList.append(
+                '<div class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle p-2 text-start small">' +
+                '<i class="fa-solid fa-user me-1"></i> <span class="fw-bold">' + arName + '</span>' +
+                '<div class="text-muted" style="font-size: 10px;">' + enName + ' (' + code + ')</div>' +
+                '</div>'
+            );
+        });
+
+        selectedVend.forEach(function (code) {
+            var s = currencySuffixLabels[code] || { ar: code, en: code };
+            var arName = baseAr + ' - ' + s.ar;
+            var enName = baseEn + ' - ' + s.en;
+            $previewList.append(
+                '<div class="badge bg-success bg-opacity-10 text-success border border-success-subtle p-2 text-start small">' +
+                '<i class="fa-solid fa-truck-moving me-1"></i> <span class="fw-bold">' + arName + '</span>' +
+                '<div class="text-muted" style="font-size: 10px;">' + enName + ' (' + code + ') - مورد</div>' +
+                '</div>'
+            );
+        });
+    }
+
+    // ─── Related Records Modal & Linking Endpoints ─────────────────────────────────
+
+    function openRelatedRecordsModal(partyType, partyId, partyName, branchId) {
+        $('#relatedModalCurrentPartyType').val(partyType);
+        $('#relatedModalCurrentPartyId').val(partyId);
+        $('#relatedModalBranchId').val(branchId || 0);
+        $('#relatedModalTitle').html('<i class="fa-solid fa-diagram-project me-2"></i> السجلات المرتبطة وتعدد العملات: ' + (partyName || ''));
+        $('#searchLinkPartyResults').addClass('d-none');
+        $('#searchLinkPartyTerm').val('');
+        $('#evalUnifiedResultContainer').html('<span class="text-muted small">اختر عملة واضغط حساب لمعاينة صافي رصيد المجموعة بالعملة المختارة.</span>');
+        $('#relatedModalAlert').addClass('d-none');
+
+        var modal = new bootstrap.Modal(document.getElementById('relatedRecordsModal'));
+        modal.show();
+
+        loadRelatedRecordsData(partyType, partyId);
+    }
+
+    function loadRelatedRecordsData(partyType, partyId, unifiedCurrencyId) {
+        var url = '@Url.Action("GetRelatedRecords", "Customer")?partyType=' + encodeURIComponent(partyType) + '&partyId=' + partyId;
+        if (unifiedCurrencyId) {
+            url += '&unifiedCurrencyId=' + unifiedCurrencyId;
+        }
+
+        $('#relatedModalRecordsTableBody').html('<tr><td colspan="9" class="text-center py-3 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div>جاري تحميل البيانات...</td></tr>');
+        $('#relatedModalCurrencyCards').html('<div class="col-12 text-center text-muted py-2 small"><div class="spinner-border spinner-border-sm text-primary me-2"></div>جاري تحميل الأرصدة...</div>');
+
+        $.getJSON(url, function (res) {
+            if (!res || !res.success || !res.data) {
+                $('#relatedModalRecordsTableBody').html('<tr><td colspan="9" class="text-center py-3 text-danger">فشل تحميل السجلات المرتبطة.</td></tr>');
+                return;
+            }
+
+            var d = res.data;
+            $('#relatedModalGroupName').text(d.groupNameAr || 'حساب مستقل غير مرتبط');
+            $('#relatedModalGroupCode').text(d.groupCode || '—');
+            var firstRec = (d.records && d.records.length > 0) ? d.records[0] : null;
+            $('#relatedModalBranchName').text(firstRec ? firstRec.branchName : '—');
+            $('#relatedModalRecordsCount').text((d.records || []).length);
+
+            // Render Balances Cards by Currency
+            var cardsHtml = '';
+            if (d.balancesByCurrency && d.balancesByCurrency.length > 0) {
+                d.balancesByCurrency.forEach(function (b) {
+                    var custNet = b.netCustomerBalance || 0;
+                    var vendNet = b.netVendorBalance || 0;
+                    var net = custNet + vendNet;
+                    var netColor = net > 0 ? 'text-primary' : (net < 0 ? 'text-danger' : 'text-dark');
+
+                    cardsHtml +=
+                        '<div class="col-md-3 col-6">' +
+                        '<div class="p-2 rounded bg-white border shadow-sm">' +
+                        '<div class="d-flex justify-content-between align-items-center mb-1">' +
+                        '<span class="badge bg-primary bg-opacity-10 text-primary fw-bold">' + b.currencyCode + '</span>' +
+                        '<span class="small text-muted" style="font-size:11px;">' + b.currencyNameAr + '</span>' +
+                        '</div>' +
+                        '<div class="d-flex justify-content-between small text-muted" style="font-size:11px;">' +
+                        '<span>عميل:</span> <span class="fw-bold font-monospace">' + custNet.toFixed(2) + '</span>' +
+                        '</div>' +
+                        '<div class="d-flex justify-content-between small text-muted" style="font-size:11px;">' +
+                        '<span>مورد:</span> <span class="fw-bold font-monospace">' + vendNet.toFixed(2) + '</span>' +
+                        '</div>' +
+                        '<div class="d-flex justify-content-between small border-top pt-1 mt-1 ' + netColor + '">' +
+                        '<span class="fw-bold">الصافي:</span> <span class="fw-bold font-monospace fs-6">' + net.toFixed(2) + '</span>' +
+                        '</div>' +
+                        '</div>' +
+                        '</div>';
+                });
+            } else {
+                cardsHtml = '<div class="col-12 text-center text-muted py-2 small">لا توجد حركات مالية مسجلة لهذه المجموعة حتى الآن.</div>';
+            }
+            $('#relatedModalCurrencyCards').html(cardsHtml);
+
+            // Render Records Table
+            var tbody = $('#relatedModalRecordsTableBody');
+            tbody.empty();
+            if (d.records && d.records.length > 0) {
+                var currentPartyId = parseInt($('#relatedModalCurrentPartyId').val(), 10);
+                var currentPartyType = $('#relatedModalCurrentPartyType').val();
+
+                d.records.forEach(function (r) {
+                    var isCurrent = (r.partyType === currentPartyType && r.partyId === currentPartyId);
+                    var typeBadge = r.partyType === 'Vendor'
+                        ? '<span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">مورد</span>'
+                        : '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">عميل</span>';
+
+                    var actionBtn = '';
+                    if (r.partyGroupId) {
+                        actionBtn = '<button type="button" class="btn btn-outline-danger btn-xs py-0 px-2" style="font-size:11px;" title="فك الارتباط عن المجموعة دون حذف السجل" onclick="unlinkPartyRecord(\'' + r.partyType + '\', ' + r.partyId + ')"><i class="fa-solid fa-link-slash"></i> فك الربط</button>';
+                    } else {
+                        actionBtn = '<span class="text-muted small">—</span>';
+                    }
+
+                    var balColor = r.balanceInCurrency > 0 ? 'text-primary' : (r.balanceInCurrency < 0 ? 'text-danger' : 'text-muted');
+
+                    tbody.append(
+                        '<tr class="' + (isCurrent ? 'table-warning bg-opacity-25' : '') + '">' +
+                        '<td>' + typeBadge + '</td>' +
+                        '<td class="font-monospace fw-bold">' + r.code + '</td>' +
+                        '<td>' +
+                        '<div class="fw-bold">' + r.nameAr + (isCurrent ? ' <span class="badge bg-warning text-dark ms-1" style="font-size:10px;">الحالي</span>' : '') + '</div>' +
+                        '<small class="text-muted">' + (r.nameEn || '') + '</small>' +
+                        '</td>' +
+                        '<td><span class="badge bg-light text-dark border">' + r.currencyCode + '</span></td>' +
+                        '<td class="text-end font-monospace">' + (r.debitInCurrency || 0).toFixed(2) + '</td>' +
+                        '<td class="text-end font-monospace">' + (r.creditInCurrency || 0).toFixed(2) + '</td>' +
+                        '<td class="text-end font-monospace fw-bold ' + balColor + '">' + (r.balanceInCurrency || 0).toFixed(2) + '</td>' +
+                        '<td class="text-center"><span class="badge bg-secondary bg-opacity-10 text-secondary">' + (r.journalEntriesCount || 0) + '</span></td>' +
+                        '<td class="text-center">' + actionBtn + '</td>' +
+                        '</tr>'
+                    );
+                });
+            } else {
+                tbody.append('<tr><td colspan="9" class="text-center py-3 text-muted">لا توجد سجلات مرتبطة.</td></tr>');
+            }
+
+            // If Unified Evaluation returned
+            if (d.unifiedEvaluation) {
+                var u = d.unifiedEvaluation;
+                $('#evalUnifiedResultContainer').html(
+                    '<div class="p-2 rounded bg-success bg-opacity-10 border border-success-subtle small">' +
+                    '<div>صافي التقييم بالـ <strong>' + u.targetCurrencyCode + '</strong>: <span class="fs-6 fw-bold text-success font-monospace">' + u.totalConvertedNetBalance.toFixed(2) + '</span></div>' +
+                    '<div class="text-muted" style="font-size:10.5px;">عملاء: ' + u.totalConvertedCustomerBalance.toFixed(2) + ' | موردين: ' + u.totalConvertedVendorBalance.toFixed(2) + ' (بتاريخ: ' + new Date(u.conversionDate).toLocaleDateString() + ')</div>' +
+                    '</div>'
+                );
+            }
+        }).fail(function () {
+            $('#relatedModalRecordsTableBody').html('<tr><td colspan="9" class="text-center py-3 text-danger">حدث خطأ في الاتصال بالسيرفر.</td></tr>');
+        });
+    }
+
+    function executePartySearchForLink() {
+        var searchType = $('#searchLinkPartyType').val();
+        var term = ($('#searchLinkPartyTerm').val() || '').trim();
+        var branchId = $('#relatedModalBranchId').val();
+        var currentPartyType = $('#relatedModalCurrentPartyType').val();
+        var currentPartyId = $('#relatedModalCurrentPartyId').val();
+
+        if (!term) {
+            alert('يرجى كتابة اسم أو كود للبحث.');
+            return;
+        }
+
+        var url = '@Url.Action("SearchPartiesForLink", "Customer")?term=' + encodeURIComponent(term) +
+            '&searchPartyType=' + encodeURIComponent(searchType) +
+            '&branchId=' + branchId +
+            '&excludePartyType=' + encodeURIComponent(currentPartyType) +
+            '&excludePartyId=' + currentPartyId;
+
+        $('#searchLinkPartyList').html('<div class="text-muted small py-2"><div class="spinner-border spinner-border-sm text-primary me-1"></div>جاري البحث...</div>');
+        $('#searchLinkPartyResults').removeClass('d-none');
+
+        $.getJSON(url, function (res) {
+            if (!res || !res.success || !res.data || res.data.length === 0) {
+                $('#searchLinkPartyList').html('<div class="text-muted small py-1">لم يتم العثور على نتائج مطابقة في هذا الفرع.</div>');
+                return;
+            }
+
+            var html = '';
+            res.data.forEach(function (item) {
+                var tBadge = item.partyType === 'Vendor' ? '<span class="badge bg-success me-1">مورد</span>' : '<span class="badge bg-primary me-1">عميل</span>';
+                var grpBadge = item.partyGroupId ? '<span class="badge bg-warning text-dark ms-1">مرتبط بمجموعة ' + (item.partyGroupCode || item.partyGroupId) + '</span>' : '<span class="badge bg-light text-muted ms-1">غير مرتبط</span>';
+
+                html +=
+                    '<div class="d-flex justify-content-between align-items-center p-2 bg-white rounded border">' +
+                    '<div>' +
+                    tBadge +
+                    '<strong class="font-monospace text-primary">' + item.code + '</strong> - ' + item.nameAr +
+                    ' <span class="badge bg-light text-dark border">' + item.currencyCode + '</span>' +
+                    grpBadge +
+                    '</div>' +
+                    '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" onclick="linkPartyRecord(\'' + item.partyType + '\', ' + item.partyId + ', false)">' +
+                    '<i class="fa-solid fa-link me-1"></i> ربط بهذه المجموعة' +
+                    '</button>' +
+                    '</div>';
+            });
+            $('#searchLinkPartyList').html(html);
+        });
+    }
+
+    function linkPartyRecord(targetPartyType, targetPartyId, confirmMove) {
+        var srcType = $('#relatedModalCurrentPartyType').val();
+        var srcId = parseInt($('#relatedModalCurrentPartyId').val(), 10);
+
+        var token = $('input[name="__RequestVerificationToken"]').first().val();
+
+        var payload = {
+            sourcePartyType: srcType,
+            sourcePartyId: srcId,
+            targetPartyType: targetPartyType,
+            targetPartyId: targetPartyId,
+            confirmMove: confirmMove === true
+        };
+
+        $.ajax({
+            url: '@Url.Action("LinkRelatedRecord", "Customer")',
+            type: 'POST',
+            contentType: 'application/json',
+            headers: { 'RequestVerificationToken': token },
+            data: JSON.stringify(payload),
+            success: function (res) {
+                if (res.requiresMoveConfirmation) {
+                    if (confirm(res.message)) {
+                        linkPartyRecord(targetPartyType, targetPartyId, true);
+                    }
+                    return;
+                }
+
+                var alertBox = $('#relatedModalAlert');
+                alertBox.removeClass('d-none alert-success alert-danger');
+                if (res.success) {
+                    alertBox.addClass('alert-success').html('<i class="fa-solid fa-circle-check me-1"></i> ' + res.message);
+                    $('#searchLinkPartyResults').addClass('d-none');
+                    $('#searchLinkPartyTerm').val('');
+                    loadRelatedRecordsData(srcType, srcId);
+                } else {
+                    alertBox.addClass('alert-danger').html('<i class="fa-solid fa-triangle-exclamation me-1"></i> ' + (res.message || 'فشل الربط.'));
+                }
+            },
+            error: function () {
+                alert('حدث خطأ أثناء تنفيذ عملية الربط.');
+            }
+        });
+    }
+
+    function unlinkPartyRecord(partyType, partyId) {
+        if (!confirm('هل أنت متأكد من فك ارتباط هذا السجل من المجموعة؟\n(لن يتم حذف السجل ولن تتأثر حركاته أو رصيده السابق)'))
+            return;
+
+        var token = $('input[name="__RequestVerificationToken"]').first().val();
+        var srcType = $('#relatedModalCurrentPartyType').val();
+        var srcId = parseInt($('#relatedModalCurrentPartyId').val(), 10);
+
+        $.ajax({
+            url: '@Url.Action("UnlinkRelatedRecord", "Customer")?partyType=' + encodeURIComponent(partyType) + '&partyId=' + partyId,
+            type: 'POST',
+            headers: { 'RequestVerificationToken': token },
+            success: function (res) {
+                var alertBox = $('#relatedModalAlert');
+                alertBox.removeClass('d-none alert-success alert-danger');
+                if (res.success) {
+                    alertBox.addClass('alert-success').html('<i class="fa-solid fa-circle-check me-1"></i> ' + res.message);
+                    loadRelatedRecordsData(srcType, srcId);
+                } else {
+                    alertBox.addClass('alert-danger').html('<i class="fa-solid fa-triangle-exclamation me-1"></i> ' + (res.message || 'فشل فك الربط.'));
+                }
+            },
+            error: function () {
+                alert('حدث خطأ أثناء فك الربط.');
+            }
+        });
+    }
+
+    function evaluateUnifiedGroupBalance() {
+        var targetCurrencyId = $('#evalTargetCurrency').val();
+        var srcType = $('#relatedModalCurrentPartyType').val();
+        var srcId = parseInt($('#relatedModalCurrentPartyId').val(), 10);
+        loadRelatedRecordsData(srcType, srcId, targetCurrencyId);
+    }
 </script>
 }

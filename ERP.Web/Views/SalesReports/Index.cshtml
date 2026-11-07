@@ -1,0 +1,244 @@
+@{
+    ViewData["Title"] = "تقارير المبيعات الشاملة";
+    Layout = "_Layout";
+}
+
+<div class="container-fluid py-3">
+    <!-- Header Page Title -->
+    <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-chart-pie me-2"></i>تقارير المبيعات الشاملة (Sales Reports Hub)
+            </h3>
+            <p class="text-muted small mb-0">تحليلات المبيعات وفواتير البيع والأصناف والعملاء والمناديب ومعدلات الارتجاع والتسليم</p>
+        </div>
+    </div>
+
+    <!-- Reports Cards Grid (9 Reports) -->
+    <div class="row g-4">
+        <!-- 1. Sales Summary -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary fs-3">
+                            <i class="fa-solid fa-calendar-days"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">ملخص المبيعات حسب الفترة والفرع</h5>
+                            <span class="text-muted small">Sales Summary by Period & Branch</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        إجمالي المبيعات، الخصومات، الضرائب، المرتجعات، وصافي الإيرادات موزعة زمنياً لكل فرع.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="SalesSummary" class="btn btn-primary w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Invoice Details -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success fs-3">
+                            <i class="fa-solid fa-file-invoice-dollar"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">تفاصيل فواتير البيع</h5>
+                            <span class="text-muted small">Sales Invoices Detailed Report</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        سجل كامل لفواتير البيع وبنودها والعملاء والأسعار والضرائب وطرق السداد.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="InvoiceDetails" class="btn btn-success w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Sales By Item -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info fs-3">
+                            <i class="fa-solid fa-boxes-stacked"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">المبيعات حسب الصنف</h5>
+                            <span class="text-muted small">Sales by Item</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        الكميات المباعة والمرتجعة وصافي المبيعات ومتوسط أسعار البيع لكل صنف ومجموعة.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ByItem" class="btn btn-info w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Sales By Customer -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning fs-3">
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">المبيعات حسب العميل</h5>
+                            <span class="text-muted small">Sales by Customer</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        حجم المبيعات والخصومات والمسحوبات والمرتجعات وصافي قيمة تعاملات كل عميل.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ByCustomer" class="btn btn-warning w-100 fw-bold text-dark">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Sales By Salesman -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-purple bg-opacity-10 p-3 text-primary fs-3">
+                            <i class="fa-solid fa-user-tie"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">المبيعات حسب المندوب</h5>
+                            <span class="text-muted small">Sales by Salesman</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        تقييم أداء مناديب البيع، عدد الفواتير، إجمالي المبيعات، المرتجعات، وصافي التحصيل.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="BySalesman" class="btn btn-outline-primary w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. Sales Returns and Net -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger fs-3">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">مرتجعات المبيعات وصافي المبيعات</h5>
+                            <span class="text-muted small">Sales Returns & Net Sales</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        مقارنة دقيقة للمرتجعات مع فواتير البيع ونسبة الإرجاع الصافية بدون ازدواجية الحساب.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ReturnsAndNet" class="btn btn-danger w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. Branch Comparison -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-secondary bg-opacity-10 p-3 text-secondary fs-3">
+                            <i class="fa-solid fa-code-compare"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">مقارنة المبيعات بين الفروع والفترات</h5>
+                            <span class="text-muted small">Branch & Period Comparison</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        مقارنة الأداء البيعي بين مختلف الفروع عبر فترات زمنية متتالية ونسب النمو والتراجع.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="BranchComparison" class="btn btn-secondary w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. Top Selling & Stagnant Items -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success fs-3">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">الأصناف الأكثر مبيعًا والأصناف الراكدة</h5>
+                            <span class="text-muted small">Top Selling & Non-Moving Items</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        حصر الأصناف المتصدرة في المبيعات مقابل الأصناف التي لم تشهد أي حركة بيع في الفترة.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="TopSellingAndStagnant" class="btn btn-outline-success w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. Fulfillment Tracking -->
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-dark bg-opacity-10 p-3 text-dark fs-3">
+                            <i class="fa-solid fa-list-check"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">متابعة الفواتير واستكمال المخزون</h5>
+                            <span class="text-muted small">Sales Order & Fulfillment Tracking</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        متابعة أوامر البيع والفواتير المعلقة ونسب التسليم الفعلي المنفذ من المخازن.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="FulfillmentTracking" class="btn btn-dark w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

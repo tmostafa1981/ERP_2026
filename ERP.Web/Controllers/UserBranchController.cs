@@ -2,6 +2,7 @@ using ERP.Domain.Entities;
 using ERP.Infrastructure.Data;
 using ERP.Infrastructure.Identity;
 using ERP.Application.Interfaces;
+using ERP.Web.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -37,6 +38,7 @@ namespace ERP.Web.Controllers
         }
 
         [HttpGet]
+        [HasPermission("Administration.UserBranch.View")]
         public async Task<IActionResult> Index(string? userId, int? companyIdFilter)
         {
             var users = await _userManager.Users.OrderBy(u => u.UserName).ToListAsync();
@@ -82,6 +84,7 @@ namespace ERP.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [HasPermission("Administration.UserBranch.Edit")]
         public async Task<IActionResult> SaveAssignment(
             string userId, bool hasAllBranches, List<int> selectedBranchIds, int? companyIdFilter)
         {

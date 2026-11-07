@@ -1,0 +1,1270 @@
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = "شجرة ودليل الحسابات (Tree View)";
+    var parentAccounts = ViewBag.ParentAccounts as List<ERP.Domain.Entities.GLAccount> ?? new List<ERP.Domain.Entities.GLAccount>();
+    var currencies = ViewBag.Currencies as List<ERP.Domain.Entities.Currency> ?? new List<ERP.Domain.Entities.Currency>();
+    var branches = ViewBag.Branches as List<ERP.Domain.Entities.Branch> ?? new List<ERP.Domain.Entities.Branch>();
+    bool hasAllBranches = ViewBag.HasAllBranches is bool b && b;
+    int? currentBranchId = ViewBag.CurrentBranchId as int?;
+    int? selectedAccountId = ViewBag.SelectedAccountId as int?;
+}
+
+<style>
+    /* Chart of Accounts Tree View Styles */
+    .coa-tree-wrapper {
+        min-height: calc(100vh - 200px);
+    }
+    .coa-tree-container {
+        max-height: calc(100vh - 260px);
+        overflow-y: auto;
+        overflow-x: auto;
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px;
+    }
+    .tree-node-item {
+        transition: all 0.15s ease-in-out;
+        border: 1px solid transparent;
+        cursor: pointer;
+        user-select: none;
+    }
+    .tree-node-item:hover {
+        background-color: #f1f5f9 !important;
+        border-color: #cbd5e1;
+    }
+    .tree-node-item.selected-node {
+        background-color: #e0f2fe !important;
+        border-color: #0284c7 !important;
+        box-shadow: 0 0 0 1px #0284c7;
+    }
+    .tree-node-item.search-match {
+        background-color: #fef08a !important;
+        border-color: #eab308 !important;
+        font-weight: bold;
+    }
+    .tree-node-item.node-inactive {
+        opacity: 0.65;
+        background-color: #f8fafc;
+    }
+    .tree-node-item.node-inactive .node-title {
+        text-decoration: line-through;
+        color: #94a3b8;
+    }
+    .tree-children-list {
+        list-style: none;
+        padding-right: 22px;
+        margin-top: 4px;
+        border-right: 2px dashed #cbd5e1;
+    }
+    .toggle-icon {
+        width: 18px;
+        text-align: center;
+        display: inline-block;
+        cursor: pointer;
+        color: #64748b;
+        transition: transform 0.2s ease;
+    }
+    .toggle-icon:hover {
+        color: #0f172a;
+    }
+    .details-panel-card {
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        background: #ffffff;
+    }
+    .prop-label {
+        font-size: 0.82rem;
+        color: #64748b;
+        font-weight: 600;
+        width: 38%;
+    }
+    .prop-value {
+        font-size: 0.87rem;
+        color: #0f172a;
+        font-weight: 500;
+        width: 62%;
+    }
+    .context-menu {
+        position: absolute;
+        z-index: 1060;
+        display: none;
+        min-width: 180px;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+    }
+</style>
+
+<div class="container-fluid py-3">
+    <!-- Top Action Bar -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0 text-primary fw-bold">
+                <i class="fa-solid fa-sitemap me-2"></i> شجرة الحسابات التفاعلية (Chart of Accounts Tree)
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item"><a asp-action="Index">دليل الحسابات</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">العرض الشجري الهرمي</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            <a id="btnExportTreeExcel" href="@Url.Action("ExportTreeToExcel", "Accounts")" class="btn btn-outline-success" title="تصدير شجرة ودليل الحسابات بالكامل إلى ملف Excel منسق">
+                <i class="fa-solid fa-file-excel me-1"></i> تصدير الشجرة إلى Excel
+            </a>
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-table-list me-1"></i> عرض الجدول والبحث
+            </a>
+            <button type="button" class="btn btn-outline-primary" onclick="openQuickCreateModal(null, true)">
+                <i class="fa-solid fa-folder-plus me-1"></i> إضافة مجموعة رئيسية
+            </button>
+            <button type="button" class="btn btn-primary" onclick="openQuickCreateModal(null, false)">
+                <i class="fa-solid fa-plus me-1"></i> إضافة حساب حركة
+            </button>
+        </div>
+    </div>
+
+    <!-- Alert / Toast Messages Container -->
+    <div id="alertMessageContainer"></div>
+
+    <!-- Main Split-Screen Layout -->
+    <div class="row g-3 coa-tree-wrapper">
+        <!-- ─── Left Side: Tree View Panel (عرض الشجرة بالكامل) ─────────── -->
+        <div class="col-lg-7 col-xl-7">
+            <div class="card border-0 shadow-sm h-100">
+                <!-- Search & Controls Toolbar -->
+                <div class="card-header bg-white border-bottom py-2">
+                    <div class="row g-2 align-items-center">
+                        @if (branches.Any() && hasAllBranches)
+                        {
+                            <!-- Branch Filter for Admin -->
+                            <div class="col-md-3">
+                                <select id="treeBranchFilter" class="form-select form-select-sm">
+                                    <option value="">-- كافة الفروع --</option>
+                                    @foreach (var br in branches)
+                                    {
+                                        <option value="@br.Id">@br.Code - @br.LocalizedName</option>
+                                    }
+                                </select>
+                            </div>
+                            <!-- Quick Search Input -->
+                            <div class="col-md-5">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light text-muted border-end-0">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                    </span>
+                                    <input type="text" id="treeSearchInput" class="form-control border-start-0 ps-0" 
+                                           placeholder="بحث برقم الحساب أو الاسم..." />
+                                    <button type="button" id="btnClearSearch" class="btn btn-outline-secondary" title="مسح البحث">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Expand / Collapse / Refresh / Export Actions -->
+                            <div class="col-md-4 d-flex justify-content-end gap-1">
+                                <a id="btnQuickExportExcel" href="@Url.Action("ExportTreeToExcel", "Accounts")" class="btn btn-sm btn-outline-success px-2" title="تصدير شجرة الحسابات إلى ملف Excel">
+                                    <i class="fa-solid fa-file-excel me-1"></i> إكسيل
+                                </a>
+                                <button type="button" id="btnExpandAll" class="btn btn-sm btn-outline-secondary px-2" title="توسيع الكل">
+                                    <i class="fa-solid fa-plus-square me-1"></i> توسيع
+                                </button>
+                                <button type="button" id="btnCollapseAll" class="btn btn-sm btn-outline-secondary px-2" title="طي الكل">
+                                    <i class="fa-solid fa-minus-square me-1"></i> طي
+                                </button>
+                                <button type="button" id="btnRefreshTree" class="btn btn-sm btn-outline-primary px-2" title="تحديث البيانات">
+                                    <i class="fa-solid fa-rotate me-1"></i> تحديث
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- Quick Search Input -->
+                            <div class="col-md-7">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light text-muted border-end-0">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                    </span>
+                                    <input type="text" id="treeSearchInput" class="form-control border-start-0 ps-0" 
+                                           placeholder="بحث سريع برقم الحساب أو الاسم (عربي / إنجليزي)..." />
+                                    <button type="button" id="btnClearSearch" class="btn btn-outline-secondary" title="مسح البحث">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Expand / Collapse / Refresh / Export Actions -->
+                            <div class="col-md-5 d-flex justify-content-end gap-1">
+                                <a id="btnQuickExportExcel2" href="@Url.Action("ExportTreeToExcel", "Accounts")" class="btn btn-sm btn-outline-success px-2" title="تصدير شجرة الحسابات إلى ملف Excel">
+                                    <i class="fa-solid fa-file-excel me-1"></i> إكسيل
+                                </a>
+                                <button type="button" id="btnExpandAll" class="btn btn-sm btn-outline-secondary px-2" title="توسيع الكل">
+                                    <i class="fa-solid fa-plus-square me-1"></i> توسيع
+                                </button>
+                                <button type="button" id="btnCollapseAll" class="btn btn-sm btn-outline-secondary px-2" title="طي الكل">
+                                    <i class="fa-solid fa-minus-square me-1"></i> طي
+                                </button>
+                                <button type="button" id="btnRefreshTree" class="btn btn-sm btn-outline-primary px-2" title="تحديث البيانات">
+                                    <i class="fa-solid fa-rotate me-1"></i> تحديث
+                                </button>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Search Navigation & Legend Bar -->
+                    <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top small text-muted">
+                        <!-- Legend -->
+                        <div>
+                            <span class="me-3"><i class="fa-solid fa-folder text-warning me-1"></i> مجموعة رئيسية (📁)</span>
+                            <span class="me-3"><i class="fa-solid fa-file-lines text-primary me-1"></i> حساب حركة (📄)</span>
+                            <span><i class="fa-solid fa-ban text-danger me-1"></i> معطل (⛔)</span>
+                        </div>
+                        <!-- Search matches tracker -->
+                        <div id="searchMatchesTracker" class="fw-bold text-primary d-none">
+                            <span id="matchIndex">0</span> من <span id="matchCount">0</span> نتيجة
+                            <button type="button" id="btnPrevMatch" class="btn btn-link btn-sm p-0 ms-1" title="السابق"><i class="fa-solid fa-chevron-up"></i></button>
+                            <button type="button" id="btnNextMatch" class="btn btn-link btn-sm p-0 ms-1" title="التالي"><i class="fa-solid fa-chevron-down"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tree Scrollable Body -->
+                <div class="card-body p-2 position-relative">
+                    <!-- Loading Spinner -->
+                    <div id="treeLoadingSpinner" class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <div class="mt-2 text-muted fw-bold">جاري تحميل شجرة الحسابات...</div>
+                    </div>
+
+                    <!-- Empty Tree Notice -->
+                    <div id="treeEmptyNotice" class="text-center py-5 d-none text-muted">
+                        <i class="fa-solid fa-folder-open fs-1 mb-2"></i>
+                        <h6>لا توجد حسابات مسجلة حالياً في دليل الحسابات</h6>
+                        <button type="button" class="btn btn-sm btn-primary mt-2" onclick="openQuickCreateModal(null, true)">
+                            <i class="fa-solid fa-plus me-1"></i> إنشاء أول مجموعة رئيسية
+                        </button>
+                    </div>
+
+                    <!-- Tree Container -->
+                    <div id="treeContainer" class="coa-tree-container d-none"></div>
+                </div>
+
+                <!-- Footer Summary Counter -->
+                <div class="card-footer bg-light py-1 px-3 d-flex justify-content-between align-items-center small text-muted">
+                    <span>إجمالي الحسابات: <strong id="lblTotalAccounts">0</strong></span>
+                    <span>المجموعات: <strong id="lblTotalGroups" class="text-warning">0</strong></span>
+                    <span>حسابات الحركة: <strong id="lblTotalLeafs" class="text-primary">0</strong></span>
+                    <span>المعطلة: <strong id="lblTotalInactive" class="text-danger">0</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Right Side: Information Panel (تفاصيل العنصر المحدد) ─────── -->
+        <div class="col-lg-5 col-xl-5">
+            <div class="card details-panel-card h-100 border-0 shadow-sm">
+                <!-- Panel Header -->
+                <div class="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-dark">
+                        <i class="fa-solid fa-circle-info text-primary me-1"></i> تفاصيل الحساب المحدد
+                    </h6>
+                    <div id="panelStatusBadge">
+                        <span class="badge bg-secondary">لم يتم التحديد</span>
+                    </div>
+                </div>
+
+                <div class="card-body p-3" id="detailsPanelBody">
+                    <!-- Unselected Placeholder -->
+                    <div id="noSelectionPlaceholder" class="text-center py-5 text-muted">
+                        <i class="fa-solid fa-hand-pointer fs-1 mb-3 text-secondary opacity-50"></i>
+                        <h6 class="fw-bold">اختر حساباً من الشجرة للاطلاع على تفاصيله وإدارته</h6>
+                        <p class="small text-muted mb-0">يمكنك النقر المزدوج على أي حساب لتعديله مباشرة.</p>
+                    </div>
+
+                    <!-- Selected Account Content -->
+                    <div id="selectedAccountContent" class="d-none">
+                        <!-- Account Title Card -->
+                        <div class="p-2 mb-3 rounded bg-light border d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center">
+                                <span id="infoTypeIcon" class="fs-4 me-2">📁</span>
+                                <div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span id="infoCode" class="fw-bold font-monospace text-primary fs-5">1101</span>
+                                        <span id="infoGroupBadge" class="badge bg-secondary">مجموعة</span>
+                                        <span id="infoControlBadge" class="badge bg-warning text-dark d-none">حساب مراقبة</span>
+                                    </div>
+                                    <h6 id="infoName" class="mb-0 fw-bold text-dark">النقدية وما في حكمها</h6>
+                                </div>
+                            </div>
+                            <div>
+                                <span id="infoActiveBadge" class="badge bg-success">نشط</span>
+                            </div>
+                        </div>
+
+                        <!-- Key-Value Properties Table -->
+                        <div class="table-responsive mb-3 border rounded">
+                            <table class="table table-sm table-striped align-middle mb-0">
+                                <tbody>
+                                    <tr>
+                                        <td class="prop-label">كود الحساب:</td>
+                                        <td class="prop-value font-monospace fw-bold text-primary" id="propCode">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">الاسم بالعربية:</td>
+                                        <td class="prop-value" id="propNameAr">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">الاسم بالإنجليزية:</td>
+                                        <td class="prop-value" id="propNameEn">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">الحساب الأب:</td>
+                                        <td class="prop-value" id="propParent">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">المستوى الشجري:</td>
+                                        <td class="prop-value" id="propLevel">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">طبيعة الحساب:</td>
+                                        <td class="prop-value" id="propNature">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">التصنيف المحاسبي:</td>
+                                        <td class="prop-value" id="propCategory">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">نوع الحساب:</td>
+                                        <td class="prop-value" id="propIsGroup">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">يقبل قيود وحركات:</td>
+                                        <td class="prop-value" id="propIsTransactional">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">الفرع المخصص:</td>
+                                        <td class="prop-value" id="propBranch">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">العملة:</td>
+                                        <td class="prop-value" id="propCurrency">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">يتطلب مركز تكلفة:</td>
+                                        <td class="prop-value" id="propRequiresCostCenter">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">حساب تسوية ومطابقة:</td>
+                                        <td class="prop-value" id="propIsReconciliation">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">نطاق استخدام الحساب:</td>
+                                        <td class="prop-value" id="propUsage">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">تاريخ الإنشاء:</td>
+                                        <td class="prop-value" id="propCreatedAt">-</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="prop-label">آخر تحديث:</td>
+                                        <td class="prop-value" id="propUpdatedAt">-</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Action Buttons Bar -->
+                        <div class="card border mb-3">
+                            <div class="card-header bg-light py-1 fw-bold small text-muted">
+                                <i class="fa-solid fa-bolt me-1 text-warning"></i> الإجراءات المتاحة للحساب
+                            </div>
+                            <div class="card-body p-2 d-flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="btnActionAddChildGroup">
+                                    <i class="fa-solid fa-folder-plus me-1"></i> إضافة مجموعة فرعية
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success" id="btnActionAddChildAccount">
+                                    <i class="fa-solid fa-file-circle-plus me-1"></i> إضافة حساب حركة
+                                </button>
+                                <a href="#" id="btnActionEdit" class="btn btn-sm btn-outline-secondary">
+                                    <i class="fa-solid fa-pen-to-square me-1"></i> تعديل كامل
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-warning text-dark" id="btnActionToggleStatus">
+                                    <i class="fa-solid fa-power-off me-1"></i> <span id="lblToggleActionText">تجميد</span>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info text-dark" id="btnActionViewAudit">
+                                    <i class="fa-solid fa-clock-rotate-left me-1"></i> سجل المراجعة
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="btnActionDelete">
+                                    <i class="fa-solid fa-trash-can me-1"></i> حذف
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Future Ready Extensions (جاهز للتوسعات المستقبلية) -->
+                        <div class="card border-0 bg-light rounded p-2">
+                            <div class="fw-bold small text-secondary mb-1">
+                                <i class="fa-solid fa-chart-line me-1"></i> استكشاف الأرصدة والتقارير (Future Ready)
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-light border text-muted w-50" title="ميزة مستقبلية لكشف الحساب">
+                                    <i class="fa-solid fa-book-open me-1 text-primary"></i> كشف الحساب
+                                </button>
+                                <button type="button" class="btn btn-sm btn-light border text-muted w-50" title="ميزة مستقبلية لميزان المراجعة">
+                                    <i class="fa-solid fa-scale-balanced me-1 text-success"></i> ميزان المراجعة
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Modal 1: Quick Create Child Account / Group ─────────────────── -->
+<div class="modal fade" id="quickCreateModal" tabindex="-1" aria-labelledby="quickCreateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title fw-bold" id="quickCreateModalLabel">
+                    <i class="fa-solid fa-plus-circle me-1"></i> إضافة حساب / مجموعة في الشجرة
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <form id="quickCreateForm">
+                    <input type="hidden" id="qcParentId" />
+                    
+                    <!-- Parent Indicator -->
+                    <div class="alert alert-light border py-1 px-3 mb-3 small d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-muted">الحساب الأب:</span> 
+                            <strong id="qcParentDisplay" class="text-primary font-monospace">-</strong>
+                        </div>
+                        <div>
+                            <span class="text-muted">المستوى:</span>
+                            <span id="qcLevelBadge" class="badge bg-secondary">مستوى 1</span>
+                        </div>
+                    </div>
+
+                    <div class="row g-2">
+                        <!-- Account Type (Group or Leaf) -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">طبيعة ونوع العقدة <span class="text-danger">*</span></label>
+                            <div class="d-flex gap-3 mt-1">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="qcIsGroup" id="qcTypeLeaf" value="false" checked>
+                                    <label class="form-check-label small fw-bold" for="qcTypeLeaf">
+                                        📄 حساب حركة فرعي (يقبل القيود)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="qcIsGroup" id="qcTypeGroup" value="true">
+                                    <label class="form-check-label small fw-bold" for="qcTypeGroup">
+                                        📁 مجموعة رئيسية (تجميعية)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Code -->
+                        <div class="col-md-6">
+                            <label for="qcCode" class="form-label small fw-bold">كود الحساب <span class="text-danger">*</span></label>
+                            <input type="text" id="qcCode" class="form-control form-control-sm font-monospace" placeholder="مثال: 110101001" required />
+                        </div>
+
+                        <!-- Name Arabic -->
+                        <div class="col-md-6">
+                            <label for="qcNameAr" class="form-label small fw-bold">اسم الحساب بالعربية <span class="text-danger">*</span></label>
+                            <input type="text" id="qcNameAr" class="form-control form-control-sm" placeholder="مثال: خزينة المبيعات المركزية" required />
+                        </div>
+
+                        <!-- Name English -->
+                        <div class="col-md-6">
+                            <label for="qcNameEn" class="form-label small fw-bold">اسم الحساب بالإنجليزية</label>
+                            <input type="text" id="qcNameEn" class="form-control form-control-sm" placeholder="e.g. Central Sales Safe" />
+                        </div>
+
+                        <!-- Category -->
+                        <div class="col-md-4">
+                            <label for="qcCategory" class="form-label small fw-bold">التصنيف المحاسبي</label>
+                            <select id="qcCategory" class="form-select form-select-sm">
+                                <option value="1">1 - الأصول (Assets)</option>
+                                <option value="2">2 - الالتزامات (Liabilities)</option>
+                                <option value="3">3 - حقوق الملكية (Equity)</option>
+                                <option value="4">4 - الإيرادات (Revenue)</option>
+                                <option value="5">5 - المصروفات (Expenses)</option>
+                            </select>
+                        </div>
+
+                        <!-- Nature -->
+                        <div class="col-md-4">
+                            <label for="qcNature" class="form-label small fw-bold">طبيعة الحساب</label>
+                            <select id="qcNature" class="form-select form-select-sm">
+                                <option value="1">مدين (Debit)</option>
+                                <option value="2">دائن (Credit)</option>
+                            </select>
+                        </div>
+
+                        <!-- Currency -->
+                        <div class="col-md-4">
+                            <label for="qcCurrencyId" class="form-label small fw-bold">العملة</label>
+                            <select id="qcCurrencyId" class="form-select form-select-sm">
+                                <option value="">-- متعدد العملات --</option>
+                                @foreach (var c in currencies)
+                                {
+                                    <option value="@c.Id">@c.Code - @c.LocalizedName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- Branch Scoping -->
+                        <div class="col-md-4" id="qcBranchContainer">
+                            <label for="qcBranchId" class="form-label small fw-bold">الفرع المخصص</label>
+                            <select id="qcBranchId" class="form-select form-select-sm">
+                                <option value="">-- عام (مشترك لكافة الفروع) --</option>
+                                @foreach (var br in branches)
+                                {
+                                    <option value="@br.Id" selected="@(currentBranchId == br.Id && !hasAllBranches ? "selected" : null)">@br.Code - @br.LocalizedName</option>
+                                }
+                            </select>
+                            <div class="form-text text-muted" style="font-size:0.7rem;">تخصيص الحساب لفرع محدد (مثل الصندوق).</div>
+                        </div>
+
+                        <!-- Flags -->
+                        <div class="col-md-12 pt-2 border-top mt-2">
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="qcRequiresCostCenter">
+                                        <label class="form-check-label small" for="qcRequiresCostCenter">إلزامية مركز التكلفة</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="qcIsControlAccount">
+                                        <label class="form-check-label small" for="qcIsControlAccount">حساب مراقبة دفتر مساعد</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="qcIsReconciliation">
+                                        <label class="form-check-label small" for="qcIsReconciliation">حساب تسوية ومطابقة</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sub-Ledger Type (visible if control account) -->
+                        <div class="col-md-6 d-none" id="qcSubLedgerContainer">
+                            <label for="qcSubLedgerType" class="form-label small fw-bold">نوع الدفتر المساعد</label>
+                            <select id="qcSubLedgerType" class="form-select form-select-sm">
+                                <option value="0">بدون</option>
+                                <option value="1">عملاء (Customers)</option>
+                                <option value="2">موردون (Vendors)</option>
+                                <option value="3">بنوك (Banks)</option>
+                                <option value="4">موظفون (Employees)</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" id="btnSubmitQuickCreate" class="btn btn-primary btn-sm px-4">
+                    <span id="qcBtnSpinner" class="spinner-border spinner-border-sm me-1 d-none"></span>
+                    <i class="fa-solid fa-floppy-disk me-1"></i> حفظ وإضافة للشجرة
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Modal 2: Account Audit History Trail ────────────────────────── -->
+<div class="modal fade" id="auditHistoryModal" tabindex="-1" aria-labelledby="auditHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title fw-bold" id="auditHistoryModalLabel">
+                    <i class="fa-solid fa-clock-rotate-left me-1"></i> سجل المراجعة والتدقيق للحساب: <span id="auditModalAccountCode" class="font-monospace text-warning"></span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div id="auditLoadingSpinner" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="small text-muted mt-2">جاري قراءة سجل التدقيق والمراجعة...</div>
+                </div>
+                <div id="auditEmptyNotice" class="text-center py-4 d-none text-muted">
+                    <i class="fa-solid fa-file-circle-check fs-2 mb-2 text-secondary"></i>
+                    <div>لا توجد تعديلات سابقة مسجلة على هذا الحساب.</div>
+                </div>
+                <div id="auditListContainer" class="d-none">
+                    <div class="list-group list-group-flush" id="auditTimeline"></div>
+                </div>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+    <script>
+        // ====================================================================
+        // Chart of Accounts Tree View Controller
+        // ====================================================================
+        let rawTreeData = [];
+        let nodesMap = {};
+        let currentSelectedNode = null;
+        let searchMatches = [];
+        let currentMatchCursor = -1;
+
+        $(document).ready(function () {
+            loadTreeData();
+
+            // Branch Filter Handler
+            $('#treeBranchFilter').change(function () {
+                const bVal = $(this).val();
+                const baseUrl = '@Url.Action("ExportTreeToExcel", "Accounts")';
+                const exportUrl = bVal ? `${baseUrl}?branchId=${bVal}` : baseUrl;
+                $('#btnExportTreeExcel, #btnQuickExportExcel, #btnQuickExportExcel2').attr('href', exportUrl);
+                loadTreeData();
+            });
+
+            // IsGroup radio toggle in quick create modal
+            $('input[name="qcIsGroup"]').change(function () {
+                if ($(this).val() === 'true') {
+                    $('#qcBranchContainer').addClass('d-none');
+                    $('#qcBranchId').val('');
+                } else {
+                    $('#qcBranchContainer').removeClass('d-none');
+                }
+            });
+
+            // Search Handlers
+            let searchTimeout = null;
+            $('#treeSearchInput').on('input', function () {
+                clearTimeout(searchTimeout);
+                const query = $(this).val().trim();
+                searchTimeout = setTimeout(function () {
+                    executeTreeSearch(query);
+                }, 250);
+            });
+
+            $('#btnClearSearch').click(function () {
+                $('#treeSearchInput').val('');
+                executeTreeSearch('');
+            });
+
+            $('#btnPrevMatch').click(function () { navigateMatch(-1); });
+            $('#btnNextMatch').click(function () { navigateMatch(1); });
+
+            // Expand / Collapse All
+            $('#btnExpandAll').click(function () {
+                $('#treeContainer ul').show();
+                $('.toggle-icon').removeClass('fa-chevron-left').addClass('fa-chevron-down');
+            });
+
+            $('#btnCollapseAll').click(function () {
+                $('#treeContainer > ul > li > ul').hide();
+                $('.toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-left');
+            });
+
+            $('#btnRefreshTree').click(function () {
+                loadTreeData();
+            });
+
+            // Control Account sub-ledger toggle in quick create modal
+            $('#qcIsControlAccount').change(function () {
+                if ($(this).is(':checked')) {
+                    $('#qcSubLedgerContainer').removeClass('d-none');
+                } else {
+                    $('#qcSubLedgerContainer').addClass('d-none');
+                    $('#qcSubLedgerType').val('0');
+                }
+            });
+
+            // Action Button Handlers
+            $('#btnActionAddChildGroup').click(function () {
+                if (currentSelectedNode) openQuickCreateModal(currentSelectedNode, true);
+            });
+
+            $('#btnActionAddChildAccount').click(function () {
+                if (currentSelectedNode) openQuickCreateModal(currentSelectedNode, false);
+            });
+
+            $('#btnActionEdit').click(function (e) {
+                e.preventDefault();
+                if (currentSelectedNode) {
+                    window.location.href = '@Url.Action("Edit", "Accounts")/' + currentSelectedNode.id;
+                }
+            });
+
+            $('#btnActionToggleStatus').click(function () {
+                if (currentSelectedNode) toggleAccountStatus(currentSelectedNode.id);
+            });
+
+            $('#btnActionViewAudit').click(function () {
+                if (currentSelectedNode) openAuditModal(currentSelectedNode);
+            });
+
+            $('#btnActionDelete').click(function () {
+                if (currentSelectedNode) deleteAccount(currentSelectedNode.id);
+            });
+
+            $('#btnSubmitQuickCreate').click(function () {
+                submitQuickCreate();
+            });
+        });
+
+        // ====================================================================
+        // Tree Data Loader & Hierarchy Builder
+        // ====================================================================
+        function loadTreeData() {
+            $('#treeLoadingSpinner').removeClass('d-none');
+            $('#treeContainer').addClass('d-none');
+            $('#treeEmptyNotice').addClass('d-none');
+
+            const branchFilter = $('#treeBranchFilter').val();
+            const url = '@Url.Action("GetTreeHierarchy", "Accounts")' + (branchFilter ? '?branchId=' + branchFilter : '');
+
+            $.get(url, function (nodes) {
+                $('#treeLoadingSpinner').addClass('d-none');
+                rawTreeData = nodes || [];
+
+                if (rawTreeData.length === 0) {
+                    $('#treeEmptyNotice').removeClass('d-none');
+                    updateCounterLabels(0, 0, 0, 0);
+                    return;
+                }
+
+                // Build Map & Counters
+                nodesMap = {};
+                let groupsCount = 0;
+                let leafsCount = 0;
+                let inactiveCount = 0;
+
+                rawTreeData.forEach(n => {
+                    nodesMap[n.id] = { ...n, children: [] };
+                    if (n.isGroup) groupsCount++; else leafsCount++;
+                    if (!n.isActive) inactiveCount++;
+                });
+
+                updateCounterLabels(rawTreeData.length, groupsCount, leafsCount, inactiveCount);
+
+                // Build Root Hierarchy
+                const roots = [];
+                rawTreeData.forEach(n => {
+                    if (n.parentId && nodesMap[n.parentId]) {
+                        nodesMap[n.parentId].children.push(nodesMap[n.id]);
+                    } else {
+                        roots.push(nodesMap[n.id]);
+                    }
+                });
+
+                // Render DOM Tree
+                renderTreeRoots(roots);
+                $('#treeContainer').removeClass('d-none');
+
+                // Re-select previously selected or default
+                const preselectId = @(selectedAccountId ?? 0);
+                if (preselectId > 0 && nodesMap[preselectId]) {
+                    selectNode(nodesMap[preselectId]);
+                    expandPathToNode(preselectId);
+                } else if (roots.length > 0) {
+                    selectNode(roots[0]);
+                }
+            }).fail(function () {
+                $('#treeLoadingSpinner').addClass('d-none');
+                showNotice('حدث خطأ أثناء تحميل شجرة الحسابات من الخادم.', 'danger');
+            });
+        }
+
+        function updateCounterLabels(total, groups, leafs, inactive) {
+            $('#lblTotalAccounts').text(total);
+            $('#lblTotalGroups').text(groups);
+            $('#lblTotalLeafs').text(leafs);
+            $('#lblTotalInactive').text(inactive);
+        }
+
+        // ====================================================================
+        // Tree DOM Renderer
+        // ====================================================================
+        function renderTreeRoots(roots) {
+            const container = $('#treeContainer');
+            container.empty();
+
+            let treeHtml = '<ul class="list-unstyled p-0 m-0">';
+            roots.forEach(root => {
+                treeHtml += renderNodeHtml(root);
+            });
+            treeHtml += '</ul>';
+            container.html(treeHtml);
+
+            // Bind click & double-click events
+            container.find('.tree-node-item').click(function (e) {
+                if ($(e.target).hasClass('toggle-icon')) return;
+                const id = parseInt($(this).data('node-id'));
+                if (nodesMap[id]) {
+                    selectNode(nodesMap[id]);
+                }
+            });
+
+            container.find('.tree-node-item').dblclick(function (e) {
+                const id = parseInt($(this).data('node-id'));
+                window.location.href = '@Url.Action("Edit", "Accounts")/' + id;
+            });
+
+            container.find('.toggle-icon').click(function () {
+                const parentLi = $(this).closest('li');
+                const childrenUl = parentLi.children('ul');
+                if (childrenUl.length > 0) {
+                    childrenUl.slideToggle(150);
+                    $(this).toggleClass('fa-chevron-down fa-chevron-left');
+                }
+            });
+        }
+
+        function renderNodeHtml(node) {
+            const hasChildren = node.children && node.children.length > 0;
+            const isGroup = node.isGroup;
+            const isActive = node.isActive;
+
+            // Visual Icons: Group 📁, Leaf 📄, Inactive ⛔
+            let iconHtml = '';
+            if (!isActive) {
+                iconHtml = '<i class="fa-solid fa-ban text-danger me-2" title="حساب معطل"></i>';
+            } else if (isGroup) {
+                iconHtml = '<i class="fa-solid fa-folder text-warning me-2"></i>';
+            } else {
+                iconHtml = '<i class="fa-solid fa-file-lines text-primary me-2"></i>';
+            }
+
+            const activeClass = !isActive ? 'node-inactive' : '';
+            const natureBadge = node.accountNature === 1 
+                ? '<span class="badge bg-light text-primary border ms-1" style="font-size:0.68rem;">مدين</span>' 
+                : '<span class="badge bg-light text-danger border ms-1" style="font-size:0.68rem;">دائن</span>';
+
+            const groupBadge = isGroup 
+                ? '<span class="badge bg-secondary-subtle text-secondary border ms-1" style="font-size:0.65rem;">مجموعة</span>' 
+                : '<span class="badge bg-success-subtle text-success border ms-1" style="font-size:0.65rem;">فرعي</span>';
+
+            const branchBadge = node.branchId 
+                ? `<span class="badge bg-info-subtle text-info-emphasis border ms-1" style="font-size:0.65rem;" title="حساب مخصص لفرع: ${node.branchName}"><i class="fa-solid fa-code-branch me-1"></i>${node.branchName}</span>` 
+                : '';
+
+            const controlBadge = node.isControlAccount 
+                ? '<span class="badge bg-warning-subtle text-warning-emphasis border ms-1" style="font-size:0.65rem;" title="حساب مراقبة"><i class="fa-solid fa-shield-halved"></i> مراقبة</span>' 
+                : '';
+
+            let html = `<li class="my-1" data-li-id="${node.id}">`;
+            html += `
+                <div class="tree-node-item d-flex align-items-center p-2 rounded ${activeClass}" 
+                     data-node-id="${node.id}" id="tree_node_${node.id}">
+                    <span class="toggle-icon me-1">
+                        ${hasChildren ? '<i class="fa-solid fa-chevron-down"></i>' : '<span style="display:inline-block; width:14px;"></span>'}
+                    </span>
+                    ${iconHtml}
+                    <span class="font-monospace fw-bold text-primary me-2 node-code">${node.code}</span>
+                    <span class="fw-semibold text-dark me-2 node-title">${node.nameAr || node.nameEn}</span>
+                    ${groupBadge}
+                    ${branchBadge}
+                    ${controlBadge}
+                    ${natureBadge}
+                    <span class="badge bg-light text-muted border ms-auto" style="font-size:0.65rem;">L${node.level}</span>
+                </div>
+            `;
+
+            if (hasChildren) {
+                html += `<ul class="tree-children-list">`;
+                node.children.forEach(child => {
+                    html += renderNodeHtml(child);
+                });
+                html += `</ul>`;
+            }
+            html += `</li>`;
+            return html;
+        }
+
+        // ====================================================================
+        // Node Selection & Details Panel Update
+        // ====================================================================
+        function selectNode(node) {
+            currentSelectedNode = node;
+
+            // Highlight node in tree
+            $('.tree-node-item').removeClass('selected-node');
+            $(`#tree_node_${node.id}`).addClass('selected-node');
+
+            // Fetch latest detailed properties
+            $.get('@Url.Action("GetAccountDetails", "Accounts")?id=' + node.id, function (res) {
+                if (res.success && res.data) {
+                    displayDetailsPanel(res.data);
+                } else {
+                    displayDetailsPanel(node);
+                }
+            }).fail(function () {
+                displayDetailsPanel(node);
+            });
+        }
+
+        function displayDetailsPanel(d) {
+            $('#noSelectionPlaceholder').addClass('d-none');
+            $('#selectedAccountContent').removeClass('d-none');
+
+            // Header Info
+            $('#infoTypeIcon').text(!d.isActive ? '⛔' : (d.isGroup ? '📁' : '📄'));
+            $('#infoCode').text(d.code);
+            $('#infoName').text(d.nameAr || d.nameEn);
+
+            if (d.isGroup) {
+                $('#infoGroupBadge').text('مجموعة رئيسية').removeClass('bg-success').addClass('bg-secondary');
+            } else {
+                $('#infoGroupBadge').text('حساب حركة فرعي').removeClass('bg-secondary').addClass('bg-success');
+            }
+
+            if (d.isControlAccount) {
+                $('#infoControlBadge').removeClass('d-none');
+            } else {
+                $('#infoControlBadge').addClass('d-none');
+            }
+
+            if (d.isActive) {
+                $('#infoActiveBadge').text('نشط').removeClass('bg-danger').addClass('bg-success');
+                $('#panelStatusBadge').html('<span class="badge bg-success">نشط</span>');
+                $('#lblToggleActionText').text('تجميد');
+            } else {
+                $('#infoActiveBadge').text('معطل ومجمد').removeClass('bg-success').addClass('bg-danger');
+                $('#panelStatusBadge').html('<span class="badge bg-danger">معطل ومجمد</span>');
+                $('#lblToggleActionText').text('تنشيط');
+            }
+
+            // Key-Value Properties
+            $('#propCode').text(d.code);
+            $('#propNameAr').text(d.nameAr || '-');
+            $('#propNameEn').text(d.nameEn || '-');
+            $('#propParent').text(d.parentCode && d.parentCode !== '-' ? `${d.parentCode} - ${d.parentName}` : 'حساب رئيسي جذري');
+            $('#propLevel').html(`<span class="badge bg-light text-dark border">المستوى ${d.level}</span>`);
+            $('#propNature').html(d.accountNature === 1 
+                ? '<span class="badge bg-primary-subtle text-primary border">مدين (Debit)</span>' 
+                : '<span class="badge bg-danger-subtle text-danger border">دائن (Credit)</span>');
+            $('#propCategory').text(d.accountCategoryText || '-');
+            $('#propIsGroup').text(d.isGroup ? 'مجموعة رئيسية (تجميعي لا يقبل قيود مباشرة)' : 'حساب حركة فرعي');
+            $('#propIsTransactional').html(!d.isGroup 
+                ? '<span class="text-success fw-bold"><i class="fa-solid fa-check me-1"></i>نعم (يقبل قيود اليومية)</span>' 
+                : '<span class="text-muted"><i class="fa-solid fa-xmark me-1"></i>لا (حساب تجميعي)</span>');
+            $('#propBranch').html(d.branchId 
+                ? `<span class="badge bg-info text-dark"><i class="fa-solid fa-code-branch me-1"></i>${d.branchName}</span>` 
+                : '<span class="badge bg-light text-muted border">عام (مشترك لكافة الفروع)</span>');
+            $('#propCurrency').text(d.currencyCode || 'متعدد العملات');
+            $('#propRequiresCostCenter').html(d.requiresCostCenter 
+                ? '<span class="text-danger fw-bold"><i class="fa-solid fa-check me-1"></i>إلزامي</span>' 
+                : '<span class="text-muted">غير إلزامي</span>');
+            $('#propIsReconciliation').text(d.isReconciliationAccount ? 'نعم' : 'لا');
+            $('#propUsage').text(d.accountUsageText || 'جميع الشاشات');
+            $('#propCreatedAt').text(d.createdAt ? new Date(d.createdAt).toLocaleString('ar-EG') : '-');
+            $('#propUpdatedAt').text(d.updatedAt ? new Date(d.updatedAt).toLocaleString('ar-EG') : 'لم يعدل');
+
+            // Button actions logic
+            if (d.isGroup) {
+                $('#btnActionAddChildGroup').prop('disabled', false).show();
+                $('#btnActionAddChildAccount').prop('disabled', false).show();
+            } else {
+                // Leaf accounts cannot have child accounts or groups
+                $('#btnActionAddChildGroup').prop('disabled', true).hide();
+                $('#btnActionAddChildAccount').prop('disabled', true).hide();
+            }
+
+            $('#btnActionEdit').attr('href', '@Url.Action("Edit", "Accounts")/' + d.id);
+        }
+
+        // ====================================================================
+        // Search & Auto-Expand Engine
+        // ====================================================================
+        function executeTreeSearch(query) {
+            $('.tree-node-item').removeClass('search-match');
+            searchMatches = [];
+            currentMatchCursor = -1;
+
+            if (!query || query.trim() === '') {
+                $('#searchMatchesTracker').addClass('d-none');
+                return;
+            }
+
+            const cleanQ = query.trim().toLowerCase();
+
+            rawTreeData.forEach(n => {
+                const matchCode = (n.code || '').toLowerCase().includes(cleanQ);
+                const matchAr = (n.nameAr || '').toLowerCase().includes(cleanQ);
+                const matchEn = (n.nameEn || '').toLowerCase().includes(cleanQ);
+
+                if (matchCode || matchAr || matchEn) {
+                    searchMatches.push(n.id);
+                    $(`#tree_node_${n.id}`).addClass('search-match');
+                }
+            });
+
+            if (searchMatches.length > 0) {
+                $('#searchMatchesTracker').removeClass('d-none');
+                $('#matchCount').text(searchMatches.length);
+                navigateMatch(1);
+            } else {
+                $('#searchMatchesTracker').addClass('d-none');
+                showNotice(`لا توجد حسابات مطابقة للبحث: "${query}"`, 'warning');
+            }
+        }
+
+        function navigateMatch(direction) {
+            if (searchMatches.length === 0) return;
+
+            currentMatchCursor += direction;
+            if (currentMatchCursor >= searchMatches.length) currentMatchCursor = 0;
+            if (currentMatchCursor < 0) currentMatchCursor = searchMatches.length - 1;
+
+            $('#matchIndex').text(currentMatchCursor + 1);
+
+            const targetId = searchMatches[currentMatchCursor];
+            expandPathToNode(targetId);
+
+            const el = $(`#tree_node_${targetId}`);
+            if (el.length > 0) {
+                // Scroll into view
+                const container = $('#treeContainer');
+                container.animate({
+                    scrollTop: el.offset().top - container.offset().top + container.scrollTop() - 40
+                }, 200);
+
+                if (nodesMap[targetId]) {
+                    selectNode(nodesMap[targetId]);
+                }
+            }
+        }
+
+        function expandPathToNode(nodeId) {
+            let curr = nodesMap[nodeId];
+            while (curr && curr.parentId) {
+                const parentLi = $(`li[data-li-id="${curr.parentId}"]`);
+                parentLi.children('ul').show();
+                parentLi.find(`> .tree-node-item .toggle-icon i`).removeClass('fa-chevron-left').addClass('fa-chevron-down');
+                curr = nodesMap[curr.parentId];
+            }
+        }
+
+        // ====================================================================
+        // Quick Create Child Modal
+        // ====================================================================
+        function openQuickCreateModal(parentNode, isGroup) {
+            $('#quickCreateForm')[0].reset();
+            $('#qcParentId').val(parentNode ? parentNode.id : '');
+            
+            if (parentNode) {
+                $('#qcParentDisplay').text(`${parentNode.code} - ${parentNode.nameAr || parentNode.nameEn}`);
+                $('#qcLevelBadge').text(`مستوى ${parentNode.level + 1}`);
+                $('#qcCategory').val(parentNode.accountCategory);
+                $('#qcNature').val(parentNode.accountNature);
+            } else {
+                $('#qcParentDisplay').text('حساب رئيسي جذري (بدون أب)');
+                $('#qcLevelBadge').text('مستوى 1');
+            }
+
+            if (isGroup) {
+                $('#qcTypeGroup').prop('checked', true);
+                $('#qcBranchContainer').addClass('d-none');
+                $('#qcBranchId').val('');
+            } else {
+                $('#qcTypeLeaf').prop('checked', true);
+                $('#qcBranchContainer').removeClass('d-none');
+                const defaultBranch = '@(currentBranchId ?? 0)';
+                if (defaultBranch !== '0' && !@((hasAllBranches).ToString().ToLower())) {
+                    $('#qcBranchId').val(defaultBranch);
+                }
+            }
+
+            $('#quickCreateModal').modal('show');
+            setTimeout(() => { $('#qcCode').focus(); }, 400);
+        }
+
+        function submitQuickCreate() {
+            const code = $('#qcCode').val().trim();
+            const nameAr = $('#qcNameAr').val().trim();
+            const nameEn = $('#qcNameEn').val().trim();
+            const parentId = parseInt($('#qcParentId').val()) || null;
+            const isGroup = $('input[name="qcIsGroup"]:checked').val() === 'true';
+            const branchIdVal = parseInt($('#qcBranchId').val()) || null;
+
+            if (!code) {
+                alert('يرجى إدخال كود الحساب.');
+                return;
+            }
+            if (!nameAr) {
+                alert('يرجى إدخال اسم الحساب بالعربية.');
+                return;
+            }
+
+            $('#qcBtnSpinner').removeClass('d-none');
+            $('#btnSubmitQuickCreate').prop('disabled', true);
+
+            const payload = {
+                ParentId: parentId,
+                Code: code,
+                NameAr: nameAr,
+                NameEn: nameEn || nameAr,
+                IsGroup: isGroup,
+                BranchId: isGroup ? null : branchIdVal,
+                AccountCategory: parseInt($('#qcCategory').val()),
+                AccountNature: parseInt($('#qcNature').val()),
+                CurrencyId: parseInt($('#qcCurrencyId').val()) || null,
+                RequiresCostCenter: $('#qcRequiresCostCenter').is(':checked'),
+                IsControlAccount: $('#qcIsControlAccount').is(':checked'),
+                SubLedgerType: parseInt($('#qcSubLedgerType').val()) || 0,
+                IsReconciliationAccount: $('#qcIsReconciliation').is(':checked')
+            };
+
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            $.ajax({
+                url: '@Url.Action("QuickCreate", "Accounts")',
+                type: 'POST',
+                contentType: 'application/json',
+                headers: { 'RequestVerificationToken': token },
+                data: JSON.stringify(payload),
+                success: function (res) {
+                    $('#qcBtnSpinner').addClass('d-none');
+                    $('#btnSubmitQuickCreate').prop('disabled', false);
+
+                    if (res.success) {
+                        $('#quickCreateModal').modal('hide');
+                        showNotice(res.message, 'success');
+                        loadTreeData();
+                    } else {
+                        alert(res.message);
+                    }
+                },
+                error: function (err) {
+                    $('#qcBtnSpinner').addClass('d-none');
+                    $('#btnSubmitQuickCreate').prop('disabled', false);
+                    alert('حدث خطأ غير متوقع أثناء حفظ الحساب.');
+                }
+            });
+        }
+
+        // ====================================================================
+        // Toggle Account Active / Inactive Status
+        // ====================================================================
+        function toggleAccountStatus(id) {
+            const acc = nodesMap[id];
+            if (!acc) return;
+
+            const actionName = acc.isActive ? 'تجميد وتعطيل' : 'تنشيط';
+            if (!confirm(`هل أنت متأكد من رغبتك في ${actionName} الحساب (${acc.code} - ${acc.nameAr})؟`)) return;
+
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            $.post('@Url.Action("ToggleStatus", "Accounts")', { id: id, __RequestVerificationToken: token }, function (res) {
+                if (res.success) {
+                    showNotice(res.message, 'success');
+                    acc.isActive = res.isActive;
+                    selectNode(acc);
+                    loadTreeData();
+                } else {
+                    alert(res.message);
+                }
+            }).fail(function () {
+                alert('حدث خطأ أثناء تغيير حالة الحساب.');
+            });
+        }
+
+        // ====================================================================
+        // Delete Account
+        // ====================================================================
+        function deleteAccount(id) {
+            const acc = nodesMap[id];
+            if (!acc) return;
+
+            if (!confirm(`هل أنت متأكد من رغبتك في حذف الحساب (${acc.code} - ${acc.nameAr}) نهائياً؟`)) return;
+
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            $.post('@Url.Action("Delete", "Accounts")', { id: id, __RequestVerificationToken: token }, function (res) {
+                if (res.success) {
+                    showNotice(res.message, 'success');
+                    currentSelectedNode = null;
+                    $('#selectedAccountContent').addClass('d-none');
+                    $('#noSelectionPlaceholder').removeClass('d-none');
+                    loadTreeData();
+                } else {
+                    alert(res.message);
+                }
+            }).fail(function () {
+                alert('حدث خطأ أثناء محاولة حذف الحساب.');
+            });
+        }
+
+        // ====================================================================
+        // Audit History Trail Modal
+        // ====================================================================
+        function openAuditModal(node) {
+            $('#auditModalAccountCode').text(`${node.code} - ${node.nameAr}`);
+            $('#auditLoadingSpinner').removeClass('d-none');
+            $('#auditEmptyNotice').addClass('d-none');
+            $('#auditListContainer').addClass('d-none');
+            $('#auditTimeline').empty();
+            $('#auditHistoryModal').modal('show');
+
+            $.get('@Url.Action("GetAccountAudit", "Accounts")?id=' + node.id, function (res) {
+                $('#auditLoadingSpinner').addClass('d-none');
+
+                if (res.success && res.data && res.data.length > 0) {
+                    $('#auditListContainer').removeClass('d-none');
+                    let listHtml = '';
+                    res.data.forEach(item => {
+                        const dateStr = new Date(item.timestamp).toLocaleString('ar-EG');
+                        const actionBadge = item.action === 'Create'
+                            ? '<span class="badge bg-success">إنشاء</span>'
+                            : (item.action === 'Update' ? '<span class="badge bg-warning text-dark">تعديل</span>' : '<span class="badge bg-danger">حذف</span>');
+
+                        listHtml += `
+                            <div class="list-group-item p-2 mb-2 border rounded">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div>
+                                        ${actionBadge}
+                                        <strong class="ms-1 text-dark">${item.userName || 'النظام'}</strong>
+                                    </div>
+                                    <small class="text-muted font-monospace">${dateStr}</small>
+                                </div>
+                                <div class="small text-secondary mb-1">${item.description || 'عملية على الحساب'}</div>
+                                ${item.changedValues ? `<div class="bg-light p-1 rounded font-monospace small text-muted text-truncate" title="${item.changedValues}">التغييرات: ${item.changedValues}</div>` : ''}
+                            </div>
+                        `;
+                    });
+                    $('#auditTimeline').html(listHtml);
+                } else {
+                    $('#auditEmptyNotice').removeClass('d-none');
+                }
+            }).fail(function () {
+                $('#auditLoadingSpinner').addClass('d-none');
+                alert('تعذر تحميل سجل المراجعة للحساب.');
+            });
+        }
+
+        // ====================================================================
+        // Notifications Banner
+        // ====================================================================
+        function showNotice(msg, type = 'info') {
+            const html = `
+                <div class="alert alert-${type} alert-dismissible fade show shadow-sm py-2" role="alert">
+                    <i class="fa-solid fa-circle-info me-1"></i> ${msg}
+                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            $('#alertMessageContainer').html(html);
+            setTimeout(() => { $('#alertMessageContainer .alert').alert('close'); }, 6000);
+        }
+    </script>
+}

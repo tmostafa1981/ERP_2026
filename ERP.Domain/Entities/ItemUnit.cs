@@ -3,9 +3,10 @@ using ERP.Domain.Interfaces;
 
 namespace ERP.Domain.Entities
 {
-    public class ItemUnit : IAuditableEntity
+    public class ItemUnit : IAuditableEntity, IConcurrencyAware
     {
         public int Id { get; set; }
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
         public int ItemId { get; set; }
         public int UnitId { get; set; }
         public decimal ConversionFactor { get; set; } = 1.0m;

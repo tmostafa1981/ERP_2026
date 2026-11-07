@@ -10,10 +10,18 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Security.Claims;
 
 namespace ERP.Web.Controllers
 {
+    public class LoginLookupDto
+    {
+        public int id { get; set; }
+        public string name { get; set; } = string.Empty;
+        public string code { get; set; } = string.Empty;
+    }
+
     public class AccountController : Controller
     {
         private readonly SignInManager<ApplicationUser> _signInManager;
@@ -21,32 +29,48 @@ namespace ERP.Web.Controllers
         private readonly ErpDbContext _context;
         private readonly Microsoft.Extensions.Localization.IStringLocalizer<ERP.Web.Resources.SharedResource> _localizer;
         private readonly IAuditService _audit;
+        private readonly IMemoryCache _cache;
 
         public AccountController(
             SignInManager<ApplicationUser> signInManager,
             UserManager<ApplicationUser> userManager,
             ErpDbContext context,
             Microsoft.Extensions.Localization.IStringLocalizer<ERP.Web.Resources.SharedResource> localizer,
-            IAuditService audit)
+            IAuditService audit,
+            IMemoryCache cache)
         {
             _signInManager = signInManager;
             _userManager = userManager;
             _context = context;
             _localizer = localizer;
             _audit = audit;
+            _cache = cache;
         }
 
         // ─── GET: Login ───────────────────────────────────────────────────────────
         [HttpGet]
         public async Task<IActionResult> Login()
         {
+            // Auto-clean any legacy chunked cookies from old sessions
+            foreach (var cookieKey in Request.Cookies.Keys)
+            {
+                if (cookieKey.StartsWith(".AspNetCore.Identity.ApplicationC") || cookieKey == ".AspNetCore.Identity.Application")
+                {
+                    Response.Cookies.Delete(cookieKey);
+                }
+            }
             var model = new LoginViewModel();
-            var fiscalYears = await _context.FiscalYears
-                .Where(f => !f.IsClosed && f.IsActive)
-                .OrderByDescending(f => f.Year)
-                .ToListAsync();
-            model.FiscalYears = fiscalYears.Select(f =>
-                new SelectListItem { Value = f.Id.ToString(), Text = f.LocalizedName });
+            var fiscalYears = await _cache.GetOrCreateAsync("ActiveFiscalYearsList", async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
+                var items = await _context.FiscalYears
+                    .AsNoTracking()
+                    .Where(f => !f.IsClosed && f.IsActive)
+                    .OrderByDescending(f => f.Year)
+                    .ToListAsync();
+                return items.Select(f => new SelectListItem { Value = f.Id.ToString(), Text = f.LocalizedName }).ToList();
+            });
+            model.FiscalYears = fiscalYears ?? new List<SelectListItem>();
             return View(model);
         }
 
@@ -57,36 +81,50 @@ namespace ERP.Web.Controllers
             if (string.IsNullOrWhiteSpace(employeeCode))
                 return Json(new { success = false, message = "Employee code is required." });
 
-            var user = await _userManager.Users
-                .FirstOrDefaultAsync(u => u.EmployeeCode == employeeCode || u.UserName == employeeCode);
+            var cleanCode = employeeCode.Trim();
+            var cacheKey = $"UserCompanies_{cleanCode.ToLower()}";
+            if (_cache.TryGetValue(cacheKey, out List<LoginLookupDto>? cachedList) && cachedList != null)
+            {
+                return Json(new { success = true, companies = cachedList });
+            }
+
+            var user = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.EmployeeCode == cleanCode || u.UserName == cleanCode)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.HasAllBranches,
+                    IsAdmin = u.HasAllBranches || _context.UserRoles
+                        .Any(ur => ur.UserId == u.Id && _context.Roles.Any(r => r.Id == ur.RoleId && (r.Name == "Admin" || r.Name == "System Administrator"))),
+                    AllowedCompanyIds = _context.UserBranches
+                        .Where(ub => ub.UserId == u.Id && ub.Branch!.IsActive && ub.Branch.Company!.IsActive)
+                        .Select(ub => ub.Branch!.CompanyId)
+                        .Distinct()
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
 
             if (user == null)
                 return Json(new { success = false, message = "Employee not found." });
 
-            var isAdmin = await _userManager.IsInRoleAsync(user, "Admin") || await _userManager.IsInRoleAsync(user, "System Administrator");
-            List<Company> companies;
-
-            if (isAdmin || user.HasAllBranches)
+            var allCompanies = await _cache.GetOrCreateAsync("AllActiveCompaniesList", async entry =>
             {
-                companies = await _context.Companies
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
+                return await _context.Companies
+                    .AsNoTracking()
                     .Where(c => c.IsActive)
                     .OrderBy(c => c.Code)
+                    .Select(c => new LoginLookupDto { id = c.Id, name = c.NameAr ?? c.Name, code = c.Code })
                     .ToListAsync();
-            }
-            else
-            {
-                companies = await _context.UserBranches
-                    .Include(ub => ub.Branch)
-                    .ThenInclude(b => b!.Company)
-                    .Where(ub => ub.UserId == user.Id && ub.Branch!.IsActive && ub.Branch.Company!.IsActive)
-                    .Select(ub => ub.Branch!.Company!)
-                    .Distinct()
-                    .OrderBy(c => c.Code)
-                    .ToListAsync();
-            }
+            }) ?? new List<LoginLookupDto>();
 
-            var companyItems = companies.Select(c => new { id = c.Id, name = c.LocalizedName, code = c.Code });
-            return Json(new { success = true, companies = companyItems });
+            var userCompanies = user.IsAdmin
+                ? allCompanies
+                : allCompanies.Where(c => user.AllowedCompanyIds.Contains(c.id)).ToList();
+
+            _cache.Set(cacheKey, userCompanies, TimeSpan.FromMinutes(15));
+            return Json(new { success = true, companies = userCompanies });
         }
 
         // ─── AJAX: GetBranches (by EmployeeCode + CompanyId) ──────────────────────
@@ -96,43 +134,55 @@ namespace ERP.Web.Controllers
             if (string.IsNullOrWhiteSpace(employeeCode) || companyId <= 0)
                 return Json(new { success = false });
 
-            var user = await _userManager.Users
-                .FirstOrDefaultAsync(u => u.EmployeeCode == employeeCode || u.UserName == employeeCode);
+            var cleanCode = employeeCode.Trim();
+            var cacheKey = $"UserBranches_{cleanCode.ToLower()}_{companyId}";
+            if (_cache.TryGetValue(cacheKey, out List<LoginLookupDto>? cachedList) && cachedList != null)
+            {
+                return Json(new { success = true, branches = cachedList });
+            }
+
+            var user = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.EmployeeCode == cleanCode || u.UserName == cleanCode)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.HasAllBranches,
+                    IsAdmin = u.HasAllBranches || _context.UserRoles
+                        .Any(ur => ur.UserId == u.Id && _context.Roles.Any(r => r.Id == ur.RoleId && (r.Name == "Admin" || r.Name == "System Administrator"))),
+                    AllowedBranchIds = _context.UserBranches
+                        .Where(ub => ub.UserId == u.Id && ub.Branch!.IsActive && ub.Branch.CompanyId == companyId)
+                        .Select(ub => ub.BranchId)
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
 
             if (user == null)
                 return Json(new { success = false, message = "Employee not found." });
 
-            // Verify user has access to this company via allowed branches (server-side check)
-            var isAdmin = await _userManager.IsInRoleAsync(user, "Admin") || await _userManager.IsInRoleAsync(user, "System Administrator");
-            bool hasCompanyAccess = isAdmin || user.HasAllBranches ||
-                await _context.UserBranches.AnyAsync(ub => ub.UserId == user.Id && ub.Branch!.CompanyId == companyId && ub.Branch.IsActive);
+            bool hasCompanyAccess = user.IsAdmin ||
+                await _context.UserBranches.AsNoTracking().AnyAsync(ub => ub.UserId == user.Id && ub.Branch!.CompanyId == companyId && ub.Branch.IsActive);
 
             if (!hasCompanyAccess)
                 return Json(new { success = false, message = "Access denied to this company." });
 
-            List<Branch> branches;
-
-            if (isAdmin || user.HasAllBranches)
+            var allBranchesForCompany = await _cache.GetOrCreateAsync($"CompanyBranchesList_{companyId}", async entry =>
             {
-                branches = await _context.Branches
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
+                return await _context.Branches
+                    .AsNoTracking()
                     .Where(b => b.IsActive && b.CompanyId == companyId)
                     .OrderBy(b => b.Code)
+                    .Select(b => new LoginLookupDto { id = b.Id, name = b.NameAr ?? b.Name, code = b.Code })
                     .ToListAsync();
-            }
-            else
-            {
-                branches = await _context.UserBranches
-                    .Include(ub => ub.Branch)
-                    .Where(ub => ub.UserId == user.Id &&
-                                 ub.Branch!.IsActive &&
-                                 ub.Branch.CompanyId == companyId)
-                    .Select(ub => ub.Branch!)
-                    .OrderBy(b => b.Code)
-                    .ToListAsync();
-            }
+            }) ?? new List<LoginLookupDto>();
 
-            var branchItems = branches.Select(b => new { id = b.Id, name = b.LocalizedName, code = b.Code });
-            return Json(new { success = true, branches = branchItems });
+            var userBranches = user.IsAdmin
+                ? allBranchesForCompany
+                : allBranchesForCompany.Where(b => user.AllowedBranchIds.Contains(b.id)).ToList();
+
+            _cache.Set(cacheKey, userBranches, TimeSpan.FromMinutes(15));
+            return Json(new { success = true, branches = userBranches });
         }
 
         // ─── POST: Login ──────────────────────────────────────────────────────────
@@ -275,27 +325,20 @@ namespace ERP.Web.Controllers
                 new Claim("FiscalYearId", fiscalYear.Id.ToString()),
                 new Claim("FiscalYearName", fiscalYear.LocalizedName),
                 new Claim("HasAllBranches", (isAdmin || user.HasAllBranches).ToString()),
+                new Claim("IsSuperAdmin", (isAdmin || user.HasAllBranches).ToString()),
             };
 
-            foreach (var cid in allowedCompanyIds)
-                claims.Add(new Claim("AllowedCompanyId", cid));
+            if (!isAdmin && !user.HasAllBranches)
+            {
+                foreach (var cid in allowedCompanyIds)
+                    claims.Add(new Claim("AllowedCompanyId", cid));
 
-            foreach (var bid in allowedBranchIds)
-                claims.Add(new Claim("AllowedBranchId", bid));
+                foreach (var bid in allowedBranchIds)
+                    claims.Add(new Claim("AllowedBranchId", bid));
+            }
 
             // Load role-permission claims
-            var userRoleNames = await _userManager.GetRolesAsync(user);
-            var userRoleIds = await _context.Roles.Where(r => userRoleNames.Contains(r.Name!)).Select(r => r.Id).ToListAsync();
-            var grantedPermissionCodes = await _context.RolePermissions
-                .Where(rp => userRoleIds.Contains(rp.RoleId) && rp.IsGranted)
-                .Select(rp => rp.Permission!.Code)
-                .Distinct()
-                .ToListAsync();
-
-            foreach (var permCode in grantedPermissionCodes)
-            {
-                claims.Add(new Claim("Permission", permCode));
-            }
+            await AddRolePermissionClaimsAsync(user, claims);
 
             await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, claims);
 
@@ -353,8 +396,6 @@ namespace ERP.Web.Controllers
             }
 
             // After switching company, reset to the first allowed branch within that company
-            var fyId = User.FindFirst("FiscalYearId")?.Value ?? "0";
-            var fyName = User.FindFirst("FiscalYearName")?.Value ?? "N/A";
 
             List<Branch> allowedBranches;
             if (isAdmin || user.HasAllBranches)
@@ -375,6 +416,20 @@ namespace ERP.Web.Controllers
             }
 
             var firstBranch = allowedBranches.FirstOrDefault();
+            if (firstBranch == null)
+            {
+                TempData["ErrorMessage"] = "لا توجد فروع نشطة متاحة في الشركة المختارة.";
+                return LocalRedirect(string.IsNullOrEmpty(returnUrl) || !Url.IsLocalUrl(returnUrl) ? "~/" : returnUrl);
+            }
+
+            var fyId = User.FindFirst("FiscalYearId")?.Value;
+            var fyName = User.FindFirst("FiscalYearName")?.Value;
+            if (string.IsNullOrEmpty(fyId) || fyId == "0")
+            {
+                var activeFy = await _context.FiscalYears.Where(f => !f.IsClosed && f.IsActive).OrderByDescending(f => f.Year).FirstOrDefaultAsync();
+                fyId = activeFy?.Id.ToString() ?? "1";
+                fyName = activeFy?.LocalizedName ?? "2026";
+            }
 
             var allowedCompanyIds = (isAdmin || user.HasAllBranches)
                 ? await _context.Companies.Where(c => c.IsActive).Select(c => c.Id.ToString()).ToListAsync()
@@ -387,17 +442,23 @@ namespace ERP.Web.Controllers
                 new Claim("EmployeeCode", user.EmployeeCode ?? user.UserName ?? ""),
                 new Claim("CompanyId", company.Id.ToString()),
                 new Claim("CompanyName", company.LocalizedName),
-                new Claim("BranchId", firstBranch?.Id.ToString() ?? "0"),
-                new Claim("BranchName", firstBranch?.LocalizedName ?? "N/A"),
+                new Claim("BranchId", firstBranch.Id.ToString()),
+                new Claim("BranchName", firstBranch.LocalizedName),
                 new Claim("FiscalYearId", fyId),
                 new Claim("FiscalYearName", fyName),
                 new Claim("HasAllBranches", (isAdmin || user.HasAllBranches).ToString()),
+                new Claim("IsSuperAdmin", (isAdmin || user.HasAllBranches).ToString()),
             };
 
-            foreach (var cid in allowedCompanyIds)
-                newClaims.Add(new Claim("AllowedCompanyId", cid));
-            foreach (var bid in allowedBranchIds)
-                newClaims.Add(new Claim("AllowedBranchId", bid));
+            if (!isAdmin && !user.HasAllBranches)
+            {
+                foreach (var cid in allowedCompanyIds)
+                    newClaims.Add(new Claim("AllowedCompanyId", cid));
+                foreach (var bid in allowedBranchIds)
+                    newClaims.Add(new Claim("AllowedBranchId", bid));
+            }
+
+            await AddRolePermissionClaimsAsync(user, newClaims);
 
             await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, newClaims);
             TempData["SuccessMessage"] = $"Switched to company: {company.LocalizedName}";
@@ -436,9 +497,21 @@ namespace ERP.Web.Controllers
                 return LocalRedirect(string.IsNullOrEmpty(returnUrl) || !Url.IsLocalUrl(returnUrl) ? "~/" : returnUrl);
             }
 
-            var companyName = User.FindFirst("CompanyName")?.Value ?? "";
-            var fyId = User.FindFirst("FiscalYearId")?.Value ?? "0";
-            var fyName = User.FindFirst("FiscalYearName")?.Value ?? "N/A";
+            var companyName = User.FindFirst("CompanyName")?.Value;
+            if (string.IsNullOrEmpty(companyName))
+            {
+                var comp = await _context.Companies.FindAsync(currentCompanyId);
+                companyName = comp?.LocalizedName ?? "";
+            }
+
+            var fyId = User.FindFirst("FiscalYearId")?.Value;
+            var fyName = User.FindFirst("FiscalYearName")?.Value;
+            if (string.IsNullOrEmpty(fyId) || fyId == "0")
+            {
+                var activeFy = await _context.FiscalYears.Where(f => !f.IsClosed && f.IsActive).OrderByDescending(f => f.Year).FirstOrDefaultAsync();
+                fyId = activeFy?.Id.ToString() ?? "1";
+                fyName = activeFy?.LocalizedName ?? "2026";
+            }
 
             var allowedCompanyIds = (isAdmin || user.HasAllBranches)
                 ? await _context.Companies.Where(c => c.IsActive).Select(c => c.Id.ToString()).ToListAsync()
@@ -458,12 +531,18 @@ namespace ERP.Web.Controllers
                 new Claim("FiscalYearId", fyId),
                 new Claim("FiscalYearName", fyName),
                 new Claim("HasAllBranches", (isAdmin || user.HasAllBranches).ToString()),
+                new Claim("IsSuperAdmin", (isAdmin || user.HasAllBranches).ToString()),
             };
 
-            foreach (var c2 in allowedCompanyIds)
-                newClaims.Add(new Claim("AllowedCompanyId", c2));
-            foreach (var bid in allowedBranchIds)
-                newClaims.Add(new Claim("AllowedBranchId", bid));
+            if (!isAdmin && !user.HasAllBranches)
+            {
+                foreach (var c2 in allowedCompanyIds)
+                    newClaims.Add(new Claim("AllowedCompanyId", c2));
+                foreach (var bid in allowedBranchIds)
+                    newClaims.Add(new Claim("AllowedBranchId", bid));
+            }
+
+            await AddRolePermissionClaimsAsync(user, newClaims);
 
             await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, newClaims);
             TempData["SuccessMessage"] = $"Branch switched to: {branch.LocalizedName}";
@@ -498,22 +577,45 @@ namespace ERP.Web.Controllers
                 ? await _context.Branches.Where(b => b.IsActive && b.CompanyId == currentCompanyId).Select(b => b.Id.ToString()).ToListAsync()
                 : await _context.UserBranches.Where(ub => ub.UserId == user.Id && ub.Branch!.CompanyId == currentCompanyId).Select(ub => ub.BranchId.ToString()).ToListAsync();
 
+            if (currentCompanyId <= 0)
+            {
+                var firstComp = allowedCompanyIds.FirstOrDefault();
+                currentCompanyId = int.TryParse(firstComp, out var fc) ? fc : 1;
+            }
+            var compObj = await _context.Companies.FindAsync(currentCompanyId);
+            var currentCompanyName = compObj?.LocalizedName ?? "";
+
+            var currentBranchId = int.TryParse(User.FindFirst("BranchId")?.Value, out var bidVal) ? bidVal : 0;
+            var branchObj = currentBranchId > 0 ? await _context.Branches.FindAsync(currentBranchId) : null;
+            if (branchObj == null || branchObj.CompanyId != currentCompanyId)
+            {
+                branchObj = await _context.Branches.FirstOrDefaultAsync(b => b.CompanyId == currentCompanyId && b.IsActive);
+                currentBranchId = branchObj?.Id ?? 1;
+            }
+            var currentBranchName = branchObj?.LocalizedName ?? $"Branch {currentBranchId}";
+
             var newClaims = new List<Claim>
             {
                 new Claim("EmployeeCode", user.EmployeeCode ?? user.UserName ?? ""),
-                new Claim("CompanyId", User.FindFirst("CompanyId")?.Value ?? "0"),
-                new Claim("CompanyName", User.FindFirst("CompanyName")?.Value ?? ""),
-                new Claim("BranchId", User.FindFirst("BranchId")?.Value ?? "0"),
-                new Claim("BranchName", User.FindFirst("BranchName")?.Value ?? "N/A"),
+                new Claim("CompanyId", currentCompanyId.ToString()),
+                new Claim("CompanyName", currentCompanyName),
+                new Claim("BranchId", currentBranchId.ToString()),
+                new Claim("BranchName", currentBranchName),
                 new Claim("FiscalYearId", fy.Id.ToString()),
                 new Claim("FiscalYearName", fy.LocalizedName),
                 new Claim("HasAllBranches", (isAdmin || user.HasAllBranches).ToString()),
+                new Claim("IsSuperAdmin", (isAdmin || user.HasAllBranches).ToString()),
             };
 
-            foreach (var c2 in allowedCompanyIds)
-                newClaims.Add(new Claim("AllowedCompanyId", c2));
-            foreach (var bid in allowedBranchIds)
-                newClaims.Add(new Claim("AllowedBranchId", bid));
+            if (!isAdmin && !user.HasAllBranches)
+            {
+                foreach (var c2 in allowedCompanyIds)
+                    newClaims.Add(new Claim("AllowedCompanyId", c2));
+                foreach (var bid in allowedBranchIds)
+                    newClaims.Add(new Claim("AllowedBranchId", bid));
+            }
+
+            await AddRolePermissionClaimsAsync(user, newClaims);
 
             await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, newClaims);
             TempData["SuccessMessage"] = $"Fiscal Year switched to: {fy.LocalizedName}";
@@ -573,6 +675,28 @@ namespace ERP.Web.Controllers
 
             await _signInManager.SignOutAsync();
             return RedirectToAction("Login", "Account");
+        }
+
+        private async Task AddRolePermissionClaimsAsync(ApplicationUser user, List<Claim> claims)
+        {
+            var userRoleNames = await _userManager.GetRolesAsync(user);
+            if (userRoleNames.Contains("Admin") || userRoleNames.Contains("System Administrator"))
+            {
+                // Admin already has full implicit access to all permissions across all screens in CurrentUserContext
+                return;
+            }
+
+            var userRoleIds = await _context.Roles.Where(r => userRoleNames.Contains(r.Name!)).Select(r => r.Id).ToListAsync();
+            var grantedPermissionCodes = await _context.RolePermissions
+                .Where(rp => userRoleIds.Contains(rp.RoleId) && rp.IsGranted)
+                .Select(rp => rp.Permission!.Code)
+                .Distinct()
+                .ToListAsync();
+
+            foreach (var permCode in grantedPermissionCodes)
+            {
+                claims.Add(new Claim("Permission", permCode));
+            }
         }
     }
 }

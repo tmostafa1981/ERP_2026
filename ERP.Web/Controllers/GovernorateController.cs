@@ -2,6 +2,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Infrastructure.Data;
 using ERP.Web.Authorization;
+using ERP.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,16 +18,23 @@ namespace ERP.Web.Controllers
         private readonly ErpDbContext _context;
         private readonly ICurrentUserContext _currentUser;
         private readonly IAuditService _audit;
+        private readonly ICodeSequenceService _sequenceService;
 
         private const string SC_Code   = "GOV001";
         private const string SC_Name   = "Governorates";
         private const string SC_Module = "MasterData";
+        private const string EntityName = "Governorate";
 
-        public GovernorateController(ErpDbContext context, ICurrentUserContext currentUser, IAuditService audit)
+        public GovernorateController(
+            ErpDbContext context,
+            ICurrentUserContext currentUser,
+            IAuditService audit,
+            ICodeSequenceService sequenceService)
         {
-            _context     = context;
-            _currentUser = currentUser;
-            _audit       = audit;
+            _context         = context;
+            _currentUser     = currentUser;
+            _audit           = audit;
+            _sequenceService = sequenceService;
         }
 
         [HttpGet]
@@ -54,10 +62,15 @@ namespace ERP.Web.Controllers
                 .Take(pageSize)
                 .ToListAsync();
 
-            ViewBag.SearchString = searchString;
-            ViewBag.CurrentPage  = page;
-            ViewBag.TotalPages   = (int)Math.Ceiling(totalCount / (double)pageSize);
-            ViewBag.TotalCount   = totalCount;
+            var seqConfig = await _sequenceService.GetConfigAsync(EntityName);
+
+            ViewBag.SearchString    = searchString;
+            ViewBag.CurrentPage     = page;
+            ViewBag.TotalPages      = (int)Math.Ceiling(totalCount / (double)pageSize);
+            ViewBag.TotalCount      = totalCount;
+            ViewBag.NextCode        = seqConfig.PreviewCode;
+            ViewBag.IsAutoCode      = seqConfig.IsAuto;
+            ViewBag.IsManualAllowed = seqConfig.IsManualAllowed;
 
             return View(items);
         }
@@ -65,37 +78,53 @@ namespace ERP.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [HasPermission("MasterData.Governorates.Add")]
-        public async Task<IActionResult> Create(Governorate model)
+        public async Task<IActionResult> Create(Governorate model, bool? isManualCode = null)
         {
+            // Auto-number logic
+            bool shouldAutoCode = isManualCode.HasValue
+                ? (!isManualCode.Value && await _sequenceService.IsAutoEnabledAsync(EntityName))
+                : (string.IsNullOrWhiteSpace(model.Code) || (await _sequenceService.IsAutoEnabledAsync(EntityName) && !await _sequenceService.IsManualAllowedAsync(EntityName)));
+
+            if (shouldAutoCode)
+            {
+                model.Code = await _sequenceService.GetNextCodeAsync(EntityName);
+            }
+
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "Governorate Code is required.");
+                ModelState.AddModelError("Code", "كود المحافظة مطلوب.");
             else if (await _context.Governorates.AnyAsync(g => g.Code == model.Code.Trim()))
-                ModelState.AddModelError("Code", "Governorate Code already exists.");
+                ModelState.AddModelError("Code", "كود المحافظة موجود بالفعل.");
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "اسم المحافظة بالعربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (ModelState.IsValid)
             {
                 model.Code      = model.Code.Trim();
-                model.NameAr    = model.NameAr.Trim();
-                model.NameEn    = model.NameEn.Trim();
+                model.NameAr    = model.NameAr?.Trim() ?? string.Empty;
+                model.NameEn    = string.IsNullOrWhiteSpace(model.NameEn) ? model.NameAr : model.NameEn.Trim();
                 model.CreatedAt = DateTime.UtcNow;
 
                 _context.Governorates.Add(model);
                 await _context.SaveChangesAsync();
 
                 await _audit.LogCreateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "Governorate",
+                    entityName: EntityName,
                     entityId:   model.Id.ToString(),
                     newValues: new { model.Id, model.Code, model.NameAr, model.NameEn, model.IsActive });
 
-                TempData["SuccessMessage"] = "Governorate created successfully.";
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم إضافة المحافظة بنجاح.");
+
+                TempData["SuccessMessage"] = "تم إضافة المحافظة بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(ModelState, "يرجى تصحيح أخطاء الإدخال الموضحة أدناه.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
@@ -106,41 +135,70 @@ namespace ERP.Web.Controllers
         [HasPermission("MasterData.Governorates.Edit")]
         public async Task<IActionResult> Edit(Governorate model)
         {
+            var entity = await _context.Governorates.FindAsync(model.Id);
+            if (entity == null)
+            {
+                if (Request.IsAjaxRequest())
+                    return this.JsonValidationFailure(new[] { "المحافظة غير موجودة أو تم حذفها." });
+                return NotFound();
+            }
+
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "Governorate Code is required.");
+                ModelState.AddModelError("Code", "كود المحافظة مطلوب.");
             else if (await _context.Governorates.AnyAsync(g => g.Code == model.Code.Trim() && g.Id != model.Id))
-                ModelState.AddModelError("Code", "Governorate Code already exists.");
+                ModelState.AddModelError("Code", "كود المحافظة موجود بالفعل.");
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "اسم المحافظة بالعربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (ModelState.IsValid)
             {
-                var entity = await _context.Governorates.FindAsync(model.Id);
-                if (entity == null) return NotFound();
-
-                var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.IsActive };
+                var oldValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.IsActive,
+                    OldCode = entity.Code
+                };
 
                 entity.Code      = model.Code.Trim();
-                entity.NameAr    = model.NameAr.Trim();
-                entity.NameEn    = model.NameEn.Trim();
+                entity.NameAr    = model.NameAr?.Trim() ?? string.Empty;
+                entity.NameEn    = string.IsNullOrWhiteSpace(model.NameEn) ? entity.NameAr : model.NameEn.Trim();
                 entity.IsActive  = model.IsActive;
                 entity.UpdatedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
+                var newValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.IsActive,
+                    NewCode = entity.Code
+                };
+
                 await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "Governorate",
+                    entityName: EntityName,
                     entityId:   entity.Id.ToString(),
                     oldValues:  oldValues,
-                    newValues: new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.IsActive });
+                    newValues:  newValues);
 
-                TempData["SuccessMessage"] = "Governorate updated successfully.";
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم تحديث المحافظة بنجاح.");
+
+                TempData["SuccessMessage"] = "تم تحديث المحافظة بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(ModelState, "يرجى تصحيح أخطاء الإدخال الموضحة أدناه.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
@@ -169,7 +227,7 @@ namespace ERP.Web.Controllers
             await _context.SaveChangesAsync();
 
             await _audit.LogDeleteAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "Governorate",
+                entityName: EntityName,
                 entityId:   id.ToString(),
                 oldValues:  oldValues);
 
@@ -192,7 +250,7 @@ namespace ERP.Web.Controllers
             await _context.SaveChangesAsync();
 
             await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "Governorate",
+                entityName: EntityName,
                 entityId:   id.ToString(),
                 oldValues:  oldValues,
                 newValues: new { entity.Id, entity.Code, entity.IsActive });

@@ -4,13 +4,13 @@
 
 @{
     ViewData["Title"] = Localizer["Cities"];
-    var governorates = ViewBag.Governorates as IEnumerable<ERP.Domain.Entities.Governorate> ?? new List<ERP.Domain.Entities.Governorate>();
+    var governorates = ViewBag.Governorates as IEnumerable<ERP.Domain.Entities.Governorate> ?? Enumerable.Empty<ERP.Domain.Entities.Governorate>();
 }
 
 <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
     <div>
         <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
-            <i class="fa-solid fa-tree-city text-primary me-2 ms-0"></i> @Localizer["Cities"]
+            <i class="fa-solid fa-city text-primary me-2 ms-0"></i> @Localizer["Cities"]
         </h4>
         <span class="text-muted" style="font-size: 12.5px;">@Localizer["ManageCities"] (@ViewBag.TotalCount)</span>
     </div>
@@ -40,24 +40,25 @@
 <div class="erp-card mb-3">
     <div class="erp-card-body p-2">
         <form method="get" asp-action="Index" class="row g-2 align-items-center">
+            <div class="col-md-4 col-lg-3">
+                <select name="governorateId" class="form-select form-select-sm erp-select2 erp-form-control" data-lookup-entity="governorate" data-placeholder="-- @Localizer["Governorate"] (@Localizer["All"]) --" data-allow-clear="true">
+                    <option value="">-- @Localizer["Governorate"] (@Localizer["All"]) --</option>
+                    @if (ViewBag.GovernorateId != null && governorates.Any(g => g.Id == (int)ViewBag.GovernorateId))
+                    {
+                        var selG = governorates.First(g => g.Id == (int)ViewBag.GovernorateId);
+                        <option value="@selG.Id" selected>@selG.Code - @selG.LocalizedName</option>
+                    }
+                </select>
+            </div>
             <div class="col-md-5 col-lg-4">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
                     <input type="text" name="searchString" value="@ViewBag.SearchString" class="form-control erp-form-control" placeholder="@Localizer["Search"]..." />
                 </div>
             </div>
-            <div class="col-md-4 col-lg-3">
-                <select name="governorateId" class="form-select form-select-sm erp-form-control" onchange="this.form.submit()">
-                    <option value="">-- @Localizer["Governorates"] (الكل) --</option>
-                    @foreach (var g in governorates)
-                    {
-                        <option value="@g.Id" selected="@(ViewBag.GovernorateId == g.Id ? "selected" : null)">@g.Code - @g.LocalizedName</option>
-                    }
-                </select>
-            </div>
             <div class="col-auto">
                 <button type="submit" class="btn btn-erp-primary btn-sm px-3">@Localizer["Search"]</button>
-                @if (!string.IsNullOrEmpty(ViewBag.SearchString as string) || (ViewBag.GovernorateId != null && (int)ViewBag.GovernorateId > 0))
+                @if (!string.IsNullOrEmpty(ViewBag.SearchString as string) || ViewBag.GovernorateId != null)
                 {
                     <a asp-action="Index" class="btn btn-erp-outline btn-sm">@Localizer["Cancel"]</a>
                 }
@@ -71,10 +72,10 @@
     <table class="erp-table">
         <thead>
             <tr>
-                <th style="width: 100px;">@Localizer["Code"]</th>
+                <th style="width: 120px;">@Localizer["Code"]</th>
                 <th>@Localizer["NameAr"]</th>
                 <th>@Localizer["NameEn"]</th>
-                <th><i class="fa-solid fa-map-location-dot text-primary me-1 ms-0"></i> @Localizer["Governorate"]</th>
+                <th>@Localizer["Governorate"]</th>
                 <th style="width: 100px;" class="text-center">@Localizer["Status"]</th>
                 <th style="width: 140px;" class="text-center">@Localizer["Actions"]</th>
             </tr>
@@ -89,9 +90,12 @@
                         <td>@item.NameAr</td>
                         <td>@item.NameEn</td>
                         <td>
-                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-1">
-                                @(item.Governorate?.LocalizedName ?? $"ID: {item.GovernorateId}")
-                            </span>
+                            @if (item.Governorate != null)
+                            {
+                                <span class="badge bg-light text-dark border">
+                                    <i class="fa-solid fa-map-location-dot me-1"></i>@item.Governorate.LocalizedName
+                                </span>
+                            }
                         </td>
                         <td class="text-center">
                             @if (item.IsActive)
@@ -126,7 +130,7 @@
                             <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content border-0 shadow">
-                                        <form asp-action="Edit" method="post">
+                                        <form asp-action="Edit" method="post" class="erp-modal-form">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="Id" value="@item.Id" />
                                             <div class="modal-header bg-light py-2">
@@ -134,15 +138,6 @@
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
                                             <div class="modal-body p-3">
-                                                <div class="mb-2">
-                                                    <label class="form-label small fw-bold">@Localizer["Governorate"] <span class="text-danger">*</span></label>
-                                                    <select name="GovernorateId" class="form-select form-select-sm" required>
-                                                        @foreach (var g in governorates)
-                                                        {
-                                                            <option value="@g.Id" selected="@(item.GovernorateId == g.Id ? "selected" : null)">@g.Code - @g.LocalizedName</option>
-                                                        }
-                                                    </select>
-                                                </div>
                                                 <div class="mb-2">
                                                     <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
                                                     <input type="text" name="Code" value="@item.Code" class="form-control form-control-sm" required maxlength="50" />
@@ -154,6 +149,15 @@
                                                 <div class="mb-2">
                                                     <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
                                                     <input type="text" name="NameEn" value="@item.NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" />
+                                                </div>
+                                                 <div class="mb-2">
+                                                    <label class="form-label small fw-bold">@Localizer["Governorate"] <span class="text-danger">*</span></label>
+                                                    <select name="GovernorateId" class="form-select form-select-sm erp-select2" required data-lookup-entity="governorate">
+                                                        @if (item.Governorate != null)
+                                                        {
+                                                            <option value="@item.GovernorateId" selected>@item.Governorate.Code - @item.Governorate.LocalizedName</option>
+                                                        }
+                                                    </select>
                                                 </div>
                                                 <div class="form-check form-switch mt-2">
                                                     <input class="form-check-input" type="checkbox" name="IsActive" value="true" @(item.IsActive ? "checked" : "") id="editActive_@item.Id" />
@@ -201,7 +205,7 @@
 <div class="modal fade" id="createCityModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-light py-2">
                     <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2"></i> @Localizer["AddNewCity"]</h6>
@@ -209,18 +213,20 @@
                 </div>
                 <div class="modal-body p-3">
                     <div class="mb-2">
-                        <label class="form-label small fw-bold">@Localizer["Governorate"] <span class="text-danger">*</span></label>
-                        <select name="GovernorateId" class="form-select form-select-sm" required>
-                            <option value="">-- @Localizer["SelectOption"] --</option>
-                            @foreach (var g in governorates)
-                            {
-                                <option value="@g.Id" selected="@(ViewBag.GovernorateId == g.Id ? "selected" : null)">@g.Code - @g.LocalizedName</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                        <input type="text" name="Code" class="form-control form-control-sm" required maxlength="50" placeholder="CIT-01" />
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="Code" id="createCityCode" value="@ViewBag.NextCode" class="form-control form-control-sm" required maxlength="50" @(ViewBag.IsAutoCode == true ? "readonly" : "") />
+                            @if (ViewBag.IsManualAllowed == true && ViewBag.IsAutoCode == true)
+                            {
+                                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('createCityCode').removeAttribute('readonly'); this.style.display='none';" title="@Localizer["ManualEntry"]">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            }
+                        </div>
+                        @if (ViewBag.IsAutoCode == true)
+                        {
+                            <span class="text-muted small" style="font-size: 11px;">@Localizer["AutoGeneratedCode"]</span>
+                        }
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
@@ -229,6 +235,17 @@
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
                         <input type="text" name="NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" placeholder="Nasr City" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">@Localizer["Governorate"] <span class="text-danger">*</span></label>
+                        <select name="GovernorateId" class="form-select form-select-sm erp-select2" required data-lookup-entity="governorate" data-placeholder="-- @Localizer["SelectOption"] --">
+                            <option value="">-- @Localizer["SelectOption"] --</option>
+                            @if (ViewBag.GovernorateId != null && governorates.Any(g => g.Id == (int)ViewBag.GovernorateId))
+                            {
+                                var selG = governorates.First(g => g.Id == (int)ViewBag.GovernorateId);
+                                <option value="@selG.Id" selected>@selG.Code - @selG.LocalizedName</option>
+                            }
+                        </select>
                     </div>
                     <div class="form-check form-switch mt-2">
                         <input class="form-check-input" type="checkbox" name="IsActive" value="true" checked id="createCityActive" />

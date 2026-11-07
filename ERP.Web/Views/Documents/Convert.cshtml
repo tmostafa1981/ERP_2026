@@ -1,0 +1,201 @@
+@model IEnumerable<ERP.Application.DTOs.AvailableForConversionDocumentDto>
+@{
+    var targetType = ViewBag.TargetType as ERP.Application.DTOs.TransactionTypeDto;
+    ViewData["Title"] = $"تحويل إلى {targetType?.LocalizedName}";
+}
+
+<div class="container-fluid px-4 py-3" id="convApp" v-cloak>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-arrow-right-arrow-left text-primary me-2"></i> معالج تحويل المستندات
+            </h4>
+            <span class="text-muted small">
+                المستند الهدف المراد إنشاؤه: 
+                <span class="badge bg-primary fs-6">@(targetType?.LocalizedName)</span>
+            </span>
+        </div>
+        <div>
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-xmark me-1"></i> إلغاء
+            </a>
+        </div>
+    </div>
+
+    <!-- Available Documents List -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-light py-2">
+            <h6 class="mb-0 fw-bold text-dark">المستندات المتاحة للتحويل (ذات رصيد متبقي)</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-dark small">
+                        <tr>
+                            <th style="width: 40px;"></th>
+                            <th>رقم المستند</th>
+                            <th>التاريخ</th>
+                            <th>نوع الحركة</th>
+                            <th>الطرف</th>
+                            <th class="text-end">الإجمالي الصافي</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">
+                                    لا توجد مستندات مصدر متاحة للتحويل إلى هذا النوع حالياً.
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var doc in Model)
+                        {
+                            <tr class="table-light">
+                                <td class="text-center">
+                                    <input class="form-check-input" type="checkbox" :value="@doc.DocumentId" v-model="selectedDocIds" @@change="onDocToggle(@doc.DocumentId)" />
+                                </td>
+                                <td class="font-monospace fw-bold text-primary">@doc.DocumentNumber</td>
+                                <td>@doc.DocumentDate.ToString("yyyy-MM-dd")</td>
+                                <td>@doc.TransactionTypeName</td>
+                                <td>@doc.PartyName</td>
+                                <td class="text-end font-monospace fw-bold">@doc.TotalAmountNet.ToString("N2")</td>
+                            </tr>
+                            <tr v-if="selectedDocIds.includes(@doc.DocumentId)">
+                                <td colspan="6" class="p-0 bg-white">
+                                    <table class="table table-sm table-bordered mb-0 small" style="font-size: 0.8rem;">
+                                        <thead class="table-secondary">
+                                            <tr>
+                                                <th style="width: 30px;">#</th>
+                                                <th>الصنف</th>
+                                                <th class="text-end" style="width: 100px;">الكمية الأصلية</th>
+                                                <th class="text-end" style="width: 100px;">المحولة مسبقاً</th>
+                                                <th class="text-end" style="width: 100px;">المتبقية</th>
+                                                <th class="text-end" style="width: 130px;">الكمية للتحويل</th>
+                                                <th class="text-end" style="width: 100px;">السعر</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var line in doc.AvailableLines)
+                                            {
+                                                <tr>
+                                                    <td class="text-center">
+                                                        <input class="form-check-input" type="checkbox" :value="@line.LineId" v-model="selectedLineIds" />
+                                                    </td>
+                                                    <td class="fw-bold">@line.ItemCode - @line.ItemName</td>
+                                                    <td class="text-end font-monospace">@line.OriginalQuantity</td>
+                                                    <td class="text-end font-monospace text-muted">@line.ConvertedQuantity</td>
+                                                    <td class="text-end font-monospace fw-bold text-success">@line.RemainingQuantity</td>
+                                                    <td class="text-end">
+                                                        <input type="number" step="1" min="1" max="@line.RemainingQuantity"
+                                                               class="form-control form-control-sm text-end font-monospace"
+                                                               v-model.number="lineQuantities[@line.LineId]" />
+                                                    </td>
+                                                    <td class="text-end font-monospace">@line.UnitPrice.ToString("N2")</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conversion Action Bar -->
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <span class="text-muted small">تم تحديد {{ selectedLineIds.length }} بنود للتحويل.</span>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary px-4 fw-bold" @@click="executeConversion" :disabled="selectedLineIds.length === 0 || isConverting">
+                <span v-if="isConverting" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="fa-solid fa-check me-1"></i> تنفيذ التحويل وإنشاء المستند
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/lib/vue/vue.global.prod.js"></script>
+    <script src="~/lib/sweetalert2/sweetalert2.all.min.js"></script>
+    <script>
+        const { createApp, ref, reactive } = Vue;
+
+        createApp({
+            setup() {
+                const targetTypeId = @(targetType?.Id ?? 0);
+                const selectedDocIds = ref([]);
+                const selectedLineIds = ref([]);
+                const lineQuantities = reactive({});
+                const isConverting = ref(false);
+
+                // Populate initial remaining quantities
+                @foreach (var doc in Model)
+                {
+                    foreach (var line in doc.AvailableLines)
+                    {
+                        @:lineQuantities[@line.LineId] = @line.RemainingQuantity;
+                    }
+                }
+
+                function onDocToggle(docId) {
+                    // Optional toggle logic
+                }
+
+                function executeConversion() {
+                    if (selectedLineIds.value.length === 0) {
+                        Swal.fire('تنبيه', 'يرجى تحديد بند واحد على الأقل.', 'warning');
+                        return;
+                    }
+
+                    isConverting.value = true;
+                    const payload = {
+                        targetTransactionTypeId: targetTypeId,
+                        documentDate: new Date().toISOString().split('T')[0],
+                        selectedLines: selectedLineIds.value.map(id => ({
+                            sourceDocumentLineId: id,
+                            quantityToConvert: lineQuantities[id] || 1
+                        }))
+                    };
+
+                    $.ajax({
+                        url: `@Url.Action("Convert", "Documents")`,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        headers: {
+                            'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                        },
+                        data: JSON.stringify(payload),
+                        success: function(res) {
+                            isConverting.value = false;
+                            if (res.success) {
+                                Swal.fire('تم بنجاح', res.message, 'success').then(() => {
+                                    window.location.href = `@Url.Action("Index", "Documents")`;
+                                });
+                            } else {
+                                Swal.fire('خطأ', res.message, 'error');
+                            }
+                        },
+                        error: function() {
+                            isConverting.value = false;
+                            Swal.fire('خطأ', 'فشل تحويل المستندات.', 'error');
+                        }
+                    });
+                }
+
+                return {
+                    selectedDocIds,
+                    selectedLineIds,
+                    lineQuantities,
+                    isConverting,
+                    onDocToggle,
+                    executeConversion
+                };
+            }
+        }).mount('#convApp');
+    </script>
+}

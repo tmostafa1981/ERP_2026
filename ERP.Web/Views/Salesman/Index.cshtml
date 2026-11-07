@@ -47,11 +47,12 @@
                 </div>
             </div>
             <div class="col-md-4 col-lg-3">
-                <select name="branchId" class="form-select form-select-sm erp-form-control" onchange="this.form.submit()">
+                <select name="branchId" class="form-select form-select-sm erp-select2 erp-form-control" data-lookup-entity="branch" data-placeholder="-- @Localizer["Branch"] (الكل) --" data-allow-clear="true" onchange="this.form.submit()">
                     <option value="">-- @Localizer["Branch"] (الكل) --</option>
-                    @foreach (var b in branches)
+                    @if (ViewBag.BranchId != null && branches.Any(b => b.Id == (int)ViewBag.BranchId))
                     {
-                        <option value="@b.Id" selected="@(ViewBag.BranchId == b.Id ? "selected" : null)">@b.Code - @b.LocalizedName</option>
+                        var selB = branches.First(b => b.Id == (int)ViewBag.BranchId);
+                        <option value="@selB.Id" selected>@selB.Code - @selB.LocalizedName</option>
                     }
                 </select>
             </div>
@@ -130,7 +131,7 @@
                             <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content border-0 shadow">
-                                        <form asp-action="Edit" method="post">
+                                        <form asp-action="Edit" method="post" class="erp-modal-form">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="Id" value="@item.Id" />
                                             <div class="modal-header bg-light py-2">
@@ -138,12 +139,12 @@
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
                                             <div class="modal-body p-3">
-                                                <div class="mb-2">
+                                                 <div class="mb-2">
                                                     <label class="form-label small fw-bold">@Localizer["Branch"] <span class="text-danger">*</span></label>
-                                                    <select name="BranchId" class="form-select form-select-sm" required>
-                                                        @foreach (var b in branches)
+                                                    <select name="BranchId" class="form-select form-select-sm erp-select2" required data-lookup-entity="branch">
+                                                        @if (item.Branch != null)
                                                         {
-                                                            <option value="@b.Id" selected="@(item.BranchId == b.Id ? "selected" : null)">@b.Code - @b.LocalizedName</option>
+                                                            <option value="@item.BranchId" selected>@item.Branch.Code - @item.Branch.LocalizedName</option>
                                                         }
                                                     </select>
                                                 </div>
@@ -215,7 +216,7 @@
 <div class="modal fade" id="createSalesmanModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-light py-2">
                     <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2"></i> @Localizer["AddNewSalesman"]</h6>
@@ -224,17 +225,34 @@
                 <div class="modal-body p-3">
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["Branch"] <span class="text-danger">*</span></label>
-                        <select name="BranchId" class="form-select form-select-sm" required>
-                            <option value="">-- @Localizer["SelectOption"] --</option>
-                            @foreach (var b in branches)
+                        <select name="BranchId" class="form-select form-select-sm erp-select2" id="createSalesmanBranch" required data-lookup-entity="branch" onchange="onSalesmanBranchChanged()">
+                            @if (ViewBag.DefaultBranchId != null && branches.Any(b => b.Id == (int)ViewBag.DefaultBranchId))
                             {
-                                <option value="@b.Id" selected="@(ViewBag.BranchId == b.Id ? "selected" : null)">@b.Code - @b.LocalizedName</option>
+                                var defB = branches.First(b => b.Id == (int)ViewBag.DefaultBranchId);
+                                <option value="@defB.Id" selected>@defB.Code - @defB.LocalizedName</option>
+                            }
+                            else if (ViewBag.BranchId != null && branches.Any(b => b.Id == (int)ViewBag.BranchId))
+                            {
+                                var defB = branches.First(b => b.Id == (int)ViewBag.BranchId);
+                                <option value="@defB.Id" selected>@defB.Code - @defB.LocalizedName</option>
                             }
                         </select>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                        <input type="text" name="Code" class="form-control form-control-sm" required maxlength="50" placeholder="SAL-001" />
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="Code" id="createSalesmanCode" value="@ViewBag.NextCode" class="form-control form-control-sm" required maxlength="50" @(ViewBag.IsAutoCode == true ? "readonly" : "") />
+                            @if (ViewBag.IsManualAllowed == true && ViewBag.IsAutoCode == true)
+                            {
+                                <button type="button" class="btn btn-outline-secondary" id="btnToggleManualSalesmanCode" onclick="toggleManualSalesmanCode()" title="@Localizer["ManualEntry"]">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            }
+                        </div>
+                        @if (ViewBag.IsAutoCode == true)
+                        {
+                            <span class="text-muted small" id="autoSalesmanCodeBadge" style="font-size: 11px;">@Localizer["AutoGeneratedCode"]</span>
+                        }
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
@@ -267,3 +285,27 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    function onSalesmanBranchChanged() {
+        var branchId = $('#createSalesmanBranch').val();
+        if (!branchId) return;
+
+        $.getJSON('/api/sequence/preview', { entity: 'Salesman', branchId: branchId }, function (data) {
+            if (data && data.code) {
+                var codeInput = $('#createSalesmanCode');
+                if (codeInput.prop('readonly')) {
+                    codeInput.val(data.code);
+                }
+            }
+        });
+    }
+
+    function toggleManualSalesmanCode() {
+        $('#createSalesmanCode').removeAttr('readonly').focus();
+        $('#btnToggleManualSalesmanCode').hide();
+        $('#autoSalesmanCodeBadge').hide();
+    }
+</script>
+}

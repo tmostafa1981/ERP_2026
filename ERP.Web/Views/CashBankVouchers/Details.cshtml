@@ -1,0 +1,330 @@
+@model ERP.Domain.Entities.VoucherHeader
+@using ERP.Domain.Enums
+@{
+    bool isReceipt = Model.VoucherType == VoucherType.Receipt;
+    ViewData["Title"] = $"تفاصيل {(isReceipt ? "سند قبض" : "سند صرف")} {Model.VoucherNumber}";
+    var customers = ViewBag.Customers as Dictionary<int, string> ?? new Dictionary<int, string>();
+    var vendors = ViewBag.Vendors as Dictionary<int, string> ?? new Dictionary<int, string>();
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 :class="['mb-0', @(isReceipt ? "'text-success'" : "'text-danger'")]">
+                <i class="fa-solid @(isReceipt ? "fa-arrow-down" : "fa-arrow-up") me-2"></i>
+                @(isReceipt ? "سند قبض نقدي / بنكي" : "سند صرف نقدي / بنكي") - @Model.VoucherNumber
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item"><a asp-action="Index">سندات القبض والصرف</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">تفاصيل السند</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            @{
+                string printPerm = isReceipt ? "Cash.ReceiptVoucher.Print" : "Cash.PaymentVoucher.Print";
+                string editPerm = isReceipt ? "Cash.ReceiptVoucher.Edit" : "Cash.PaymentVoucher.Edit";
+                string postPerm = isReceipt ? "Cash.ReceiptVoucher.Post" : "Cash.PaymentVoucher.Post";
+                string unpostPerm = isReceipt ? "Cash.ReceiptVoucher.Unpost" : "Cash.PaymentVoucher.Unpost";
+            }
+            @if (CurrentUserContext.HasPermission(printPerm))
+            {
+                <a asp-action="Print" asp-route-id="@Model.Id" target="_blank" class="btn btn-outline-secondary">
+                    <i class="fa-solid fa-print me-1"></i> طباعة السند
+                </a>
+            }
+            @if (Model.Status == VoucherStatus.Posted)
+            {
+                @if (CurrentUserContext.HasPermission(editPerm))
+                {
+                    <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-primary">
+                        <i class="fa-solid fa-pen-to-square me-1"></i> تعديل السند
+                    </a>
+                }
+                <button type="button" class="btn btn-outline-danger btn-delete" data-id="@Model.Id" data-num="@Model.VoucherNumber">
+                    <i class="fa-solid fa-trash-can me-1"></i> حذف السند
+                </button>
+            }
+            <a asp-action="Index" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    <!-- Master Details Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header @(isReceipt ? "bg-success" : "bg-primary") text-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold">
+                <i class="fa-solid fa-circle-info me-1"></i> معلومات السند الأساسية
+            </h6>
+            <div>
+                @if (Model.Status == VoucherStatus.Posted)
+                {
+                    <span class="badge bg-light text-success fw-bold"><i class="fa-solid fa-check-circle me-1"></i>معتمد / نافذ</span>
+                }
+                else if (Model.Status == VoucherStatus.Cancelled)
+                {
+                    <span class="badge bg-danger">ملغى</span>
+                }
+                else
+                {
+                    <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>مسودة</span>
+                }
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <div class="small text-muted">رقم السند</div>
+                    <div class="fw-bold fs-6 text-primary">@Model.VoucherNumber</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">تاريخ السند</div>
+                    <div class="fw-bold">@Model.VoucherDate.ToString("yyyy-MM-dd")</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">الفرع</div>
+                    <div class="fw-bold">@(Model.Branch?.LocalizedName ?? "المركز الرئيسي")</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">السنة المالية</div>
+                    <div class="fw-bold">@(Model.FiscalYear?.LocalizedName ?? "-")</div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="small text-muted">حساب الخزينة / البنك</div>
+                    <div class="fw-bold text-dark">
+                        @(Model.CashBankAccount != null ? $"{Model.CashBankAccount.Code} - {Model.CashBankAccount.LocalizedName}" : "-")
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">طريقة الدفع</div>
+                    <div class="fw-bold">
+                        @{
+                            var pMethods = Model.Lines.Select(l => l.PaymentMethod).Distinct().ToList();
+                            string pSummary = pMethods.Count switch
+                            {
+                                0 => "-",
+                                1 => pMethods[0] switch {
+                                    VoucherPaymentMethod.Cash => "نقداً (Cash)",
+                                    VoucherPaymentMethod.Cheque => "شيك بنكي (Cheque)",
+                                    VoucherPaymentMethod.BankTransfer => "تحويل بنكي (Bank Transfer)",
+                                    _ => "أخرى"
+                                },
+                                _ => "طرق سداد متعددة"
+                            };
+                        }
+                        @pSummary
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">العملة وسعر الصرف</div>
+                    <div class="fw-bold">@(Model.Currency?.Code ?? "EGP") (سعر الصرف: @Model.ExchangeRate.ToString("N4"))</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">رقم المرجع</div>
+                    <div class="fw-bold">@(Model.ReferenceNumber ?? "-")</div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(Model.Notes))
+                {
+                    <div class="col-12">
+                        <div class="small text-muted">البيان العام / الملاحظات</div>
+                        <div>@Model.Notes</div>
+                    </div>
+                }
+
+                <div class="col-12">
+                    <div class="p-2 bg-success-subtle text-success-emphasis border border-success-subtle rounded small">
+                        <strong>المبلغ بالحروف:</strong> @ViewBag.AmountInWords
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Linked Journal Entry (If posted) -->
+    @if (Model.JournalEntryHeader != null)
+    {
+        <div class="alert alert-info shadow-sm d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <i class="fa-solid fa-link me-2 fs-5"></i>
+                <span>تم ترحيل هذا السند آلياً بالقيد المحاسبي العام: </span>
+                <strong class="fs-6">@Model.JournalEntryHeader.EntryNumber</strong>
+                <span class="ms-2 text-muted">بتاريخ: @Model.JournalEntryHeader.EntryDate.ToString("yyyy-MM-dd")</span>
+            </div>
+            <a asp-controller="JournalEntries" asp-action="Details" asp-route-id="@Model.JournalEntryHeader.Id" class="btn btn-sm btn-info text-white">
+                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> فتح القيد المحاسبي
+            </a>
+        </div>
+    }
+
+    <!-- Lines Table Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white py-2">
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="fa-solid fa-list me-1 text-primary"></i> بنود وأطراف السند التفصيلية
+            </h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.9rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width: 40px;">#</th>
+                            <th>نوع الطرف</th>
+                            <th>اسم الطرف / الحساب المساعد</th>
+                            <th>الحساب الرقابي / المالي</th>
+                            <th>طريقة الدفع والتفاصيل</th>
+                            <th class="text-end">المبلغ بالعملة</th>
+                            <th class="text-end">المبلغ بالمحلي</th>
+                            <th>مركز التكلفة</th>
+                            <th>البيان</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in Model.Lines.OrderBy(l => l.LineNumber))
+                        {
+                            string subLedgerName = "-";
+                            if (line.LineType == VoucherLineType.Customer && line.SubLedgerId.HasValue && customers.TryGetValue(line.SubLedgerId.Value, out var cName))
+                            {
+                                subLedgerName = cName;
+                            }
+                            else if (line.LineType == VoucherLineType.Vendor && line.SubLedgerId.HasValue && vendors.TryGetValue(line.SubLedgerId.Value, out var vName))
+                            {
+                                subLedgerName = vName;
+                            }
+                            else if (line.Account != null)
+                            {
+                                subLedgerName = $"{line.Account.Code} - {line.Account.LocalizedName}";
+                            }
+
+                            <tr>
+                                <td class="text-center fw-bold">@line.LineNumber</td>
+                                <td>
+                                    <span class="badge bg-secondary-subtle text-secondary border">
+                                        @(line.LineType == VoucherLineType.Customer ? "عميل" : (line.LineType == VoucherLineType.Vendor ? "مورد" : (line.LineType == VoucherLineType.Bank ? "بنك" : "حساب عام")))
+                                    </span>
+                                </td>
+                                <td class="fw-bold">@subLedgerName</td>
+                                <td>
+                                    @if (line.Account != null)
+                                    {
+                                        <span class="badge bg-light text-dark border">
+                                            <i class="fa-solid fa-book-bookmark me-1 text-muted"></i>@line.Account.Code - @line.Account.LocalizedName
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (line.PaymentMethod == VoucherPaymentMethod.Cheque)
+                                    {
+                                        <div>
+                                            <span class="badge bg-warning text-dark border">
+                                                <i class="fa-solid fa-money-check-dollar me-1"></i> شيك رقم: @(line.ChequeNumber ?? "-")
+                                            </span>
+                                            <div class="small text-muted mt-1">
+                                                @if (line.Bank != null || !string.IsNullOrEmpty(line.BankName))
+                                                {
+                                                    <div><i class="fa-solid fa-building-columns me-1"></i>@(line.Bank != null ? $"{line.Bank.Code} - {line.Bank.NameAr}" : line.BankName)</div>
+                                                }
+                                                @if (line.DueDate.HasValue)
+                                                {
+                                                    <div><i class="fa-regular fa-calendar-check me-1"></i>استحقاق: @line.DueDate.Value.ToString("yyyy-MM-dd")</div>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(line.DrawerName))
+                                                {
+                                                    <div><i class="fa-solid fa-signature me-1"></i>الساحب: @line.DrawerName</div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (line.PaymentMethod == VoucherPaymentMethod.Cash)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border"><i class="fa-solid fa-money-bill-wave me-1"></i>نقداً</span>
+                                    }
+                                    else if (line.PaymentMethod == VoucherPaymentMethod.BankTransfer)
+                                    {
+                                        <span class="badge bg-info-subtle text-info border"><i class="fa-solid fa-building-columns me-1"></i>تحويل بنكي</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary border">أخرى</span>
+                                    }
+                                </td>
+                                <td class="text-end fw-bold text-primary">@line.AmountForeign.ToString("N2")</td>
+                                <td class="text-end fw-bold text-success">@line.AmountLocal.ToString("N2")</td>
+                                <td>@(line.CostCenter?.LocalizedName ?? "-")</td>
+                                <td class="text-muted small">@(line.Description ?? "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light fw-bold">
+                        <tr>
+                            <td colspan="5" class="text-end">الإجمالي:</td>
+                            <td class="text-end text-primary">@Model.TotalAmountForeign.ToString("N2")</td>
+                            <td class="text-end text-success">@Model.TotalAmountLocal.ToString("N2")</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        $(document).ready(function () {
+            $('.btn-post').on('click', function () {
+                const id = $(this).data('id');
+                const num = $(this).data('num');
+                Swal.fire({
+                    title: 'تأكيد الترحيل',
+                    text: `هل تريد ترحيل السند (${num}) آلياً؟`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'نعم، ترحيل',
+                    cancelButtonText: 'إلغاء'
+                }).then((r) => {
+                    if (r.isConfirmed) {
+                        $.post('@Url.Action("Post", "CashBankVouchers")', { id: id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() }, function (res) {
+                            if (res.success) {
+                                Swal.fire('تم الترحيل!', res.message, 'success').then(() => location.reload());
+                            } else {
+                                Swal.fire('خطأ!', res.message, 'error');
+                            }
+                        });
+                    }
+                });
+            });
+
+            $('.btn-unpost').on('click', function () {
+                const id = $(this).data('id');
+                const num = $(this).data('num');
+                Swal.fire({
+                    title: 'تأكيد إلغاء الترحيل',
+                    text: `هل تريد إلغاء ترحيل السند (${num})؟`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'نعم، إلغاء الترحيل',
+                    cancelButtonText: 'تراجع',
+                    confirmButtonColor: '#d33'
+                }).then((r) => {
+                    if (r.isConfirmed) {
+                        $.post('@Url.Action("Unpost", "CashBankVouchers")', { id: id, __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val() }, function (res) {
+                            if (res.success) {
+                                Swal.fire('تم الإلغاء!', res.message, 'success').then(() => location.reload());
+                            } else {
+                                Swal.fire('خطأ!', res.message, 'error');
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+}

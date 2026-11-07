@@ -1,0 +1,277 @@
+@{
+    ViewData["Title"] = "قيود اليومية العامة (Journal Entries)";
+    var fiscalYears = ViewBag.FiscalYears as List<ERP.Domain.Entities.FiscalYear> ?? new List<ERP.Domain.Entities.FiscalYear>();
+}
+
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" />
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css" />
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0 text-primary">
+                <i class="fa-solid fa-file-invoice-dollar me-2"></i> قيود اليومية العامة (Journal Entries)
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item">النواة المحاسبية</li>
+                    <li class="breadcrumb-item active" aria-current="page">قيود اليومية</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <a asp-action="Create" class="btn btn-primary">
+                <i class="fa-solid fa-plus me-1"></i> إنشاء قيد جديد
+            </a>
+            <a asp-controller="Accounts" asp-action="Index" class="btn btn-outline-secondary ms-2">
+                <i class="fa-solid fa-list-check me-1"></i> دليل الحسابات
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Messages -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fa-solid fa-check-circle me-1"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Filters Card -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <!-- From Date -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold mb-1">من تاريخ:</label>
+                    <input type="date" id="filterFromDate" class="form-control form-control-sm">
+                </div>
+
+                <!-- To Date -->
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold mb-1">إلى تاريخ:</label>
+                    <input type="date" id="filterToDate" class="form-control form-control-sm">
+                </div>
+
+                <!-- Status Filter -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold mb-1">حالة القيد:</label>
+                    <select id="filterStatus" class="form-select form-select-sm">
+                        <option value="">-- جميع الحالات --</option>
+                        <option value="1">مسودة (Draft)</option>
+                        <option value="2">مرحل (Posted)</option>
+                    </select>
+                </div>
+
+                <!-- Source Document Type -->
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold mb-1">مصدر القيد:</label>
+                    <select id="filterSourceDocType" class="form-select form-select-sm">
+                        <option value="">-- جميع المصادر --</option>
+                        <option value="1">قيد يدوي (Manual JV)</option>
+                        <option value="2">فاتورة مبيعات</option>
+                        <option value="3">فاتورة مشتريات</option>
+                        <option value="4">سند قبض</option>
+                        <option value="5">سند صرف</option>
+                        <option value="6">إعادة تقييم عملة</option>
+                    </select>
+                </div>
+
+                <!-- Reset Button -->
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" id="btnResetFilters" class="btn btn-sm btn-outline-secondary w-100 mt-4">
+                        <i class="fa-solid fa-filter-circle-xmark me-1"></i> إعادة ضبط
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <table id="journalEntriesTable" class="table table-striped table-hover align-middle w-100">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 120px;">رقم القيد</th>
+                        <th style="width: 95px;">التاريخ</th>
+                        <th>البيان</th>
+                        <th style="width: 110px;">المرجع</th>
+                        <th style="width: 120px;" class="text-end">المدين (محلي)</th>
+                        <th style="width: 120px;" class="text-end">الدائن (محلي)</th>
+                        <th style="width: 90px;" class="text-center">الحالة</th>
+                        <th style="width: 110px;" class="text-center">المصدر</th>
+                        <th style="width: 110px;" class="text-center">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+    <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
+
+    <script>
+        let journalEntriesTable = null;
+
+        $(document).ready(function () {
+            journalEntriesTable = $('#journalEntriesTable').DataTable({
+                processing: true,
+                serverSide: true,
+                responsive: true,
+                ajax: {
+                    url: '@Url.Action("LoadTableData", "JournalEntries")',
+                    type: 'POST',
+                    data: function (d) {
+                        d.fromDate = $('#filterFromDate').val();
+                        d.toDate = $('#filterToDate').val();
+                        d.status = $('#filterStatus').val();
+                        d.sourceDocType = $('#filterSourceDocType').val();
+                        d.__RequestVerificationToken = $('input[name="__RequestVerificationToken"]').val();
+                    }
+                },
+                language: {
+                    url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json'
+                },
+                columns: [
+                    {
+                        data: 'entryNumber',
+                        render: function (data, type, row) {
+                            return `<a href="@Url.Action("Details", "JournalEntries")/${row.id}" class="fw-bold font-monospace text-primary text-decoration-none">${data}</a>`;
+                        }
+                    },
+                    { data: 'entryDate' },
+                    {
+                        data: 'description',
+                        render: function (data, type, row) {
+                            return `<div class="text-truncate" style="max-width: 250px;" title="${data}">${data}</div><small class="text-muted">${row.linesCount} أسطر محاسبية</small>`;
+                        }
+                    },
+                    {
+                        data: 'referenceNumber',
+                        render: function (data) {
+                            return data ? `<span class="badge bg-light text-dark border font-monospace">${data}</span>` : '-';
+                        }
+                    },
+                    {
+                        data: 'totalDebitLocal',
+                        className: 'text-end fw-bold text-primary',
+                        render: function (data) {
+                            return parseFloat(data).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        }
+                    },
+                    {
+                        data: 'totalCreditLocal',
+                        className: 'text-end fw-bold text-primary',
+                        render: function (data) {
+                            return parseFloat(data).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        }
+                    },
+                    {
+                        data: 'status',
+                        className: 'text-center',
+                        render: function (data, type, row) {
+                            if (data === 2) {
+                                return `<span class="badge bg-success"><i class="fa-solid fa-check-circle me-1"></i>معتمد / نافذ</span>`;
+                            } else {
+                                return `<span class="badge bg-secondary">${data}</span>`;
+                            }
+                        }
+                    },
+                    {
+                        data: 'sourceDocTypeText',
+                        className: 'text-center',
+                        render: function (data, type, row) {
+                            let badgeClass = row.isManual ? 'bg-secondary' : 'bg-info text-dark';
+                            return `<span class="badge ${badgeClass}">${data}</span>`;
+                        }
+                    },
+                    {
+                        data: 'id',
+                        orderable: false,
+                        className: 'text-center',
+                        render: function (data, type, row) {
+                            let btns = `<div class="btn-group btn-group-sm">`;
+                            btns += `<a href="@Url.Action("Details", "JournalEntries")/${data}" class="btn btn-outline-info" title="عرض وتفاصيل"><i class="fa-solid fa-eye"></i></a>`;
+
+                            // Edit and Delete button for manual entries
+                            if (row.isManual) {
+                                btns += `<a href="@Url.Action("Edit", "JournalEntries")/${data}" class="btn btn-outline-primary" title="تعديل القيد"><i class="fa-solid fa-pen-to-square"></i></a>`;
+                                btns += `<button type="button" class="btn btn-outline-danger" onclick="deleteEntry(${data}, '${row.entryNumber}')" title="حذف القيد"><i class="fa-solid fa-trash-can"></i></button>`;
+                            }
+
+                            btns += `</div>`;
+                            return btns;
+                        }
+                    }
+                ],
+                order: [[1, 'desc']]
+            });
+
+            $('#filterFromDate, #filterToDate, #filterStatus, #filterSourceDocType').change(function () {
+                journalEntriesTable.ajax.reload();
+            });
+
+            $('#btnResetFilters').click(function () {
+                $('#filterFromDate').val('');
+                $('#filterToDate').val('');
+                $('#filterStatus').val('');
+                $('#filterSourceDocType').val('');
+                journalEntriesTable.ajax.reload();
+            });
+        });
+
+        // ─── Post Entry ──────────────────────────────────────────────────────
+        function postEntry(id, num) {
+            if (!confirm(`هل أنت متأكد من رغبتك في ترحيل قيد اليومية (${num})؟\nبعد الترحيل، لن يمكن تعديل أو حذف القيد.`)) return;
+
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            $.post('@Url.Action("Post", "JournalEntries")', { id: id, __RequestVerificationToken: token }, function (res) {
+                if (res.success) {
+                    journalEntriesTable.ajax.reload(null, false);
+                } else {
+                    alert(res.message);
+                }
+            }).fail(function () {
+                alert('حدث خطأ أثناء محاولة ترحيل القيد.');
+            });
+        }
+
+        // ─── Delete Entry ────────────────────────────────────────────────────
+        function deleteEntry(id, num) {
+            if (!confirm(`هل أنت متأكد من حذف قيد اليومية (${num})؟`)) return;
+
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            $.post('@Url.Action("Delete", "JournalEntries")', { id: id, __RequestVerificationToken: token }, function (res) {
+                if (res.success) {
+                    journalEntriesTable.ajax.reload(null, false);
+                } else {
+                    alert(res.message);
+                }
+            }).fail(function () {
+                alert('حدث خطأ أثناء محاولة حذف القيد.');
+            });
+        }
+    </script>
+}

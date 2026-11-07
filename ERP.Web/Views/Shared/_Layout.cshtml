@@ -1,4 +1,4 @@
-@using System.Globalization
+﻿@using System.Globalization
 @using Microsoft.Extensions.Localization
 @inject ERP.Application.Interfaces.ICurrentUserContext CurrentUserContext
 @inject ERP.Infrastructure.Data.ErpDbContext DbContext
@@ -57,6 +57,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - @Localizer["AppName"]</title>
 
+    <!-- Anti-flicker / No-Layout-Shift Sidebar Pre-render Check -->
+    <script>
+        (function () {
+            try {
+                if (window.innerWidth >= 992 && localStorage.getItem('erp_sidebar_hidden') === 'true') {
+                    document.documentElement.classList.add('sidebar-is-hidden', 'no-sidebar-transition');
+                }
+            } catch (e) { }
+        })();
+    </script>
+
     <!-- FontAwesome 6 Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     
@@ -74,19 +85,30 @@
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
     }
 
+    <!-- Select2 & Bootstrap 5 Theme -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+
     <!-- Enterprise Desktop ERP Styles -->
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
     <div class="erp-wrapper">
-        <!-- Overlay for Mobile/Tablet Sidebar Drawer -->
-        <div class="erp-sidebar-overlay" id="sidebarOverlay"></div>
+        @if (CurrentUserContext.IsAuthenticated)
+        {
+            <!-- Overlay for Mobile/Tablet Sidebar Drawer -->
+            <div class="erp-sidebar-overlay" id="sidebarOverlay"></div>
 
-        <!-- Desktop First Collapsible Multi-Level Sidebar -->
-        <aside class="erp-sidebar" id="erpSidebar">
-            <div class="erp-sidebar-brand">
-                <i class="fa-solid fa-layer-group brand-logo"></i>
-                <span class="brand-text">@Localizer["AppName"]</span>
+            <!-- Desktop First Collapsible Multi-Level Sidebar -->
+            <aside class="erp-sidebar" id="erpSidebar">
+            <div class="erp-sidebar-brand d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center overflow-hidden">
+                    <i class="fa-solid fa-layer-group brand-logo flex-shrink-0"></i>
+                    <span class="brand-text text-truncate">@Localizer["AppName"]</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-link sidebar-collapse-btn text-white-50 p-1 ms-auto" id="sidebarInnerToggleBtn" title="@(isRtl ? "إخفاء القائمة الجانبية (Ctrl + B)" : "Hide Sidebar (Ctrl + B)")">
+                    <i class="fa-solid @(isRtl ? "fa-angles-right" : "fa-angles-left")"></i>
+                </button>
             </div>
 
             <ul class="erp-sidebar-nav">
@@ -99,42 +121,91 @@
                 </li>
 
                 <!-- Organization (Company, Branches, Fiscal Years) -->
-                <li class="erp-nav-item">
-                    <a href="#menuOrg" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="true" aria-controls="menuOrg">
-                        <i class="fa-solid fa-sitemap nav-icon"></i>
-                        <span class="nav-text">@Localizer["Organization"]</span>
-                        <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
-                    </a>
-                    <ul class="collapse show erp-submenu" id="menuOrg">
-                        <li><a href="@Url.Action("Index", "Company")" class="erp-nav-link"><i class="fa-solid fa-building-columns nav-icon"></i><span class="nav-text">@Localizer["Company"]</span></a></li>
-                        <li><a href="@Url.Action("Index", "Branch")" class="erp-nav-link"><i class="fa-solid fa-code-branch nav-icon"></i><span class="nav-text">@Localizer["Branches"]</span></a></li>
-                        <li><a href="@Url.Action("Index", "FiscalYear")" class="erp-nav-link"><i class="fa-solid fa-calendar-check nav-icon"></i><span class="nav-text">@Localizer["FiscalYears"]</span></a></li>
-                    </ul>
-                </li>
+                @if (CurrentUserContext.HasPermission("Organization.Company.View") ||
+                     CurrentUserContext.HasPermission("Organization.Branch.View") ||
+                     CurrentUserContext.HasPermission("Organization.FiscalYear.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuOrg" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuOrg">
+                            <i class="fa-solid fa-sitemap nav-icon"></i>
+                            <span class="nav-text">@Localizer["Organization"]</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuOrg">
+                            @if (CurrentUserContext.HasPermission("Organization.Company.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "Company")" class="erp-nav-link"><i class="fa-solid fa-building-columns nav-icon"></i><span class="nav-text">@Localizer["Company"]</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Organization.Branch.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "Branch")" class="erp-nav-link"><i class="fa-solid fa-code-branch nav-icon"></i><span class="nav-text">@Localizer["Branches"]</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Organization.FiscalYear.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "FiscalYear")" class="erp-nav-link"><i class="fa-solid fa-calendar-check nav-icon"></i><span class="nav-text">@Localizer["FiscalYears"]</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
 
                 <!-- Administration (Users, Roles, Permissions, User Company, User Branch, Audit History) -->
-                <li class="erp-nav-item">
-                    <a href="#menuAdmin" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuAdmin">
-                        <i class="fa-solid fa-user-shield nav-icon"></i>
-                        <span class="nav-text">@Localizer["Administration"]</span>
-                        <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
-                    </a>
-                    <ul class="collapse erp-submenu" id="menuAdmin">
-                        <li><a href="@Url.Action("Index", "User")" class="erp-nav-link"><i class="fa-solid fa-users nav-icon"></i><span class="nav-text">@Localizer["Users"]</span></a></li>
-                        <li><a href="@Url.Action("Index", "Role")" class="erp-nav-link"><i class="fa-solid fa-id-card-clip nav-icon"></i><span class="nav-text">@Localizer["Roles"]</span></a></li>
-                        <li><a href="@Url.Action("Index", "Permission")" class="erp-nav-link"><i class="fa-solid fa-key nav-icon"></i><span class="nav-text">@Localizer["Permissions"]</span></a></li>
-                        <li><a href="@Url.Action("Index", "UserBranch")" class="erp-nav-link"><i class="fa-solid fa-user-gear nav-icon"></i><span class="nav-text">@Localizer["UserBranchAssignment"]</span></a></li>
-                        @if (CurrentUserContext.HasPermission("Administration.AuditHistory.View"))
-                        {
+                @if (CurrentUserContext.HasPermission("Administration.Users.View") ||
+                     CurrentUserContext.HasPermission("Administration.Roles.View") ||
+                     CurrentUserContext.HasPermission("Administration.Permissions.View") ||
+                     CurrentUserContext.HasPermission("Administration.UserBranch.View") ||
+                     CurrentUserContext.HasPermission("Administration.PaymentMethodPermissions.View") ||
+                     CurrentUserContext.HasPermission("Administration.AuditHistory.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuAdmin" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuAdmin">
+                            <i class="fa-solid fa-user-shield nav-icon"></i>
+                            <span class="nav-text">@Localizer["Administration"]</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuAdmin">
+                            @if (CurrentUserContext.HasPermission("Administration.Users.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "User")" class="erp-nav-link"><i class="fa-solid fa-users nav-icon"></i><span class="nav-text">@Localizer["Users"]</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Administration.Roles.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "Role")" class="erp-nav-link"><i class="fa-solid fa-id-card-clip nav-icon"></i><span class="nav-text">@Localizer["Roles"]</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Administration.Permissions.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "Permission")" class="erp-nav-link"><i class="fa-solid fa-key nav-icon"></i><span class="nav-text">@Localizer["Permissions"]</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Administration.UserBranch.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "UserBranch")" class="erp-nav-link"><i class="fa-solid fa-user-gear nav-icon"></i><span class="nav-text">@Localizer["UserBranchAssignment"]</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Administration.PaymentMethodPermissions.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "PaymentMethodPermissions")" class="erp-nav-link"><i class="fa-solid fa-money-check-dollar nav-icon"></i><span class="nav-text">صلاحيات وسائل الدفع</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Administration.TransactionTypes.View,Administration.Roles.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "TransactionTypes")" class="erp-nav-link"><i class="fa-solid fa-sliders nav-icon"></i><span class="nav-text">تهيئة أنواع الحركات</span></a></li>
+                                <li><a href="@Url.Action("Permissions", "TransactionTypes")" class="erp-nav-link"><i class="fa-solid fa-user-lock nav-icon"></i><span class="nav-text">صلاحيات أنواع الحركات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Administration.AuditHistory.View"))
+                            {
+                                <li>
+                                    <a href="@Url.Action("Index", "Audit")" class="erp-nav-link">
+                                        <i class="fa-solid fa-shield-halved nav-icon"></i>
+                                        <span class="nav-text">Audit History</span>
+                                    </a>
+                                </li>
+                            }
                             <li>
-                                <a href="@Url.Action("Index", "Audit")" class="erp-nav-link">
-                                    <i class="fa-solid fa-shield-halved nav-icon"></i>
-                                    <span class="nav-text">Audit History</span>
+                                <a href="@Url.Action("Index", "SystemFeedback")" class="erp-nav-link">
+                                    <i class="fa-solid fa-clipboard-question nav-icon text-warning"></i>
+                                    <span class="nav-text">اختبارات وملاحظات النظام</span>
                                 </a>
                             </li>
-                        }
-                    </ul>
-                </li>
+                        </ul>
+                    </li>
+                }
 
                 <!-- Master Data -->
                 @if (CurrentUserContext.HasPermission("MasterData.Governorates.View") ||
@@ -210,6 +281,10 @@
                             {
                                 <li><a href="@Url.Action("Index", "Warehouse")" class="erp-nav-link"><i class="fa-solid fa-warehouse nav-icon"></i><span class="nav-text">@Localizer["Warehouses"]</span></a></li>
                             }
+                            @if (CurrentUserContext.HasPermission("Inventory.SerialNumbers.View,Inventory.Items.View"))
+                            {
+                                <li><a href="@Url.Action("Inquiry", "SerialNumbers")" class="erp-nav-link"><i class="fa-solid fa-barcode nav-icon"></i><span class="nav-text">استعلام وتتبع السيريال</span></a></li>
+                            }
                         </ul>
                     </li>
                 }
@@ -217,63 +292,388 @@
 
 
                 <!-- Sales -->
-                <li class="erp-nav-item">
-                    <a href="#" class="erp-nav-link text-muted opacity-75">
-                        <i class="fa-solid fa-cart-shopping nav-icon"></i>
-                        <span class="nav-text">@Localizer["Sales"]</span>
-                    </a>
-                </li>
+                @if (CurrentUserContext.HasPermission("Sales.SalesInvoice.View,Sales.SalesInvoice.Add,Sales.Documents.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuSales" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuSales">
+                            <i class="fa-solid fa-cart-shopping nav-icon"></i>
+                            <span class="nav-text">@Localizer["Sales"]</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuSales">
+                            @if (CurrentUserContext.HasPermission("Sales.SalesInvoice.View,Sales.Documents.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "Documents", new { module = 1 })" class="erp-nav-link"><i class="fa-solid fa-file-invoice nav-icon"></i><span class="nav-text">فواتير ومستندات المبيعات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.SalesInvoice.Add"))
+                            {
+                                <li><a href="@Url.Action("Create", "Documents", new { module = 1 })" class="erp-nav-link"><i class="fa-solid fa-circle-plus nav-icon"></i><span class="nav-text">إنشاء فاتورة / حركة بيع</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
 
                 <!-- Purchases -->
-                <li class="erp-nav-item">
-                    <a href="#" class="erp-nav-link text-muted opacity-75">
-                        <i class="fa-solid fa-bag-shopping nav-icon"></i>
-                        <span class="nav-text">@Localizer["Purchases"]</span>
-                    </a>
-                </li>
+                @if (CurrentUserContext.HasPermission("Purchases.PurchaseInvoice.View,Purchases.PurchaseInvoice.Add,Purchases.Documents.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuPurchases" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuPurchases">
+                            <i class="fa-solid fa-bag-shopping nav-icon"></i>
+                            <span class="nav-text">@Localizer["Purchases"]</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuPurchases">
+                            @if (CurrentUserContext.HasPermission("Purchases.PurchaseInvoice.View,Purchases.Documents.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "Documents", new { module = 2 })" class="erp-nav-link"><i class="fa-solid fa-cart-flatbed nav-icon"></i><span class="nav-text">فواتير ومستندات المشتريات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.PurchaseInvoice.Add"))
+                            {
+                                <li><a href="@Url.Action("Create", "Documents", new { module = 2 })" class="erp-nav-link"><i class="fa-solid fa-circle-plus nav-icon"></i><span class="nav-text">إنشاء فاتورة / حركة شراء</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
 
                 <!-- Inventory -->
-                <li class="erp-nav-item">
-                    <a href="#" class="erp-nav-link text-muted opacity-75">
-                        <i class="fa-solid fa-boxes-stacked nav-icon"></i>
-                        <span class="nav-text">@Localizer["Inventory"]</span>
-                    </a>
-                </li>
+                @if (CurrentUserContext.HasPermission("Inventory.StockTransfer.View,Inventory.Items.View,Inventory.StockBalances.View,Inventory.Documents.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuInventory" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuInventory">
+                            <i class="fa-solid fa-boxes-stacked nav-icon"></i>
+                            <span class="nav-text">@Localizer["Inventory"]</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuInventory">
+                            <li><a href="@Url.Action("Index", "Documents", new { module = 3 })" class="erp-nav-link"><i class="fa-solid fa-dolly nav-icon"></i><span class="nav-text">حركات وأذون المخازن</span></a></li>
+                            @if (CurrentUserContext.HasPermission("Inventory.StockTransfer.Add,Inventory.Items.Add"))
+                            {
+                                <li><a href="@Url.Action("Create", "Documents", new { module = 3 })" class="erp-nav-link"><i class="fa-solid fa-circle-plus nav-icon"></i><span class="nav-text">إنشاء إذن / حركة مخزنية</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
+
+                <!-- Fixed Assets & Depreciation (الأصول الثابتة والإهلاكات) -->
+                @if (CurrentUserContext.HasPermission("FixedAssets.Asset.View,FixedAssets.Category.View,FixedAssets.Depreciation.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuFixedAssets" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuFixedAssets">
+                            <i class="fa-solid fa-building nav-icon"></i>
+                            <span class="nav-text">الأصول الثابتة والإهلاكات</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuFixedAssets">
+                            <li><a href="@Url.Action("Index", "FixedAssets")" class="erp-nav-link"><i class="fa-solid fa-cube nav-icon"></i><span class="nav-text">سجل الأصول الثابتة</span></a></li>
+                            <li><a href="@Url.Action("Create", "FixedAssets")" class="erp-nav-link"><i class="fa-solid fa-plus nav-icon"></i><span class="nav-text">إضافة أصل جديد</span></a></li>
+                            <li><a href="@Url.Action("Index", "AssetDepreciation")" class="erp-nav-link"><i class="fa-solid fa-calculator nav-icon"></i><span class="nav-text">تشغيل الإهلاكات الدورية</span></a></li>
+                            <li><a href="@Url.Action("Index", "AssetCategories")" class="erp-nav-link"><i class="fa-solid fa-boxes-stacked nav-icon"></i><span class="nav-text">مجموعات وتصنيفات الأصول</span></a></li>
+                            <li><a href="@Url.Action("Index", "FixedAssetReports")" class="erp-nav-link"><i class="fa-solid fa-chart-pie nav-icon"></i><span class="nav-text">تقارير الأصول الثابتة</span></a></li>
+                        </ul>
+                    </li>
+                }
 
                 <!-- Accounting -->
-                <li class="erp-nav-item">
-                    <a href="#" class="erp-nav-link text-muted opacity-75">
-                        <i class="fa-solid fa-book-journal-whills nav-icon"></i>
-                        <span class="nav-text">@Localizer["Accounting"]</span>
-                    </a>
-                </li>
+                @if (CurrentUserContext.HasPermission("Accounting.JournalVoucher.View") ||
+                     CurrentUserContext.HasPermission("Accounting.CurrencyRevaluation.View") ||
+                     CurrentUserContext.HasPermission("Accounting.ChartOfAccounts.View") ||
+                     CurrentUserContext.HasPermission("Accounting.CostCenters.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuAccounting" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuAccounting">
+                            <i class="fa-solid fa-book-journal-whills nav-icon"></i>
+                            <span class="nav-text">@Localizer["Accounting"]</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuAccounting">
+                            @if (CurrentUserContext.HasPermission("Accounting.JournalVoucher.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "JournalEntries")" class="erp-nav-link"><i class="fa-solid fa-file-invoice-dollar nav-icon"></i><span class="nav-text">قيود اليومية</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Accounting.CurrencyRevaluation.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "CurrencyRevaluations")" class="erp-nav-link"><i class="fa-solid fa-scale-balanced nav-icon"></i><span class="nav-text">إعادة تقييم العملات الأجنبية</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Accounting.ChartOfAccounts.View"))
+                            {
+                                <li><a href="@Url.Action("Tree", "Accounts")" class="erp-nav-link"><i class="fa-solid fa-network-wired nav-icon"></i><span class="nav-text">شجرة الحسابات (Tree View)</span></a></li>
+                                <li><a href="@Url.Action("Index", "Accounts")" class="erp-nav-link"><i class="fa-solid fa-sitemap nav-icon"></i><span class="nav-text">دليل الحسابات (جدول وبحث)</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Accounting.CostCenters.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "CostCenters")" class="erp-nav-link"><i class="fa-solid fa-bullseye nav-icon"></i><span class="nav-text">مراكز التكلفة</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
+
+                <!-- Cash & Banks (سندات القبض والصرف) -->
+                @if (CurrentUserContext.HasPermission("Cash.ReceiptVoucher.View,Cash.PaymentVoucher.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuCashBank" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuCashBank">
+                            <i class="fa-solid fa-money-bill-transfer nav-icon"></i>
+                            <span class="nav-text">المقبوضات والمدفوعات</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuCashBank">
+                            <li><a href="@Url.Action("Index", "CashBankVouchers")" class="erp-nav-link"><i class="fa-solid fa-list-check nav-icon"></i><span class="nav-text">سندات القبض والصرف</span></a></li>
+                            @if (CurrentUserContext.HasPermission("Cash.ReceiptVoucher.Add"))
+                            {
+                                <li><a href="@Url.Action("Create", "CashBankVouchers", new { type = "Receipt" })" class="erp-nav-link"><i class="fa-solid fa-arrow-down nav-icon text-success"></i><span class="nav-text">سند قبض جديد</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Cash.PaymentVoucher.Add"))
+                            {
+                                <li><a href="@Url.Action("Create", "CashBankVouchers", new { type = "Payment" })" class="erp-nav-link"><i class="fa-solid fa-arrow-up nav-icon text-danger"></i><span class="nav-text">سند صرف جديد</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
 
                 <!-- Reports -->
-                <li class="erp-nav-item">
-                    <a href="#" class="erp-nav-link text-muted opacity-75">
-                        <i class="fa-solid fa-chart-column nav-icon"></i>
-                        <span class="nav-text">@Localizer["Reports"]</span>
-                    </a>
-                </li>
+                @if (CurrentUserContext.HasPermission("Reports.GeneralReports.View,Reports.AccountStatement.View,Reports.CustomerStatement.View,Reports.VendorStatement.View,Reports.SubLedgerSummary.View,Reports.TrialBalance.View,Reports.GeneralLedger.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuReports" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuReports">
+                            <i class="fa-solid fa-chart-line nav-icon"></i>
+                            <span class="nav-text">التقارير المحاسبية</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuReports">
+                            @if (CurrentUserContext.HasPermission("Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "Reports")" class="erp-nav-link"><i class="fa-solid fa-list-check nav-icon"></i><span class="nav-text">فهرس التقارير</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Reports.AccountStatement.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("AccountStatement", "Reports")" class="erp-nav-link"><i class="fa-solid fa-file-invoice nav-icon"></i><span class="nav-text">كشف حساب مالي</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Reports.CustomerStatement.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("CustomerStatement", "Reports")" class="erp-nav-link"><i class="fa-solid fa-users nav-icon"></i><span class="nav-text">كشف حساب عميل</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Reports.VendorStatement.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("VendorStatement", "Reports")" class="erp-nav-link"><i class="fa-solid fa-truck-moving nav-icon"></i><span class="nav-text">كشف حساب مورد</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Reports.SubLedgerSummary.View,Reports.CustomerStatement.View,Reports.VendorStatement.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("SubLedgerSummary", "Reports")" class="erp-nav-link"><i class="fa-solid fa-address-book nav-icon"></i><span class="nav-text">إجمالي أرصدة العملاء والموردين</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Reports.TrialBalance.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("TrialBalance", "Reports")" class="erp-nav-link"><i class="fa-solid fa-scale-balanced nav-icon"></i><span class="nav-text">ميزان المراجعة</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Reports.GeneralLedger.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("GeneralLedger", "Reports")" class="erp-nav-link"><i class="fa-solid fa-book-journal-whills nav-icon"></i><span class="nav-text">دفتر الأستاذ العام</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
 
-                <!-- Settings -->
-                <li class="erp-nav-item">
-                    <a href="#" class="erp-nav-link text-muted opacity-75">
-                        <i class="fa-solid fa-sliders nav-icon"></i>
-                        <span class="nav-text">@Localizer["Settings"]</span>
-                    </a>
-                </li>
+                <!-- Sales Reports -->
+                @if (CurrentUserContext.HasPermission("Reports.SalesReports.View,Reports.GeneralReports.View,Sales.ReportsCatalog.View,Sales.SalesSummary.View,Sales.InvoiceDetails.View,Sales.ByItem.View,Sales.ByCustomer.View,Sales.BySalesman.View,Sales.ReturnsAndNet.View,Sales.BranchComparison.View,Sales.TopSellingAndStagnant.View,Sales.FulfillmentTracking.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuSalesReports" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuSalesReports">
+                            <i class="fa-solid fa-chart-pie nav-icon text-success"></i>
+                            <span class="nav-text">تقارير المبيعات</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuSalesReports">
+                            @if (CurrentUserContext.HasPermission("Sales.ReportsCatalog.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-list-check nav-icon"></i><span class="nav-text">فهرس تقارير المبيعات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.SalesSummary.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("SalesSummary", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-calendar-days nav-icon"></i><span class="nav-text">ملخص المبيعات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.InvoiceDetails.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("InvoiceDetails", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-file-invoice-dollar nav-icon"></i><span class="nav-text">تفاصيل فواتير البيع</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.ByItem.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ByItem", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-boxes-stacked nav-icon"></i><span class="nav-text">المبيعات حسب الصنف</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.ByCustomer.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ByCustomer", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-users nav-icon"></i><span class="nav-text">المبيعات حسب العميل</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.BySalesman.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("BySalesman", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-user-tie nav-icon"></i><span class="nav-text">المبيعات حسب المندوب</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.ReturnsAndNet.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ReturnsAndNet", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-rotate-left nav-icon"></i><span class="nav-text">المرتجعات وصافي المبيعات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.BranchComparison.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("BranchComparison", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-code-compare nav-icon"></i><span class="nav-text">مقارنة الفروع والفترات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.TopSellingAndStagnant.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("TopSellingAndStagnant", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-arrow-trend-up nav-icon"></i><span class="nav-text">الأكثر مبيعاً والراكد</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Sales.FulfillmentTracking.View,Reports.SalesReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("FulfillmentTracking", "SalesReports")" class="erp-nav-link"><i class="fa-solid fa-list-check nav-icon"></i><span class="nav-text">متابعة استكمال المخزون</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
+
+                <!-- Purchases Reports -->
+                @if (CurrentUserContext.HasPermission("Reports.PurchaseReports.View,Reports.GeneralReports.View,Purchases.ReportsCatalog.View,Purchases.PurchaseSummary.View,Purchases.InvoiceDetails.View,Purchases.ByItem.View,Purchases.ByVendor.View,Purchases.ReturnsAndNet.View,Purchases.PriceHistory.View,Purchases.PendingStock.View,Purchases.ReceiptTracking.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuPurchaseReports" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuPurchaseReports">
+                            <i class="fa-solid fa-cart-shopping nav-icon text-warning"></i>
+                            <span class="nav-text">تقارير المشتريات</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuPurchaseReports">
+                            @if (CurrentUserContext.HasPermission("Purchases.ReportsCatalog.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-list-check nav-icon"></i><span class="nav-text">فهرس تقارير المشتريات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.PurchaseSummary.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("PurchaseSummary", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-calendar-days nav-icon"></i><span class="nav-text">ملخص المشتريات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.InvoiceDetails.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("InvoiceDetails", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-file-invoice nav-icon"></i><span class="nav-text">تفاصيل فواتير الشراء</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.ByItem.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ByItem", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-boxes-stacked nav-icon"></i><span class="nav-text">المشتريات حسب الصنف</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.ByVendor.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ByVendor", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-truck-moving nav-icon"></i><span class="nav-text">المشتريات حسب المورد</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.ReturnsAndNet.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ReturnsAndNet", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-rotate-left nav-icon"></i><span class="nav-text">مرتجعات الشراء والصافي</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.PriceHistory.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("PriceHistory", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-tags nav-icon"></i><span class="nav-text">مقارنة أسعار الشراء</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.PendingStock.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("PendingStock", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-warehouse nav-icon"></i><span class="nav-text">فواتير بدون حركة مخزن</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Purchases.ReceiptTracking.View,Reports.PurchaseReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ReceiptTracking", "PurchaseReports")" class="erp-nav-link"><i class="fa-solid fa-dolly nav-icon"></i><span class="nav-text">متابعة الكميات المستلمة</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
+
+                <!-- Inventory Reports -->
+                @if (CurrentUserContext.HasPermission("Reports.InventoryReports.View,Reports.GeneralReports.View,Inventory.ReportsCatalog.View,Inventory.StockBalances.View,Inventory.ItemStockCard.View,Inventory.InwardOutward.View,Inventory.WarehouseTransfers.View,Inventory.ReturnsAndAdjustments.View,Inventory.ReservedAndAvailable.View,Inventory.ReorderLevelAlert.View,Inventory.DeadStock.View,Inventory.SerialNumbersReport.View,Inventory.StockDiscrepancy.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuInventoryReports" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuInventoryReports">
+                            <i class="fa-solid fa-boxes-stacked nav-icon text-info"></i>
+                            <span class="nav-text">تقارير المخازن</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuInventoryReports">
+                            @if (CurrentUserContext.HasPermission("Inventory.ReportsCatalog.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-list-check nav-icon"></i><span class="nav-text">فهرس تقارير المخازن</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.StockBalances.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("StockBalances", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-layer-group nav-icon"></i><span class="nav-text">أرصدة الأصناف بالمخازن</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.ItemStockCard.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ItemStockCard", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-address-card nav-icon"></i><span class="nav-text">كارت الصنف التفصيلي</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.InwardOutward.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("InwardOutward", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-right-left nav-icon"></i><span class="nav-text">الوارد والمنصرف خلال فترة</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.WarehouseTransfers.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("WarehouseTransfers", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-truck-ramp-box nav-icon"></i><span class="nav-text">التحويلات بين المخازن</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.ReturnsAndAdjustments.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ReturnsAndAdjustments", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-sliders nav-icon"></i><span class="nav-text">المرتجعات والتسويات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.ReservedAndAvailable.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ReservedAndAvailable", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-lock nav-icon"></i><span class="nav-text">المحجوز والمتاح للبيع</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.ReorderLevelAlert.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("ReorderLevelAlert", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-bell nav-icon"></i><span class="nav-text">حد إعادة الطلب والنواقص</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.DeadStock.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("DeadStock", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-hourglass-end nav-icon"></i><span class="nav-text">الأصناف الراكدة</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.SerialNumbersReport.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("SerialNumbers", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-barcode nav-icon"></i><span class="nav-text">الأرقام المسلسلة وسجل حركتها</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.StockDiscrepancy.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
+                            {
+                                <li><a href="@Url.Action("StockDiscrepancy", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-scale-unbalanced nav-icon"></i><span class="nav-text">فروقات الرصيد المحسوب</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
+
+                <!-- Settings (Transaction Types & Charges/Discounts) -->
+                @if (CurrentUserContext.HasPermission("Administration.TransactionTypes.View,Administration.Roles.View,Inventory.DocumentAdjustments.View,Sales.SalesInvoice.View,Purchases.PurchaseInvoice.View"))
+                {
+                    <li class="erp-nav-item">
+                        <a href="#menuSettings" class="erp-nav-link" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="menuSettings">
+                            <i class="fa-solid fa-sliders nav-icon"></i>
+                            <span class="nav-text">@Localizer["Settings"]</span>
+                            <i class="fa-solid @(isRtl ? "fa-chevron-left" : "fa-chevron-right") arrow-icon ms-auto me-0"></i>
+                        </a>
+                        <ul class="collapse erp-submenu" id="menuSettings">
+                            @if (CurrentUserContext.HasPermission("Administration.TransactionTypes.View,Administration.Roles.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "TransactionTypes")" class="erp-nav-link"><i class="fa-solid fa-file-waveform nav-icon"></i><span class="nav-text">أنواع الحركات والمستندات</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Inventory.DocumentAdjustments.View,Sales.SalesInvoice.View,Purchases.PurchaseInvoice.View"))
+                            {
+                                <li><a href="@Url.Action("Index", "DocumentAdjustments")" class="erp-nav-link"><i class="fa-solid fa-calculator nav-icon"></i><span class="nav-text">المصاريف والخصومات الإضافية</span></a></li>
+                            }
+                            @if (CurrentUserContext.HasPermission("Administration.TransactionTypes.View,Administration.Roles.View"))
+                            {
+                                <li><a href="@Url.Action("Permissions", "TransactionTypes")" class="erp-nav-link"><i class="fa-solid fa-user-shield nav-icon"></i><span class="nav-text">صلاحيات أنواع الحركات</span></a></li>
+                            }
+                        </ul>
+                    </li>
+                }
             </ul>
         </aside>
+        }
 
         <!-- Main Content Area -->
         <main class="erp-main">
             <!-- Top Navbar Header -->
             <header class="erp-topbar">
                 <div class="d-flex align-items-center gap-3">
-                    <button class="erp-toggle-btn" id="sidebarToggleBtn" title="Toggle Sidebar">
-                        <i class="fa-solid fa-bars"></i>
-                    </button>
+                    @if (CurrentUserContext.IsAuthenticated)
+                    {
+                        <button class="erp-toggle-btn" id="sidebarToggleBtn" type="button" title="@(isRtl ? "إظهار / إخفاء القائمة الجانبية (Ctrl + B)" : "Toggle Sidebar (Ctrl + B)")" aria-label="Toggle Sidebar">
+                            <i class="fa-solid fa-bars"></i>
+                        </button>
+                    }
                     <span class="fw-bold text-secondary d-none d-lg-inline" style="font-size: 13.5px;">@Localizer["AppName"]</span>
                 </div>
 

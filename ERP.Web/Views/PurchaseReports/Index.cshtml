@@ -1,0 +1,219 @@
+@{
+    ViewData["Title"] = "تقارير المشتريات الشاملة";
+    Layout = "_Layout";
+}
+
+<div class="container-fluid py-3">
+    <!-- Header Page Title -->
+    <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-cart-shopping me-2"></i>تقارير المشتريات الشاملة (Purchases Reports Hub)
+            </h3>
+            <p class="text-muted small mb-0">تحليلات المشتريات وفواتير الشراء والأصناف والموردين وتاريخ الأسعار والاستلام المخزني</p>
+        </div>
+    </div>
+
+    <!-- Reports Cards Grid (8 Reports) -->
+    <div class="row g-4">
+        <!-- 1. Purchase Summary -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary fs-3">
+                            <i class="fa-solid fa-calendar-days"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">ملخص المشتريات</h5>
+                            <span class="text-muted small">Purchase Summary</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        ملخص المشتريات والخصومات والضرائب والمرتجعات وصافي المشتريات حسب الفترة والفرع.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="PurchaseSummary" class="btn btn-primary w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Invoice Details -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success fs-3">
+                            <i class="fa-solid fa-file-invoice"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">تفاصيل فواتير الشراء</h5>
+                            <span class="text-muted small">Purchase Invoices Detail</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        سجل تفصيلي لفواتير الشراء وبنودها والموردين والمستودعات والأسعار.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="InvoiceDetails" class="btn btn-success w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. By Item -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info fs-3">
+                            <i class="fa-solid fa-boxes-stacked"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">المشتريات حسب الصنف</h5>
+                            <span class="text-muted small">Purchases by Item</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        الكميات المشتراة والمرتجعة وصافي المشتريات ومتوسط تكلفة الشراء لكل صنف.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ByItem" class="btn btn-info w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. By Vendor -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning fs-3">
+                            <i class="fa-solid fa-truck-moving"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">المشتريات حسب المورد</h5>
+                            <span class="text-muted small">Purchases by Vendor</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        حجم تعاملات الموردين، عدد الفواتير، الخصومات، المرتجعات، وصافي المشتريات.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ByVendor" class="btn btn-warning w-100 fw-bold text-dark">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Returns and Net -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger fs-3">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">مرتجعات المشتريات والصافي</h5>
+                            <span class="text-muted small">Purchase Returns & Net</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        بيان تفصيلي بمرتجعات الشراء ونسبتها من إجمالي المشتريات خلال الفترة.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ReturnsAndNet" class="btn btn-danger w-100 fw-bold text-white">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. Price Comparison -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-secondary bg-opacity-10 p-3 text-secondary fs-3">
+                            <i class="fa-solid fa-tags"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">مقارنة أسعار الشراء</h5>
+                            <span class="text-muted small">Purchase Price History</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        تتبع حركة أسعار شراء الصنف بين مختلف الموردين والفترات وتقلبات التكلفة.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="PriceHistory" class="btn btn-secondary w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. Pending Stock Movement -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-dark bg-opacity-10 p-3 text-dark fs-3">
+                            <i class="fa-solid fa-warehouse"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">فواتير بدون حركة مخزنية</h5>
+                            <span class="text-muted small">Invoices Pending Stock</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        حصر فواتير الشراء التي لا تنشئ حركة وارد آلياً وتتطلب إذن استلام مستقل.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="PendingStock" class="btn btn-dark w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. Receipt Tracking -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100 shadow-sm border-0 report-hub-card">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-circle bg-teal bg-opacity-10 p-3 text-success fs-3">
+                            <i class="fa-solid fa-dolly"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">متابعة الكميات المستلمة</h5>
+                            <span class="text-muted small">Receipt vs Order Tracking</span>
+                        </div>
+                    </div>
+                    <p class="text-secondary small flex-grow-1">
+                        مقارنة الكميات المطلوبة في أوامر الشراء بالكميات المستلمة فعلياً بالمخازن.
+                    </p>
+                    <div class="mt-3 pt-3 border-top">
+                        <a asp-action="ReceiptTracking" class="btn btn-outline-success w-100 fw-bold">
+                            <i class="fa-solid fa-arrow-left me-1"></i> فتح التقرير
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

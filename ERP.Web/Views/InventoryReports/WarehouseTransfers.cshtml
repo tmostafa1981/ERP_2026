@@ -1,0 +1,146 @@
+@model ERP.Application.DTOs.Reports.WarehouseTransfersReportDto
+@{
+    ViewData["Title"] = "تقرير التحويلات بين المخازن";
+    Layout = "_Layout";
+    bool isRequested = ViewBag.IsRequested == true;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-truck-ramp-box me-2"></i>تقرير التحويلات بين المخازن
+            </h4>
+            <span class="text-muted small">سجل تحويلات ونقل البضائع والأصناف بين المستودعات والفروع</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.InventoryReports.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.InventoryReports.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('transfersTable', 'WarehouseTransfers')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> فهرس تقارير المخازن
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="WarehouseTransfers">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="DateFrom" class="form-control form-control-sm" value="@(Model.Filter.DateFrom?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="DateTo" class="form-control form-control-sm" value="@(Model.Filter.DateTo?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> عرض التحويلات
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-truck-ramp-box fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد الفترة الزمنية والضغط على "عرض التحويلات"</h5>
+            <p class="text-muted small mb-0">اختر نطاق التاريخ لعرض سجل أذون التحويل بين المستودعات والكميات المنقولة.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Data Table -->
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table id="transfersTable" class="table table-bordered table-hover table-striped align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>رقم إذن التحويل</th>
+                                <th>التاريخ</th>
+                                <th>من مستودع</th>
+                                <th>إلى مستودع</th>
+                                <th>كود الصنف</th>
+                                <th class="text-start">اسم الصنف</th>
+                                <th>الوحدة</th>
+                                <th>الكمية المحولة</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Items.Any())
+                            {
+                                <tr>
+                                    <td colspan="9" class="py-4 text-muted">لا توجد حركات تحويل مخزني مطابقة للبحث.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in Model.Items)
+                                {
+                                    <tr>
+                                        <td class="font-monospace text-primary fw-bold">@row.DocumentNumber</td>
+                                        <td class="font-monospace">@row.DocumentDate.ToString("yyyy/MM/dd")</td>
+                                        <td>@row.FromWarehouseName</td>
+                                        <td>@row.ToWarehouseName</td>
+                                        <td class="font-monospace text-muted">@row.ItemCode</td>
+                                        <td class="text-start fw-bold">@row.ItemName</td>
+                                        <td>@row.UnitName</td>
+                                        <td class="font-monospace fw-bold text-success fs-6">@row.Quantity.ToString("G29")</td>
+                                        <td><span class="badge bg-success-subtle text-success border">@row.Status</span></td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="7" class="text-center">إجمالي الكميات المحولة</td>
+                                <td class="font-monospace text-success fs-6">@Model.TotalTransferredQuantity.ToString("G29")</td>
+                                <td>-</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+</script>

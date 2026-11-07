@@ -1,6 +1,8 @@
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Infrastructure.Data;
+using ERP.Web.Authorization;
+using ERP.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,19 +17,22 @@ namespace ERP.Web.Controllers
     {
         private readonly ErpDbContext _context;
         private readonly IAuditService _audit;
+        private readonly IFiscalPeriodService _fiscalPeriodService;
 
         // ─── Screen constants ─────────────────────────────────────────────────────
         private const string SC_Code   = "FYR001";
         private const string SC_Name   = "FiscalYears";
         private const string SC_Module = "Organization";
 
-        public FiscalYearController(ErpDbContext context, IAuditService audit)
+        public FiscalYearController(ErpDbContext context, IAuditService audit, IFiscalPeriodService fiscalPeriodService)
         {
             _context = context;
             _audit   = audit;
+            _fiscalPeriodService = fiscalPeriodService;
         }
 
         [HttpGet]
+        [HasPermission("Organization.FiscalYear.View")]
         public async Task<IActionResult> Index()
         {
             var years = await _context.FiscalYears.OrderByDescending(f => f.Year).ToListAsync();
@@ -36,6 +41,7 @@ namespace ERP.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [HasPermission("Organization.FiscalYear.Add")]
         public async Task<IActionResult> Create(FiscalYear model)
         {
             if (string.IsNullOrWhiteSpace(model.Year))
@@ -55,6 +61,9 @@ namespace ERP.Web.Controllers
 
                 _context.FiscalYears.Add(model);
                 await _context.SaveChangesAsync();
+
+                // Ensure 12 monthly periods are generated for the new fiscal year
+                await _fiscalPeriodService.EnsurePeriodsForYearAsync(model.Id);
 
                 // ── Audit: Create ─────────────────────────────────────────────────
                 await _audit.LogCreateAsync(SC_Code, SC_Name, SC_Module,
@@ -76,6 +85,7 @@ namespace ERP.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [HasPermission("Organization.FiscalYear.Edit")]
         public async Task<IActionResult> Edit(FiscalYear model)
         {
             if (model.StartDate >= model.EndDate)
@@ -98,11 +108,25 @@ namespace ERP.Web.Controllers
                 fy.Name      = !string.IsNullOrWhiteSpace(model.NameAr) ? model.NameAr : (model.NameEn ?? model.Year);
                 fy.StartDate = model.StartDate;
                 fy.EndDate   = model.EndDate;
-                fy.IsActive  = model.IsActive;
                 fy.UpdatedAt = DateTime.UtcNow;
 
-                _context.Update(fy);
-                await _context.SaveChangesAsync();
+                if (model.RowVersion != null && model.RowVersion.Length > 0)
+                {
+                    _context.Entry(fy).Property(e => e.RowVersion).OriginalValue = model.RowVersion;
+                }
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (Request.IsAjaxRequest())
+                        return this.JsonFailure("تم تعديل السجل بواسطة مستخدم آخر أثناء عملك عليه. يرجى إعادة تحميل البيانات قبل الحفظ.");
+
+                    TempData["ErrorMessage"] = "تم تعديل السجل بواسطة مستخدم آخر أثناء عملك عليه. يرجى إعادة تحميل البيانات قبل الحفظ.";
+                    return RedirectToAction(nameof(Index));
+                }
 
                 // ── Audit: Update ─────────────────────────────────────────────────
                 await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
@@ -124,6 +148,7 @@ namespace ERP.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [HasPermission("Organization.FiscalYear.Close")]
         public async Task<IActionResult> ToggleClose(int id)
         {
             var fy = await _context.FiscalYears.FindAsync(id);
@@ -132,6 +157,20 @@ namespace ERP.Web.Controllers
             var oldIsClosed = fy.IsClosed;
             fy.IsClosed  = !fy.IsClosed;
             fy.UpdatedAt = DateTime.UtcNow;
+
+            // If closing the fiscal year, also close all individual periods inside it
+            if (fy.IsClosed)
+            {
+                var periods = await _context.FiscalPeriods.Where(p => p.FiscalYearId == id).ToListAsync();
+                foreach (var p in periods)
+                {
+                    p.IsClosed = true;
+                    p.ClosedAt = DateTime.UtcNow;
+                    p.ClosedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    p.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
             await _context.SaveChangesAsync();
 
             // ── Audit: Update (close/open toggle) ─────────────────────────────────
@@ -144,6 +183,23 @@ namespace ERP.Web.Controllers
 
             TempData["SuccessMessage"] = $"Fiscal Year status changed to {(fy.IsClosed ? "Closed" : "Open")}.";
             return RedirectToAction(nameof(Index));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetPeriods(int fiscalYearId)
+        {
+            var periods = await _fiscalPeriodService.GetPeriodsByYearIdAsync(fiscalYearId);
+            return Json(new { success = true, data = periods });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [HasPermission("Organization.FiscalYear.Close")]
+        public async Task<IActionResult> TogglePeriodClose(int periodId)
+        {
+            string userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+            var res = await _fiscalPeriodService.TogglePeriodCloseAsync(periodId, userId);
+            return Json(new { success = res.Success, message = res.Message, isClosed = res.NewStatus });
         }
     }
 }

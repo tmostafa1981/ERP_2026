@@ -1,0 +1,265 @@
+@model ERP.Application.DTOs.FixedAssets.ExecuteDepreciationRunDto
+@{
+    ViewData["Title"] = "تشغيل واحتساب الإهلاك الدوري للأصول";
+}
+
+<div class="container-fluid py-3" id="depApp">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="mb-1 text-primary"><i class="fas fa-calculator me-2"></i>تشغيل واحتساب الإهلاك الدوري</h3>
+            <p class="text-muted small mb-0">معاينة وتدقيق الإهلاك الدوري للأصول المؤهلة وإنشاء وترحيل القيود المحاسبية تلقائياً</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="Index" class="btn btn-outline-secondary">إلغاء</a>
+        </div>
+    </div>
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-1"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Parameters Filter Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">تاريخ الإهلاك <span class="text-danger">*</span></label>
+                    <input type="date" v-model="filter.runDate" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">الفرع</label>
+                    <select v-model="filter.branchId" class="form-select form-select-sm">
+                        <option :value="null">-- كافة الفروع المصرح بها --</option>
+                        @foreach (var b in (SelectList)ViewBag.Branches)
+                        {
+                            <option value="@b.Value">@b.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">تصنيف / مجموعة الأصول</label>
+                    <select v-model="filter.assetCategoryId" class="form-select form-select-sm">
+                        <option :value="null">-- كافة المجموعات --</option>
+                        @foreach (var c in (SelectList)ViewBag.Categories)
+                        {
+                            <option value="@c.Value">@c.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">أصل محدد (اختياري)</label>
+                    <select v-model="filter.specificAssetId" class="form-select form-select-sm">
+                        <option :value="null">-- كافة الأصول --</option>
+                        @foreach (var a in (SelectList)ViewBag.Assets)
+                        {
+                            <option value="@a.Value">@a.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" @@click="loadPreview" :disabled="loading" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-spinner fa-spin me-1" v-if="loading"></i>
+                        <i class="fas fa-sync-alt me-1" v-else></i>
+                        معاينة واحتساب
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert / Validation messages -->
+    <div v-if="errorMessage" class="alert alert-danger" role="alert">
+        <i class="fas fa-exclamation-circle me-1"></i>{{ errorMessage }}
+    </div>
+
+    <!-- Results Section (when preview loaded) -->
+    <div v-if="previewResult">
+        <!-- Stat Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm bg-primary text-white">
+                    <div class="card-body py-3">
+                        <div class="text-white-50 small">السنة والفترة المالية</div>
+                        <h5 class="mb-0 fw-bold">{{ previewResult.fiscalYearName }} - {{ previewResult.fiscalPeriodName }}</h5>
+                        <div class="small text-white-50 mt-1">تاريخ العملية: {{ previewResult.runDate ? previewResult.runDate.substring(0, 10) : '' }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm bg-info text-white">
+                    <div class="card-body py-3">
+                        <div class="text-white-50 small">عدد الأصول المؤهلة للإهلاك</div>
+                        <h4 class="mb-0 fw-bold">{{ previewResult.totalAssetsCount }}</h4>
+                        <div class="small text-white-50 mt-1">من إجمالي الأصول الخاضعة للفحص</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm bg-success text-white">
+                    <div class="card-body py-3">
+                        <div class="text-white-50 small">إجمالي قسط الإهلاك الدوري</div>
+                        <h4 class="mb-0 fw-bold">{{ formatNumber(previewResult.totalDepreciationAmount) }}</h4>
+                        <div class="small text-white-50 mt-1">قيمة القيد المحاسبي الناتج</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submission Form -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-3">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="RunDate" :value="filter.runDate" />
+                    <input type="hidden" name="BranchId" :value="filter.branchId" />
+                    <input type="hidden" name="AssetCategoryId" :value="filter.assetCategoryId" />
+                    <input type="hidden" name="SpecificAssetId" :value="filter.specificAssetId" />
+
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">البيان والملاحظات</label>
+                            <input type="text" name="Notes" class="form-control form-control-sm" placeholder="مثال: إهلاك الأصول الثابتة لشهر نوفمبر 2026" />
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-check form-switch pt-4">
+                                <input class="form-check-input" type="checkbox" name="AutoPost" id="chkAutoPost" value="true" checked />
+                                <label class="form-check-label small fw-bold" for="chkAutoPost">اعتماد وترحيل القيد المحاسبي تلقائياً</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-end pt-3">
+                            <button type="submit" class="btn btn-success px-4" :disabled="previewResult.totalAssetsCount <= 0">
+                                <i class="fas fa-check-circle me-1"></i>تنفيذ عملية الإهلاك
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Preview Grid -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="fas fa-table me-1"></i>تفاصيل الأصول المحسوبة للإهلاك</span>
+                <span class="badge bg-secondary">{{ previewResult.lines ? previewResult.lines.length : 0 }} أصل</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0 text-center table-sm">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>#</th>
+                                <th>كود الأصل</th>
+                                <th class="text-start">اسم الأصل</th>
+                                <th>الفرع</th>
+                                <th>مركز التكلفة</th>
+                                <th>طريقة الإهلاك</th>
+                                <th>التكلفة الحالية</th>
+                                <th>مجمع الإهلاك السابق</th>
+                                <th class="table-success fw-bold">قسط الإهلاك الحالي</th>
+                                <th>مجمع الإهلاك بعد</th>
+                                <th>القيمة الدفترية بعد</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(line, idx) in previewResult.lines" :key="line.assetId" :class="{'table-light text-muted': !line.isEligible}">
+                                <td>{{ idx + 1 }}</td>
+                                <td class="fw-bold">{{ line.assetCode }}</td>
+                                <td class="text-start">{{ line.assetName }}</td>
+                                <td>{{ line.branchName }}</td>
+                                <td class="small">{{ line.costCenterName || '—' }}</td>
+                                <td><span class="badge bg-secondary">{{ line.depreciationMethodName }}</span></td>
+                                <td>{{ formatNumber(line.assetCost) }}</td>
+                                <td class="text-muted">{{ formatNumber(line.priorAccumulatedDepreciation) }}</td>
+                                <td class="table-success fw-bold text-success">{{ formatNumber(line.currentPeriodDepreciation) }}</td>
+                                <td class="text-warning">{{ formatNumber(line.postAccumulatedDepreciation) }}</td>
+                                <td class="fw-bold text-primary">{{ formatNumber(line.bookValueAfter) }}</td>
+                                <td>
+                                    <span v-if="line.isEligible" class="badge bg-success">مؤهل</span>
+                                    <span v-else class="badge bg-secondary" :title="line.ineligibilityReason">{{ line.ineligibilityReason }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot class="table-light fw-bold sticky-bottom">
+                            <tr>
+                                <td colspan="8" class="text-end">الإجمالي:</td>
+                                <td class="table-success text-success fs-6">{{ formatNumber(previewResult.totalDepreciationAmount) }}</td>
+                                <td colspan="3"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<script>
+    const { createApp, ref } = Vue;
+
+    createApp({
+        setup() {
+            const filter = ref({
+                runDate: '@DateTime.Today.ToString("yyyy-MM-dd")',
+                branchId: null,
+                assetCategoryId: null,
+                specificAssetId: null
+            });
+
+            const loading = ref(false);
+            const errorMessage = ref('');
+            const previewResult = ref(null);
+
+            const loadPreview = async () => {
+                loading.value = true;
+                errorMessage.value = '';
+                previewResult.value = null;
+
+                try {
+                    const response = await fetch('@Url.Action("Preview")', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            runDate: filter.value.runDate,
+                            branchId: filter.value.branchId ? parseInt(filter.value.branchId) : null,
+                            assetCategoryId: filter.value.assetCategoryId ? parseInt(filter.value.assetCategoryId) : null,
+                            specificAssetId: filter.value.specificAssetId ? parseInt(filter.value.specificAssetId) : null
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) {
+                        errorMessage.value = data.message || 'حدث خطأ أثناء معاينة الإهلاك.';
+                    } else {
+                        previewResult.value = data;
+                    }
+                } catch (err) {
+                    errorMessage.value = 'تعذر الاتصال بالخادم لمعاينة الإهلاك.';
+                } finally {
+                    loading.value = false;
+                }
+            };
+
+            const formatNumber = (val) => {
+                if (val === undefined || val === null) return '0.00';
+                return parseFloat(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
+
+            return {
+                filter,
+                loading,
+                errorMessage,
+                previewResult,
+                loadPreview,
+                formatNumber
+            };
+        }
+    }).mount('#depApp');
+</script>

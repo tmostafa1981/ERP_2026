@@ -94,6 +94,21 @@ namespace ERP.Web.Controllers
         [HasPermission("MasterData.ItemUnits.Add")]
         public async Task<IActionResult> Create(ItemUnit model)
         {
+            if (Request.HasFormContentType)
+            {
+                if (string.IsNullOrWhiteSpace(Request.Form["SalesPrice"]))
+                {
+                    ModelState.Remove("SalesPrice");
+                    model.SalesPrice = 0m;
+                }
+
+                if (string.IsNullOrWhiteSpace(Request.Form["PurchasePrice"]))
+                {
+                    ModelState.Remove("PurchasePrice");
+                    model.PurchasePrice = 0m;
+                }
+            }
+
             if (model.ItemId <= 0 || !await _context.Items.AnyAsync(i => i.Id == model.ItemId))
                 ModelState.AddModelError("ItemId", "Please select a valid item.");
 
@@ -171,6 +186,21 @@ namespace ERP.Web.Controllers
         [HasPermission("MasterData.ItemUnits.Edit")]
         public async Task<IActionResult> Edit(ItemUnit model)
         {
+            if (Request.HasFormContentType)
+            {
+                if (string.IsNullOrWhiteSpace(Request.Form["SalesPrice"]))
+                {
+                    ModelState.Remove("SalesPrice");
+                    model.SalesPrice = 0m;
+                }
+
+                if (string.IsNullOrWhiteSpace(Request.Form["PurchasePrice"]))
+                {
+                    ModelState.Remove("PurchasePrice");
+                    model.PurchasePrice = 0m;
+                }
+            }
+
             var entity = await _context.ItemUnits.FindAsync(model.Id);
             if (entity == null) return NotFound();
 

@@ -213,7 +213,7 @@
 <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form id="userForm" method="post">
+            <form id="userForm" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <input type="hidden" id="userId" name="Id" />
                 <div class="modal-header">
@@ -295,7 +295,7 @@
 <div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form asp-action="ResetPassword" method="post">
+            <form asp-action="ResetPassword" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <input type="hidden" id="resetUserId" name="UserId" />
                 <div class="modal-header">

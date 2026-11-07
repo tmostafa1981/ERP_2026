@@ -3,9 +3,10 @@ using ERP.Domain.Interfaces;
 
 namespace ERP.Domain.Entities
 {
-    public class Vendor : IAuditableEntity
+    public class Vendor : IAuditableEntity, IMustHaveBranch, IConcurrencyAware
     {
         public int Id { get; set; }
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
         public int BranchId { get; set; }
         public string Code { get; set; } = string.Empty;
         public string NameAr { get; set; } = string.Empty;
@@ -18,9 +19,14 @@ namespace ERP.Domain.Entities
         public string? CommercialRegister { get; set; }
         public string? TaxPayerType { get; set; }
         public int? CurrencyId { get; set; }
+        public int? PartyGroupId { get; set; }
         public string? Phone { get; set; }
         public string? Mobile { get; set; }
+        public string? Mobile1 { get => Mobile; set => Mobile = value; }
+        public string? Mobile2 { get; set; }
         public string? Email { get; set; }
+        public string? Notes { get; set; }
+        public int? FinancialAccountId { get; set; }
         public bool IsActive { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
@@ -30,6 +36,8 @@ namespace ERP.Domain.Entities
         public Governorate? Governorate { get; set; }
         public City? City { get; set; }
         public Currency? Currency { get; set; }
+        public PartyGroup? PartyGroup { get; set; }
+        public GLAccount? FinancialAccount { get; set; }
 
         public string LocalizedName =>
             System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("ar")

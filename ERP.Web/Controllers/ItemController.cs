@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using ERP.Web.Extensions;
 
 namespace ERP.Web.Controllers
 {
@@ -17,16 +18,23 @@ namespace ERP.Web.Controllers
         private readonly ErpDbContext _context;
         private readonly ICurrentUserContext _currentUser;
         private readonly IAuditService _audit;
+        private readonly ICodeSequenceService _sequenceService;
 
         private const string SC_Code   = "ITEM001";
         private const string SC_Name   = "Items";
         private const string SC_Module = "MasterData";
+        private const string EntityName = "Item";
 
-        public ItemController(ErpDbContext context, ICurrentUserContext currentUser, IAuditService audit)
+        public ItemController(
+            ErpDbContext context,
+            ICurrentUserContext currentUser,
+            IAuditService audit,
+            ICodeSequenceService sequenceService)
         {
-            _context     = context;
-            _currentUser = currentUser;
-            _audit       = audit;
+            _context         = context;
+            _currentUser     = currentUser;
+            _audit           = audit;
+            _sequenceService = sequenceService;
         }
 
         [HttpGet]
@@ -83,12 +91,17 @@ namespace ERP.Web.Controllers
                 .Take(pageSize)
                 .ToListAsync();
 
-            ViewBag.SearchString = searchString;
-            ViewBag.ItemGroupId  = itemGroupId;
-            ViewBag.IsService    = isService;
-            ViewBag.CurrentPage  = page;
-            ViewBag.TotalPages   = (int)Math.Ceiling(totalCount / (double)pageSize);
-            ViewBag.TotalCount   = totalCount;
+            var seqConfig = await _sequenceService.GetConfigAsync(EntityName);
+
+            ViewBag.SearchString    = searchString;
+            ViewBag.ItemGroupId     = itemGroupId;
+            ViewBag.IsService       = isService;
+            ViewBag.CurrentPage     = page;
+            ViewBag.TotalPages      = (int)Math.Ceiling(totalCount / (double)pageSize);
+            ViewBag.TotalCount      = totalCount;
+            ViewBag.NextCode        = seqConfig.PreviewCode;
+            ViewBag.IsAutoCode      = seqConfig.IsAuto;
+            ViewBag.IsManualAllowed = seqConfig.IsManualAllowed;
 
             return View(items);
         }
@@ -96,59 +109,73 @@ namespace ERP.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [HasPermission("MasterData.Items.Add")]
-        public async Task<IActionResult> Create(Item model, int? baseUnitId, decimal? salesPrice, decimal? purchasePrice)
+        public async Task<IActionResult> Create(Item model, int? baseUnitId, decimal? salesPrice, decimal? purchasePrice, bool? isManualCode = null)
         {
+            // Auto-number logic
+            bool shouldAutoCode = isManualCode.HasValue
+                ? (!isManualCode.Value && await _sequenceService.IsAutoEnabledAsync(EntityName))
+                : (string.IsNullOrWhiteSpace(model.Code) || (await _sequenceService.IsAutoEnabledAsync(EntityName) && !await _sequenceService.IsManualAllowedAsync(EntityName)));
+
+            if (shouldAutoCode)
+            {
+                model.Code = await _sequenceService.GetNextCodeAsync(EntityName);
+            }
+
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "Item Code is required.");
+                ModelState.AddModelError("Code", "كود الصنف مطلوب.");
             else if (await _context.Items.AnyAsync(i => i.Code == model.Code.Trim()))
-                ModelState.AddModelError("Code", "Item Code already exists.");
+                ModelState.AddModelError("Code", "كود الصنف مسجل مسبقاً.");
+
+            if (!string.IsNullOrWhiteSpace(model.Barcode))
+            {
+                var trimmedBarcode = model.Barcode.Trim();
+                if (await _context.Items.AnyAsync(i => i.Barcode == trimmedBarcode))
+                    ModelState.AddModelError("Barcode", "الباركود المدخل مستخدم بالفعل لصنف آخر.");
+            }
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "الاسم العربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (model.ItemGroupId <= 0 || !await _context.ItemGroups.AnyAsync(g => g.Id == model.ItemGroupId))
-                ModelState.AddModelError("ItemGroupId", "Please select a valid item group.");
+                ModelState.AddModelError("ItemGroupId", "يرجى اختيار مجموعة الصنف.");
 
-            if (baseUnitId.HasValue && baseUnitId.Value > 0 && !await _context.Units.AnyAsync(u => u.Id == baseUnitId.Value))
-                ModelState.AddModelError("baseUnitId", "Please select a valid base unit.");
+            if (!baseUnitId.HasValue || baseUnitId.Value <= 0 || !await _context.Units.AnyAsync(u => u.Id == baseUnitId.Value))
+                ModelState.AddModelError("baseUnitId", "يرجى اختيار وحدة الصنف.");
 
             if (ModelState.IsValid)
             {
                 model.Code            = model.Code.Trim();
                 model.Barcode         = string.IsNullOrWhiteSpace(model.Barcode) ? null : model.Barcode.Trim();
                 model.TaxCode         = string.IsNullOrWhiteSpace(model.TaxCode) ? null : model.TaxCode.Trim();
-                model.NameAr          = model.NameAr.Trim();
-                model.NameEn          = model.NameEn.Trim();
+                model.NameAr          = model.NameAr?.Trim() ?? string.Empty;
+                model.NameEn          = string.IsNullOrWhiteSpace(model.NameEn) ? model.NameAr : model.NameEn.Trim();
                 model.StorageLocation = string.IsNullOrWhiteSpace(model.StorageLocation) ? null : model.StorageLocation.Trim();
                 model.CreatedAt       = DateTime.UtcNow;
 
                 _context.Items.Add(model);
                 await _context.SaveChangesAsync();
 
-                // If base unit is selected, add as default base item unit
-                if (baseUnitId.HasValue && baseUnitId.Value > 0)
+                // Add base item unit (prices default to 0 if not provided)
+                var itemUnit = new ItemUnit
                 {
-                    var itemUnit = new ItemUnit
-                    {
-                        ItemId            = model.Id,
-                        UnitId            = baseUnitId.Value,
-                        ConversionFactor  = 1.0m,
-                        SalesPrice        = salesPrice ?? 0m,
-                        PurchasePrice     = purchasePrice ?? 0m,
-                        IsDefaultSales    = true,
-                        IsDefaultPurchase = true,
-                        IsActive          = true,
-                        CreatedAt         = DateTime.UtcNow
-                    };
-                    _context.ItemUnits.Add(itemUnit);
-                    await _context.SaveChangesAsync();
-                }
+                    ItemId            = model.Id,
+                    UnitId            = baseUnitId!.Value,
+                    ConversionFactor  = 1.0m,
+                    SalesPrice        = salesPrice ?? 0m,
+                    PurchasePrice     = purchasePrice ?? 0m,
+                    IsDefaultSales    = true,
+                    IsDefaultPurchase = true,
+                    IsActive          = true,
+                    CreatedAt         = DateTime.UtcNow
+                };
+                _context.ItemUnits.Add(itemUnit);
+                await _context.SaveChangesAsync();
 
                 await _audit.LogCreateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "Item",
+                    entityName: EntityName,
                     entityId:   model.Id.ToString(),
                     newValues: new
                     {
@@ -162,12 +189,20 @@ namespace ERP.Web.Controllers
                         model.IsService,
                         model.StorageLocation,
                         model.IsActive,
-                        BaseUnitId = baseUnitId
+                        BaseUnitId = baseUnitId.Value,
+                        SalesPrice = salesPrice ?? 0m,
+                        PurchasePrice = purchasePrice ?? 0m
                     });
+
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم حفظ الصنف بنجاح.", Url.Action(nameof(Index)));
 
                 TempData["SuccessMessage"] = "Item created successfully.";
                 return RedirectToAction(nameof(Index));
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure("لا يمكن حفظ الصنف. يرجى مراجعة الأخطاء الموضحة وتصحيحها.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
@@ -176,25 +211,38 @@ namespace ERP.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [HasPermission("MasterData.Items.Edit")]
-        public async Task<IActionResult> Edit(Item model)
+        public async Task<IActionResult> Edit(Item model, int? baseUnitId = null, decimal? salesPrice = null, decimal? purchasePrice = null)
         {
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "Item Code is required.");
+                ModelState.AddModelError("Code", "كود الصنف مطلوب.");
             else if (await _context.Items.AnyAsync(i => i.Code == model.Code.Trim() && i.Id != model.Id))
-                ModelState.AddModelError("Code", "Item Code already exists.");
+                ModelState.AddModelError("Code", "كود الصنف مسجل مسبقاً لصنف آخر.");
+
+            if (!string.IsNullOrWhiteSpace(model.Barcode))
+            {
+                var trimmedBarcode = model.Barcode.Trim();
+                if (await _context.Items.AnyAsync(i => i.Barcode == trimmedBarcode && i.Id != model.Id))
+                    ModelState.AddModelError("Barcode", "الباركود المدخل مستخدم بالفعل لصنف آخر.");
+            }
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "الاسم العربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (model.ItemGroupId <= 0 || !await _context.ItemGroups.AnyAsync(g => g.Id == model.ItemGroupId))
-                ModelState.AddModelError("ItemGroupId", "Please select a valid item group.");
+                ModelState.AddModelError("ItemGroupId", "يرجى اختيار مجموعة الصنف.");
+
+            if (!baseUnitId.HasValue || baseUnitId.Value <= 0 || !await _context.Units.AnyAsync(u => u.Id == baseUnitId.Value))
+                ModelState.AddModelError("baseUnitId", "يرجى اختيار وحدة الصنف.");
 
             if (ModelState.IsValid)
             {
-                var entity = await _context.Items.FindAsync(model.Id);
+                var entity = await _context.Items
+                    .Include(i => i.ItemUnits)
+                    .FirstOrDefaultAsync(i => i.Id == model.Id);
+
                 if (entity == null) return NotFound();
 
                 var oldValues = new
@@ -208,43 +256,111 @@ namespace ERP.Web.Controllers
                     entity.ItemGroupId,
                     entity.IsService,
                     entity.StorageLocation,
-                    entity.IsActive
+                    entity.IsActive,
+                    OldCode = entity.Code
                 };
 
                 entity.Code            = model.Code.Trim();
                 entity.Barcode         = string.IsNullOrWhiteSpace(model.Barcode) ? null : model.Barcode.Trim();
                 entity.TaxCode         = string.IsNullOrWhiteSpace(model.TaxCode) ? null : model.TaxCode.Trim();
-                entity.NameAr          = model.NameAr.Trim();
-                entity.NameEn          = model.NameEn.Trim();
+                entity.NameAr          = model.NameAr?.Trim() ?? string.Empty;
+                entity.NameEn          = string.IsNullOrWhiteSpace(model.NameEn) ? entity.NameAr : model.NameEn.Trim();
                 entity.ItemGroupId     = model.ItemGroupId;
                 entity.IsService       = model.IsService;
+                entity.TrackingType    = model.TrackingType;
                 entity.StorageLocation = string.IsNullOrWhiteSpace(model.StorageLocation) ? null : model.StorageLocation.Trim();
                 entity.IsActive        = model.IsActive;
                 entity.UpdatedAt       = DateTime.UtcNow;
 
-                await _context.SaveChangesAsync();
+                // Handle base unit update or creation
+                var baseUnit = entity.ItemUnits?.FirstOrDefault(u => u.ConversionFactor == 1.0m)
+                               ?? entity.ItemUnits?.FirstOrDefault();
+
+                if (baseUnit != null)
+                {
+                    baseUnit.UnitId        = baseUnitId!.Value;
+                    baseUnit.SalesPrice    = salesPrice ?? 0m;
+                    baseUnit.PurchasePrice = purchasePrice ?? 0m;
+                    baseUnit.UpdatedAt     = DateTime.UtcNow;
+                }
+                else
+                {
+                    var newBaseUnit = new ItemUnit
+                    {
+                        ItemId            = entity.Id,
+                        UnitId            = baseUnitId!.Value,
+                        ConversionFactor  = 1.0m,
+                        SalesPrice        = salesPrice ?? 0m,
+                        PurchasePrice     = purchasePrice ?? 0m,
+                        IsDefaultSales    = true,
+                        IsDefaultPurchase = true,
+                        IsActive          = true,
+                        CreatedAt         = DateTime.UtcNow
+                    };
+                    _context.ItemUnits.Add(newBaseUnit);
+                }
+
+                if (model.RowVersion != null && model.RowVersion.Length > 0)
+                {
+                    _context.Entry(entity).Property(e => e.RowVersion).OriginalValue = model.RowVersion;
+                }
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    var conflictMsg = "تم تعديل السجل بواسطة مستخدم آخر أثناء عملك عليه. يرجى إعادة تحميل البيانات قبل الحفظ.";
+                    if (Request.IsAjaxRequest())
+                        return this.JsonFailure(conflictMsg);
+
+                    TempData["ErrorMessage"] = conflictMsg;
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (Exception ex)
+                {
+                    var msg = ex.InnerException?.Message ?? ex.Message;
+                    if (Request.IsAjaxRequest())
+                        return this.JsonFailure("حدث خطأ أثناء حفظ تعديلات الصنف: " + msg);
+
+                    TempData["ErrorMessage"] = "حدث خطأ أثناء حفظ تعديلات الصنف: " + msg;
+                    return RedirectToAction(nameof(Index));
+                }
+
+                var newValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.Barcode,
+                    entity.TaxCode,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.ItemGroupId,
+                    entity.IsService,
+                    entity.StorageLocation,
+                    entity.IsActive,
+                    BaseUnitId = baseUnitId!.Value,
+                    SalesPrice = salesPrice ?? 0m,
+                    PurchasePrice = purchasePrice ?? 0m,
+                    NewCode = entity.Code
+                };
 
                 await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "Item",
+                    entityName: EntityName,
                     entityId:   entity.Id.ToString(),
                     oldValues:  oldValues,
-                    newValues: new
-                    {
-                        entity.Id,
-                        entity.Code,
-                        entity.Barcode,
-                        entity.TaxCode,
-                        entity.NameAr,
-                        entity.NameEn,
-                        entity.ItemGroupId,
-                        entity.IsService,
-                        entity.StorageLocation,
-                        entity.IsActive
-                    });
+                    newValues:  newValues);
+
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم تحديث الصنف بنجاح.", Url.Action(nameof(Index)));
 
                 TempData["SuccessMessage"] = "Item updated successfully.";
                 return RedirectToAction(nameof(Index));
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure("لا يمكن حفظ التعديلات. يرجى مراجعة الأخطاء الموضحة وتصحيحها.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
@@ -261,13 +377,25 @@ namespace ERP.Web.Controllers
 
             if (entity == null) return NotFound();
 
-            var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.IsActive };
+            var oldValues = new
+            {
+                entity.Id,
+                entity.Code,
+                entity.Barcode,
+                entity.TaxCode,
+                entity.NameAr,
+                entity.NameEn,
+                entity.ItemGroupId,
+                entity.IsService,
+                entity.StorageLocation,
+                entity.IsActive
+            };
 
             _context.Items.Remove(entity);
             await _context.SaveChangesAsync();
 
             await _audit.LogDeleteAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "Item",
+                entityName: EntityName,
                 entityId:   id.ToString(),
                 oldValues:  oldValues);
 
@@ -290,7 +418,7 @@ namespace ERP.Web.Controllers
             await _context.SaveChangesAsync();
 
             await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "Item",
+                entityName: EntityName,
                 entityId:   id.ToString(),
                 oldValues:  oldValues,
                 newValues: new { entity.Id, entity.Code, entity.IsActive });

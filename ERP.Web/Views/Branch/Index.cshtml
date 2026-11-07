@@ -47,11 +47,15 @@
                 </div>
             </div>
             <div class="col-md-4 col-lg-3">
-                <select name="companyIdFilter" class="form-select form-select-sm erp-form-control" onchange="this.form.submit()">
+                <select name="companyIdFilter" class="form-select form-select-sm erp-form-control erp-select2" data-lookup-entity="company" data-placeholder="-- @Localizer["Company"] (الكل) --" onchange="this.form.submit()">
                     <option value="">-- @Localizer["Company"] (الكل) --</option>
-                    @foreach (var c in companies)
+                    @if (ViewBag.CompanyIdFilter != null && (int)ViewBag.CompanyIdFilter > 0)
                     {
-                        <option value="@c.Id" selected="@(ViewBag.CompanyIdFilter == c.Id ? "selected" : null)">@c.Code - @c.LocalizedName</option>
+                        var selC = companies.FirstOrDefault(c => c.Id == (int)ViewBag.CompanyIdFilter);
+                        if (selC != null)
+                        {
+                            <option value="@selC.Id" selected="selected">@selC.Code - @selC.LocalizedName</option>
+                        }
                     }
                 </select>
             </div>
@@ -129,9 +133,10 @@
                     <div class="modal fade" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
                         <div class="modal-dialog modal-lg">
                             <div class="modal-content">
-                                <form asp-action="Edit" method="post">
+                                <form asp-action="Edit" method="post" class="erp-modal-form">
                                     @Html.AntiForgeryToken()
                                     <input type="hidden" name="Id" value="@item.Id" />
+                                    <input type="hidden" name="RowVersion" value="@(item.RowVersion != null ? Convert.ToBase64String(item.RowVersion) : "")" />
                                     <div class="modal-header">
                                         <h5 class="modal-title fw-bold"><i class="fa-solid fa-pen-to-square text-primary me-2 ms-0"></i> @Localizer["Edit"] - @item.Code</h5>
                                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -139,16 +144,14 @@
                                     <div class="modal-body">
                                         <div class="row g-3">
                                             <div class="col-md-4">
-                                                <label class="erp-form-label">@Localizer["Code"] *</label>
-                                                <input type="text" name="Code" value="@item.Code" class="form-control erp-form-control" required />
+                                                <label class="erp-form-label">@Localizer["Code"] (BranchCode) *</label>
+                                                <input type="text" name="BranchCode" value="@(!string.IsNullOrWhiteSpace(item.BranchCode) ? item.BranchCode : item.Code)" class="form-control erp-form-control" placeholder="CAI" required maxlength="20" />
+                                                <input type="hidden" name="Code" value="@item.Code" />
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="erp-form-label">@Localizer["Company"] *</label>
-                                                <select name="CompanyId" class="form-select erp-form-control" required>
-                                                    @foreach (var c in companies)
-                                                    {
-                                                        <option value="@c.Id" selected="@(item.CompanyId == c.Id ? "selected" : null)">@c.Code - @c.LocalizedName</option>
-                                                    }
+                                                <select name="CompanyId" class="form-select erp-form-control erp-select2" required data-lookup-entity="company" data-placeholder="-- @Localizer["Company"] --">
+                                                    <option value="@item.CompanyId" selected="selected">@(item.Company?.Code ?? "") - @(item.Company?.LocalizedName ?? $"ID {item.CompanyId}")</option>
                                                 </select>
                                             </div>
                                             <div class="col-md-4 d-flex align-items-end">
@@ -207,7 +210,7 @@
 <div class="modal fade" id="createBranchModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2 ms-0"></i> @Localizer["AddNewBranch"]</h5>
@@ -216,17 +219,13 @@
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="erp-form-label">@Localizer["Code"] *</label>
-                            <input type="text" name="Code" class="form-control erp-form-control" placeholder="B03" required />
+                            <label class="erp-form-label">@Localizer["Code"] (BranchCode) *</label>
+                            <input type="text" name="BranchCode" class="form-control erp-form-control" placeholder="CAI" required maxlength="20" />
                         </div>
                         <div class="col-md-4">
                             <label class="erp-form-label">@Localizer["Company"] *</label>
-                            <select name="CompanyId" class="form-select erp-form-control" required>
+                            <select name="CompanyId" class="form-select erp-form-control erp-select2" required data-lookup-entity="company" data-placeholder="-- @Localizer["Company"] --">
                                 <option value="">-- @Localizer["Company"] --</option>
-                                @foreach (var c in companies)
-                                {
-                                    <option value="@c.Id">@c.Code - @c.LocalizedName</option>
-                                }
                             </select>
                         </div>
                         <div class="col-md-4 d-flex align-items-end">

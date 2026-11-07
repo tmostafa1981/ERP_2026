@@ -1,6 +1,7 @@
 @model IEnumerable<ERP.Domain.Entities.Item>
 @using Microsoft.Extensions.Localization
 @inject IStringLocalizer<ERP.Web.Resources.SharedResource> Localizer
+@inject ERP.Application.Interfaces.ICurrentUserContext CurrentUserContext
 
 @{
     ViewData["Title"] = Localizer["Items"];
@@ -20,9 +21,12 @@
         <a asp-controller="ItemUnit" asp-action="Index" class="btn btn-erp-outline">
             <i class="fa-solid fa-layer-group me-1 ms-0"></i> @Localizer["ItemUnits"]
         </a>
-        <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#createItemModal">
-            <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewItem"]
-        </button>
+        @if (CurrentUserContext.HasPermission("MasterData.Items.Add"))
+        {
+            <button type="button" class="btn btn-erp-primary" data-bs-toggle="modal" data-bs-target="#createItemModal" onclick="prepareCreateItemModal()">
+                <i class="fa-solid fa-plus me-1 ms-0"></i> @Localizer["AddNewItem"]
+            </button>
+        }
     </div>
 </div>
 
@@ -53,11 +57,12 @@
                 </div>
             </div>
             <div class="col-md-3 col-lg-3">
-                <select name="itemGroupId" class="form-select form-select-sm erp-form-control">
+                <select name="itemGroupId" class="form-select form-select-sm erp-select2 erp-form-control" data-lookup-entity="itemGroup" data-placeholder="-- @Localizer["ItemGroup"] (@Localizer["All"]) --" data-allow-clear="true">
                     <option value="">-- @Localizer["ItemGroup"] (@Localizer["All"]) --</option>
-                    @foreach (var g in itemGroups)
+                    @if (ViewBag.ItemGroupId != null && itemGroups.Any(g => g.Id == (int)ViewBag.ItemGroupId))
                     {
-                        <option value="@g.Id" selected="@(ViewBag.ItemGroupId != null && (int)ViewBag.ItemGroupId == g.Id)">@g.LocalizedName (@g.Code)</option>
+                        var selG = itemGroups.First(g => g.Id == (int)ViewBag.ItemGroupId);
+                        <option value="@selG.Id" selected>@selG.LocalizedName (@selG.Code)</option>
                     }
                 </select>
             </div>
@@ -89,6 +94,7 @@
                 <th>@Localizer["NameEn"]</th>
                 <th>@Localizer["ItemGroup"]</th>
                 <th style="width: 90px;" class="text-center">@Localizer["Type"]</th>
+                <th style="width: 100px;" class="text-center">نوع التتبع</th>
                 <th>@Localizer["StorageLocation"]</th>
                 <th style="width: 110px;" class="text-center">@Localizer["Units"]</th>
                 <th style="width: 90px;" class="text-center">@Localizer["Status"]</th>
@@ -132,6 +138,20 @@
                                 </span>
                             }
                         </td>
+                        <td class="text-center">
+                            @if (item.TrackingType == ERP.Domain.Enums.ItemTrackingType.SerialNumber)
+                            {
+                                <span class="badge bg-primary px-2 py-1"><i class="fa-solid fa-barcode me-1"></i>سيريال</span>
+                            }
+                            else if (item.TrackingType == ERP.Domain.Enums.ItemTrackingType.BatchNumber)
+                            {
+                                <span class="badge bg-warning text-dark px-2 py-1"><i class="fa-solid fa-boxes-packing me-1"></i>تشغيلة</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-muted border px-2 py-1">عادي</span>
+                            }
+                        </td>
                         <td>
                             @(string.IsNullOrWhiteSpace(item.StorageLocation) ? "-" : item.StorageLocation)
                         </td>
@@ -155,30 +175,39 @@
                                 <a asp-controller="ItemUnit" asp-action="Index" asp-route-itemId="@item.Id" class="btn btn-erp-outline p-1 px-2" title="@Localizer["ManageItemUnits"]">
                                     <i class="fa-solid fa-scale-balanced text-secondary"></i>
                                 </a>
-                                <button type="button" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Edit"]" data-bs-toggle="modal" data-bs-target="#editModal_@item.Id">
-                                    <i class="fa-solid fa-pen-to-square text-primary"></i>
-                                </button>
-                                <form asp-action="ToggleStatus" asp-route-id="@item.Id" method="post" class="d-inline m-0">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@(item.IsActive ? Localizer["Inactive"] : Localizer["Active"])">
-                                        <i class="fa-solid @(item.IsActive ? "fa-ban text-warning" : "fa-check text-success")"></i>
+                                @if (CurrentUserContext.HasPermission("MasterData.Items.Edit"))
+                                {
+                                    <button type="button" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Edit"]" data-bs-toggle="modal" data-bs-target="#editModal_@item.Id">
+                                        <i class="fa-solid fa-pen-to-square text-primary"></i>
                                     </button>
-                                </form>
-                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline m-0" onsubmit="return confirm('@Localizer["ConfirmDelete"]');">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Delete"]">
-                                        <i class="fa-solid fa-trash text-danger"></i>
-                                    </button>
-                                </form>
+                                    <form asp-action="ToggleStatus" asp-route-id="@item.Id" method="post" class="d-inline m-0">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@(item.IsActive ? Localizer["Inactive"] : Localizer["Active"])">
+                                            <i class="fa-solid @(item.IsActive ? "fa-ban text-warning" : "fa-check text-success")"></i>
+                                        </button>
+                                    </form>
+                                }
+                                @if (CurrentUserContext.HasPermission("MasterData.Items.Delete"))
+                                {
+                                    <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline m-0" onsubmit="return confirm('@Localizer["ConfirmDelete"]');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-erp-outline p-1 px-2" title="@Localizer["Delete"]">
+                                            <i class="fa-solid fa-trash text-danger"></i>
+                                        </button>
+                                    </form>
+                                }
                             </div>
 
-                            <!-- Edit Modal -->
-                            <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
+                            @if (CurrentUserContext.HasPermission("MasterData.Items.Edit"))
+                            {
+                                <!-- Edit Modal -->
+                                <div class="modal fade text-start" id="editModal_@item.Id" tabindex="-1" aria-hidden="true">
                                 <div class="modal-dialog modal-lg modal-dialog-centered">
                                     <div class="modal-content border-0 shadow">
-                                        <form asp-action="Edit" method="post">
+                                        <form asp-action="Edit" method="post" class="erp-modal-form">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="Id" value="@item.Id" />
+                                            <input type="hidden" name="RowVersion" value="@(item.RowVersion != null ? Convert.ToBase64String(item.RowVersion) : "")" />
                                             <div class="modal-header bg-light py-2">
                                                 <h6 class="modal-title fw-bold"><i class="fa-solid fa-pen text-primary me-2"></i> @Localizer["Edit"] - @item.LocalizedName</h6>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -207,10 +236,10 @@
                                                     </div>
                                                     <div class="col-md-6 mb-2">
                                                         <label class="form-label small fw-bold">@Localizer["ItemGroup"] <span class="text-danger">*</span></label>
-                                                        <select name="ItemGroupId" class="form-select form-select-sm" required>
-                                                            @foreach (var g in itemGroups)
+                                                        <select name="ItemGroupId" class="form-select form-select-sm erp-select2" required data-lookup-entity="itemGroup">
+                                                            @if (item.ItemGroup != null)
                                                             {
-                                                                <option value="@g.Id" selected="@(item.ItemGroupId == g.Id)">@g.LocalizedName (@g.Code)</option>
+                                                                <option value="@item.ItemGroupId" selected>@item.ItemGroup.Code - @item.ItemGroup.LocalizedName</option>
                                                             }
                                                         </select>
                                                     </div>
@@ -218,6 +247,91 @@
                                                         <label class="form-label small fw-bold">@Localizer["StorageLocation"]</label>
                                                         <input type="text" name="StorageLocation" value="@item.StorageLocation" class="form-control form-control-sm" maxlength="100" placeholder="e.g. Aisle 3, Shelf B" />
                                                     </div>
+                                                    <div class="col-md-6 mb-2">
+                                                        <label class="form-label small fw-bold text-primary">نوع التتبع (Tracking Type) <span class="text-danger">*</span></label>
+                                                        <select name="TrackingType" class="form-select form-select-sm" required>
+                                                            <option value="0" selected="@(item.TrackingType == ERP.Domain.Enums.ItemTrackingType.None ? "selected" : null)">عادي (بدون سيريال أو تشغيلة)</option>
+                                                            <option value="1" selected="@(item.TrackingType == ERP.Domain.Enums.ItemTrackingType.SerialNumber ? "selected" : null)">رقم تسلسلي (Serial Number)</option>
+                                                            <option value="2" selected="@(item.TrackingType == ERP.Domain.Enums.ItemTrackingType.BatchNumber ? "selected" : null)">تشغيلة / دفعة (Batch Number)</option>
+                                                        </select>
+                                                    </div>
+
+                                                    @{
+                                                        var baseUnit = item.ItemUnits?.FirstOrDefault(u => u.ConversionFactor == 1.0m) ?? item.ItemUnits?.FirstOrDefault();
+                                                    }
+                                                    <!-- Base Unit Config in Edit -->
+                                                    <div class="col-12 mt-2">
+                                                        <div class="card border bg-light">
+                                                            <div class="card-body p-2">
+                                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                                    <div class="fw-bold small text-primary">
+                                                                        <i class="fa-solid fa-ruler-combined me-1"></i> @Localizer["BaseUnit"] <span class="text-danger">*</span>
+                                                                    </div>
+                                                                    <a asp-controller="ItemUnit" asp-action="Index" asp-route-itemId="@item.Id" class="btn btn-sm btn-link p-0 text-decoration-none small" target="_blank" title="@Localizer["ManageItemUnits"]">
+                                                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>@Localizer["ManageItemUnits"] (@(item.ItemUnits?.Count ?? 0))
+                                                                    </a>
+                                                                </div>
+                                                                <div class="row g-2">
+                                                                    <div class="col-md-4">
+                                                                        <label class="form-label small fw-bold">@Localizer["Unit"] <span class="text-danger">*</span></label>
+                                                                        <select name="baseUnitId" class="form-select form-select-sm erp-select2" required data-lookup-entity="unit" data-placeholder="-- @Localizer["Select"] --">
+                                                                            @if (baseUnit?.Unit != null)
+                                                                            {
+                                                                                <option value="@baseUnit.UnitId" selected>@baseUnit.Unit.Code - @baseUnit.Unit.LocalizedName</option>
+                                                                            }
+                                                                        </select>
+                                                                    </div>
+                                                                    <div class="col-md-4">
+                                                                        <label class="form-label small">@Localizer["SalesPrice"] <span class="text-muted" style="font-size: 11px;">(@Localizer["Optional"])</span></label>
+                                                                        <input type="number" step="0.0001" min="0" name="salesPrice" value="@(baseUnit?.SalesPrice.ToString("0.00") ?? "0.00")" class="form-control form-control-sm" />
+                                                                    </div>
+                                                                    <div class="col-md-4">
+                                                                        <label class="form-label small">@Localizer["PurchasePrice"] <span class="text-muted" style="font-size: 11px;">(@Localizer["Optional"])</span></label>
+                                                                        <input type="number" step="0.0001" min="0" name="purchasePrice" value="@(baseUnit?.PurchasePrice.ToString("0.00") ?? "0.00")" class="form-control form-control-sm" />
+                                                                    </div>
+                                                                </div>
+
+                                                                @if (item.ItemUnits != null && item.ItemUnits.Count > 1)
+                                                                {
+                                                                    <div class="mt-2 pt-2 border-top">
+                                                                        <div class="text-muted small fw-bold mb-1"><i class="fa-solid fa-list me-1"></i> @Localizer["AllUnits"]:</div>
+                                                                        <div class="table-responsive">
+                                                                            <table class="table table-sm table-bordered bg-white mb-0" style="font-size: 11px;">
+                                                                                <thead class="table-light">
+                                                                                    <tr>
+                                                                                        <th>@Localizer["Unit"]</th>
+                                                                                        <th>@Localizer["Factor"]</th>
+                                                                                        <th>@Localizer["SalesPrice"]</th>
+                                                                                        <th>@Localizer["PurchasePrice"]</th>
+                                                                                        <th>@Localizer["Status"]</th>
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody>
+                                                                                    @foreach (var iu in item.ItemUnits)
+                                                                                    {
+                                                                                        <tr class="@(iu.ConversionFactor == 1.0m ? "table-primary table-opacity-10 font-monospace" : "")">
+                                                                                            <td>
+                                                                                                @(iu.Unit?.LocalizedName ?? iu.UnitId.ToString())
+                                                                                                @(iu.ConversionFactor == 1.0m ? " (" + Localizer["BaseUnit"] + ")" : "")
+                                                                                            </td>
+                                                                                            <td>@iu.ConversionFactor</td>
+                                                                                            <td>@iu.SalesPrice.ToString("N2")</td>
+                                                                                            <td>@iu.PurchasePrice.ToString("N2")</td>
+                                                                                            <td>
+                                                                                                @if (iu.IsDefaultSales) { <span class="badge bg-success-subtle text-success border border-success-subtle">@Localizer["DefaultSales"]</span> }
+                                                                                                @if (iu.IsDefaultPurchase) { <span class="badge bg-info-subtle text-info border border-info-subtle">@Localizer["DefaultPurchase"]</span> }
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    }
+                                                                                </tbody>
+                                                                            </table>
+                                                                        </div>
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
                                                     <div class="col-md-6 mt-2">
                                                         <div class="form-check form-switch">
                                                             <input class="form-check-input" type="checkbox" name="IsService" value="true" @(item.IsService ? "checked" : "") id="editService_@item.Id" />
@@ -240,6 +354,7 @@
                                     </div>
                                 </div>
                             </div>
+                            }
                         </td>
                     </tr>
                 }
@@ -269,29 +384,39 @@
     </nav>
 }
 
-<!-- Create Modal -->
-<div class="modal fade" id="createItemModal" tabindex="-1" aria-hidden="true">
+@if (CurrentUserContext.HasPermission("MasterData.Items.Add"))
+{
+    <!-- Create Modal -->
+    <div class="modal fade" id="createItemModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form asp-action="Create" method="post">
+            <form asp-action="Create" method="post" class="erp-modal-form">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-light py-2">
                     <h6 class="modal-title fw-bold"><i class="fa-solid fa-plus text-primary me-2"></i> @Localizer["AddNewItem"]</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-3">
+                    <input type="hidden" name="isManualCode" id="createItemIsManualCode" value="false" />
                     <div class="row g-2">
-                        <div class="col-md-4 mb-2">
+                        <div class="col-md-6 mb-2">
                             <label class="form-label small fw-bold">@Localizer["Code"] <span class="text-danger">*</span></label>
-                            <input type="text" name="Code" class="form-control form-control-sm" required maxlength="50" placeholder="ITM-0001" />
+                            <div class="input-group input-group-sm">
+                                <input type="text" name="Code" id="createItemCode" value="@ViewBag.NextCode" class="form-control form-control-sm" required maxlength="50" @(ViewBag.IsAutoCode == true ? "readonly" : "") />
+                                @if (ViewBag.IsManualAllowed == true && ViewBag.IsAutoCode == true)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary" id="btnToggleManualItemCode" onclick="enableManualItemCode()" title="@Localizer["ManualEntry"]">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                }
+                            </div>
+                            <span id="autoItemCodeBadge" class="text-muted small" style="font-size: 11px; @(ViewBag.IsAutoCode == true ? "" : "display:none;")">@Localizer["AutoGeneratedCode"]</span>
                         </div>
-                        <div class="col-md-4 mb-2">
-                            <label class="form-label small fw-bold">@Localizer["Barcode"]</label>
-                            <input type="text" name="Barcode" class="form-control form-control-sm" maxlength="50" placeholder="622000000001" />
-                        </div>
-                        <div class="col-md-4 mb-2">
-                            <label class="form-label small fw-bold">@Localizer["TaxCode"]</label>
-                            <input type="text" name="TaxCode" class="form-control form-control-sm" maxlength="50" placeholder="EG-TAX-01" />
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label small fw-bold">@Localizer["ItemGroup"] <span class="text-danger">*</span></label>
+                            <select name="ItemGroupId" class="form-select form-select-sm erp-select2" required data-lookup-entity="itemGroup" data-placeholder="-- @Localizer["Select"] --">
+                                <option value="">-- @Localizer["Select"] --</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-2">
                             <label class="form-label small fw-bold">@Localizer["NameAr"] <span class="text-danger">*</span></label>
@@ -299,21 +424,27 @@
                         </div>
                         <div class="col-md-6 mb-2">
                             <label class="form-label small fw-bold">@Localizer["NameEn"] <span class="text-danger">*</span></label>
-                            <input type="text" name="NameEn" class="form-control form-control-sm" required maxlength="200" dir="ltr" placeholder="Samsung Monitor 24 Inch" />
+                            <input type="text" name="NameEn" class="form-control form-control-sm" maxlength="200" dir="ltr" placeholder="Samsung Monitor 24 Inch" />
                         </div>
                         <div class="col-md-6 mb-2">
-                            <label class="form-label small fw-bold">@Localizer["ItemGroup"] <span class="text-danger">*</span></label>
-                            <select name="ItemGroupId" class="form-select form-select-sm" required>
-                                <option value="">-- @Localizer["Select"] --</option>
-                                @foreach (var g in itemGroups)
-                                {
-                                    <option value="@g.Id">@g.LocalizedName (@g.Code)</option>
-                                }
-                            </select>
+                            <label class="form-label small fw-bold">@Localizer["Barcode"]</label>
+                            <input type="text" name="Barcode" class="form-control form-control-sm" maxlength="50" placeholder="622000000001" />
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label small fw-bold">@Localizer["TaxCode"]</label>
+                            <input type="text" name="TaxCode" class="form-control form-control-sm" maxlength="50" placeholder="EG-TAX-01" />
                         </div>
                         <div class="col-md-6 mb-2">
                             <label class="form-label small fw-bold">@Localizer["StorageLocation"]</label>
                             <input type="text" name="StorageLocation" class="form-control form-control-sm" maxlength="100" placeholder="e.g. Shelf A-1" />
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label small fw-bold text-primary">نوع التتبع (Tracking Type) <span class="text-danger">*</span></label>
+                            <select name="TrackingType" class="form-select form-select-sm" required>
+                                <option value="0" selected>عادي (بدون سيريال أو تشغيلة)</option>
+                                <option value="1">رقم تسلسلي (Serial Number)</option>
+                                <option value="2">تشغيلة / دفعة (Batch Number)</option>
+                            </select>
                         </div>
 
                         <!-- Initial Base Unit Config -->
@@ -321,25 +452,21 @@
                             <div class="card border bg-light">
                                 <div class="card-body p-2">
                                     <div class="fw-bold small text-primary mb-2">
-                                        <i class="fa-solid fa-ruler-combined me-1"></i> @Localizer["BaseUnit"] (@Localizer["Optional"])
+                                        <i class="fa-solid fa-ruler-combined me-1"></i> @Localizer["BaseUnit"] <span class="text-danger">*</span>
                                     </div>
                                     <div class="row g-2">
                                         <div class="col-md-4">
-                                            <label class="form-label small">@Localizer["Unit"]</label>
-                                            <select name="baseUnitId" class="form-select form-select-sm">
-                                                <option value="">-- @Localizer["None"] --</option>
-                                                @foreach (var u in units)
-                                                {
-                                                    <option value="@u.Id">@u.LocalizedName (@u.Code)</option>
-                                                }
+                                            <label class="form-label small fw-bold">@Localizer["Unit"] <span class="text-danger">*</span></label>
+                                            <select name="baseUnitId" class="form-select form-select-sm erp-select2" required data-lookup-entity="unit" data-placeholder="-- @Localizer["Select"] --">
+                                                <option value="">-- @Localizer["Select"] --</option>
                                             </select>
                                         </div>
                                         <div class="col-md-4">
-                                            <label class="form-label small">@Localizer["SalesPrice"]</label>
+                                            <label class="form-label small">@Localizer["SalesPrice"] <span class="text-muted" style="font-size: 11px;">(@Localizer["Optional"])</span></label>
                                             <input type="number" step="0.0001" min="0" name="salesPrice" value="0.00" class="form-control form-control-sm" />
                                         </div>
                                         <div class="col-md-4">
-                                            <label class="form-label small">@Localizer["PurchasePrice"]</label>
+                                            <label class="form-label small">@Localizer["PurchasePrice"] <span class="text-muted" style="font-size: 11px;">(@Localizer["Optional"])</span></label>
                                             <input type="number" step="0.0001" min="0" name="purchasePrice" value="0.00" class="form-control form-control-sm" />
                                         </div>
                                     </div>
@@ -369,3 +496,38 @@
         </div>
     </div>
 </div>
+}
+
+@section Scripts {
+    <script>
+        function prepareCreateItemModal() {
+            $('#createItemIsManualCode').val('false');
+            $('#createItemCode').prop('readonly', true);
+            $('#btnToggleManualItemCode').show();
+            $('#autoItemCodeBadge').show();
+
+            $.getJSON('/api/sequence/preview', { entity: 'Item' }, function (data) {
+                if (data && data.code) {
+                    $('#createItemCode').val(data.code);
+                    if (!data.isAuto) {
+                        $('#createItemCode').prop('readonly', false);
+                        $('#btnToggleManualItemCode').hide();
+                        $('#autoItemCodeBadge').hide();
+                        $('#createItemIsManualCode').val('true');
+                    }
+                }
+            });
+        }
+
+        function enableManualItemCode() {
+            $('#createItemIsManualCode').val('true');
+            $('#createItemCode').prop('readonly', false).focus();
+            $('#btnToggleManualItemCode').hide();
+            $('#autoItemCodeBadge').hide();
+        }
+
+        $('#createItemModal').on('show.bs.modal', function () {
+            prepareCreateItemModal();
+        });
+    </script>
+}

@@ -1,0 +1,187 @@
+@model ERP.Application.DTOs.Reports.DeadStockReportDto
+@{
+    ViewData["Title"] = "تقرير الأصناف الراكدة";
+    Layout = "_Layout";
+    bool isRequested = ViewBag.IsRequested == true;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-hourglass-end me-2"></i>تقرير الأصناف الراكدة (Dead Stock Report)
+            </h4>
+            <span class="text-muted small">حصر الأصناف المتوفرة بالمخازن بدون أي حركة صرف أو بيع لفترة طويلة ورأس المال المجمد</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.InventoryReports.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.InventoryReports.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('deadStockTable', 'DeadStock')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> فهرس تقارير المخازن
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="DeadStock">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" id="branchSelect" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">المستودع</label>
+                        <select name="WarehouseId" id="warehouseSelect" class="form-select form-select-sm" asp-items="ViewBag.Warehouses">
+                            <option value="">-- كل المستودعات --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">فترة الركود (بالأيام)</label>
+                        <input type="number" name="StagnantDays" class="form-control form-control-sm" value="@Model.Filter.StagnantDays" min="30" step="30" />
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> فحص البضاعة الراكدة
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-hourglass-end fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث والضغط على "فحص البضاعة الراكدة"</h5>
+            <p class="text-muted small mb-0">اختر الفرع أو المستودع وعدد أيام الركود لتحديد الأصناف الراكدة ورأس المال المجمد.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Summary KPI Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm bg-warning bg-opacity-10 text-dark p-3 text-center">
+                    <span class="small fw-bold">إجمالي كمية البضاعة الراكدة بالمخازن</span>
+                    <h4 class="fw-bold mb-0 mt-1 font-monospace">@Model.TotalDeadStockQuantity.ToString("G29")</h4>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm bg-danger bg-opacity-10 text-danger p-3 text-center">
+                    <span class="small fw-bold">إجمالي رأس المال المجمد في الركود (EGP)</span>
+                    <h4 class="fw-bold mb-0 mt-1 font-monospace">@Model.TotalTiedUpCapital.ToString("N2")</h4>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table id="deadStockTable" class="table table-bordered table-hover table-striped align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>كود الصنف</th>
+                                <th class="text-start">اسم الصنف</th>
+                                <th>المجموعة</th>
+                                <th>المستودع</th>
+                                <th>الرصيد الراكد بالمخزن</th>
+                                <th>فترة الركود (أيام)</th>
+                                <th class="table-danger text-danger-emphasis fw-bold">القيمة التقديرية المجمدة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Items.Any())
+                            {
+                                <tr>
+                                    <td colspan="7" class="py-4 text-success fw-bold">
+                                        <i class="fa-solid fa-circle-check me-2 fs-5"></i> حركة المخزون نشطة ولا توجد بضاعة راكدة تتجاوز الفترة المحددة.
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in Model.Items)
+                                {
+                                    <tr>
+                                        <td class="font-monospace text-primary fw-bold">@row.ItemCode</td>
+                                        <td class="text-start fw-bold">@row.ItemName</td>
+                                        <td>@row.GroupName</td>
+                                        <td>@row.WarehouseName</td>
+                                        <td class="font-monospace fw-bold text-dark fs-6">@row.CurrentStock.ToString("G29")</td>
+                                        <td><span class="badge bg-secondary font-monospace">+@row.DaysWithoutMovement يوم</span></td>
+                                        <td class="font-monospace text-end fw-bold text-danger table-danger fs-6">@row.EstimatedValue.ToString("N2")</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="4" class="text-center">الإجمالي</td>
+                                <td class="font-monospace">@Model.TotalDeadStockQuantity.ToString("G29")</td>
+                                <td>-</td>
+                                <td class="font-monospace text-end text-danger table-danger fs-6">@Model.TotalTiedUpCapital.ToString("N2")</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    document.getElementById('branchSelect')?.addEventListener('change', function() {
+        var branchId = this.value;
+        var whSelect = document.getElementById('warehouseSelect');
+        if (whSelect) {
+            fetch('@Url.Action("GetWarehousesByBranch", "InventoryReports")?branchId=' + branchId)
+                .then(r => r.json())
+                .then(data => {
+                    whSelect.innerHTML = '<option value="">-- كل المستودعات --</option>';
+                    data.forEach(item => {
+                        var opt = document.createElement('option');
+                        opt.value = item.id;
+                        opt.textContent = item.text;
+                        whSelect.appendChild(opt);
+                    });
+                });
+        }
+    });
+</script>

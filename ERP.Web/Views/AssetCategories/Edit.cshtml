@@ -1,0 +1,116 @@
+@model ERP.Application.DTOs.FixedAssets.CreateAssetCategoryDto
+@{
+    ViewData["Title"] = "تعديل مجموعة الأصول";
+    int categoryId = ViewBag.CategoryId ?? 0;
+}
+
+<div class="container py-3">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white py-3">
+                    <h5 class="mb-0"><i class="fas fa-edit me-2"></i>تعديل مجموعة الأصول: @Model.Code</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form asp-action="Edit" asp-route-id="@categoryId" method="post">
+                        @Html.AntiForgeryToken()
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-3"></div>
+
+                        <h6 class="text-secondary border-bottom pb-2 mb-3"><i class="fas fa-info-circle me-1"></i>البيانات الأساسية</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-3">
+                                <label asp-for="Code" class="form-label fw-bold">كود المجموعة <span class="text-danger">*</span></label>
+                                <input asp-for="Code" class="form-control" required />
+                                <span asp-validation-for="Code" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="NameAr" class="form-label fw-bold">اسم المجموعة (عربي) <span class="text-danger">*</span></label>
+                                <input asp-for="NameAr" class="form-control" required />
+                                <span asp-validation-for="NameAr" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-5">
+                                <label asp-for="NameEn" class="form-label fw-bold">اسم المجموعة (إنجليزي)</label>
+                                <input asp-for="NameEn" class="form-control" />
+                            </div>
+                            <div class="col-12">
+                                <label asp-for="Description" class="form-label">الوصف والملاحظات</label>
+                                <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+                            </div>
+                        </div>
+
+                        <h6 class="text-secondary border-bottom pb-2 mb-3"><i class="fas fa-calculator me-1"></i>إعدادات الإهلاك الافتراضية</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <label asp-for="DefaultDepreciationMethod" class="form-label fw-bold">طريقة الإهلاك الافتراضية</label>
+                                <select asp-for="DefaultDepreciationMethod" class="form-select">
+                                    <option value="1">القسط الثابت (Straight Line)</option>
+                                    <option value="2">القسط المتناقص (Declining Balance)</option>
+                                    <option value="3">وحدات الإنتاج (Units of Production)</option>
+                                    <option value="4">بدون إهلاك (مثل الأراضي)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="DefaultUsefulLifeMonths" class="form-label fw-bold">العمر الإنتاجي الافتراضي (بالأشهر)</label>
+                                <input asp-for="DefaultUsefulLifeMonths" type="number" class="form-control" min="0" />
+                            </div>
+                            <div class="col-md-4">
+                                <label asp-for="DefaultResidualValueRate" class="form-label fw-bold">نسبة الخردة / النفاية الافتراضية %</label>
+                                <input asp-for="DefaultResidualValueRate" type="number" step="0.01" class="form-control" min="0" max="100" />
+                            </div>
+                        </div>
+
+                        <h6 class="text-secondary border-bottom pb-2 mb-3"><i class="fas fa-book me-1"></i>ربط الحسابات المحاسبية من شجرة الحسابات</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label asp-for="AssetCostAccountId" class="form-label fw-bold">حساب تكلفة الأصل (أصول ثابتة) <span class="text-danger">*</span></label>
+                                <select asp-for="AssetCostAccountId" class="form-select" asp-items="ViewBag.Accounts" required></select>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="AccumulatedDepreciationAccountId" class="form-label fw-bold">حساب مجمع الإهلاك (خصوم/أصول دائنة) <span class="text-danger">*</span></label>
+                                <select asp-for="AccumulatedDepreciationAccountId" class="form-select" asp-items="ViewBag.Accounts" required></select>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="DepreciationExpenseAccountId" class="form-label fw-bold">حساب مصروف الإهلاك (مصروفات) <span class="text-danger">*</span></label>
+                                <select asp-for="DepreciationExpenseAccountId" class="form-select" asp-items="ViewBag.Accounts" required></select>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="CipAccountId" class="form-label">حساب مشروعات تحت التنفيذ (CIP - اختياري)</label>
+                                <select asp-for="CipAccountId" class="form-select" asp-items="ViewBag.Accounts">
+                                    <option value="">-- اختر حساب مشروعات تحت التنفيذ إن وجد --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="DisposalGainAccountId" class="form-label fw-bold">حساب أرباح استبعاد الأصول (إيرادات أخرى) <span class="text-danger">*</span></label>
+                                <select asp-for="DisposalGainAccountId" class="form-select" asp-items="ViewBag.Accounts" required></select>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="DisposalLossAccountId" class="form-label fw-bold">حساب خسائر استبعاد الأصول (مصروفات أخرى) <span class="text-danger">*</span></label>
+                                <select asp-for="DisposalLossAccountId" class="form-select" asp-items="ViewBag.Accounts" required></select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label asp-for="BranchId" class="form-label">نطاق الفرع</label>
+                                <select asp-for="BranchId" class="form-select" asp-items="ViewBag.Branches">
+                                    <option value="">-- عام لكافة فروع الشركة --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-center mt-4">
+                                <div class="form-check form-switch fs-5">
+                                    <input asp-for="IsActive" class="form-check-input" type="checkbox" />
+                                    <label asp-for="IsActive" class="form-check-label fs-6">المجموعة نشطة</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a asp-action="Index" class="btn btn-outline-secondary">إلغاء</a>
+                            <button type="submit" class="btn btn-primary px-4"><i class="fas fa-save me-1"></i>حفظ التعديلات</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

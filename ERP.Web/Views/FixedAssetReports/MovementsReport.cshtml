@@ -1,0 +1,81 @@
+@model List<ERP.Application.DTOs.FixedAssets.AssetTransactionItemDto>
+@{
+    ViewData["Title"] = "تقرير حركات وتنقلات الأصول الثابتة";
+    var filter = ViewBag.Filter as ERP.Application.DTOs.FixedAssets.AssetReportFilterDto ?? new();
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="mb-1 text-primary"><i class="fas fa-exchange-alt me-2"></i>تقرير حركات وتنقلات الأصول الثابتة</h3>
+            <p class="text-muted small mb-0">سجل حركات نقل العهدة والمواقع وتكاليف التحسين والاستبعاد وتغيير الحالات</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-outline-secondary">
+                <i class="fas fa-print me-1"></i>طباعة
+            </button>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs Between Reports -->
+    <div class="btn-group mb-3 d-flex flex-wrap" role="group">
+        <a asp-action="Index" asp-route-reportType="Register" class="btn btn-outline-primary">سجل الأصول الشامل</a>
+        <a asp-action="Index" asp-route-reportType="DepreciationHistory" class="btn btn-outline-primary">سجل الإهلاكات الدورية</a>
+        <a asp-action="Index" asp-route-reportType="Movements" class="btn btn-primary">حركات ونقل الأصول</a>
+        <a asp-action="Index" asp-route-reportType="Disposed" class="btn btn-outline-primary">الأصول المستبعدة</a>
+        <a asp-action="Index" asp-route-reportType="CIP" class="btn btn-outline-primary">الأصول تحت الإنشاء (CIP)</a>
+        <a asp-action="Index" asp-route-reportType="PendingDepreciation" class="btn btn-outline-primary">أصول متأخرة الإهلاك</a>
+    </div>
+
+    <!-- Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>نوع الحركة</th>
+                            <th>من فرع</th>
+                            <th>إلى فرع</th>
+                            <th>من مركز تكلفة</th>
+                            <th>إلى مركز تكلفة</th>
+                            <th>العهدة / المستلم</th>
+                            <th>المبلغ</th>
+                            <th>رقم القيد</th>
+                            <th class="text-start">البيان / السبب</th>
+                            <th>المستخدم</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model == null || !Model.Any())
+                        {
+                            <tr>
+                                <td colspan="11" class="text-muted py-5">لا توجد حركات أصول مسجلة.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var t in Model)
+                            {
+                                <tr>
+                                    <td>@t.TransactionDate.ToString("yyyy-MM-dd")</td>
+                                    <td><span class="badge bg-info text-dark">@t.TransactionTypeName</span></td>
+                                    <td>@(t.FromBranchName ?? "—")</td>
+                                    <td>@(t.ToBranchName ?? "—")</td>
+                                    <td>@(t.FromCostCenterName ?? "—")</td>
+                                    <td>@(t.ToCostCenterName ?? "—")</td>
+                                    <td>@(t.ToCustodian ?? t.FromCustodian ?? "—")</td>
+                                    <td>@(t.Amount > 0 ? t.Amount.ToString("N2") : "—")</td>
+                                    <td>@(t.JournalEntryNumber ?? "—")</td>
+                                    <td class="text-start">@t.Reason</td>
+                                    <td class="small text-muted">@t.CreatedByUserName</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

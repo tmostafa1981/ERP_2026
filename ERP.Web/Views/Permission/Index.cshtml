@@ -47,7 +47,7 @@
                                     @foreach (var perm in group)
                                     {
                                         <tr>
-                                            <td class="fw-semibold" style="font-size: 12.5px;">@Localizer[perm.Screen]</td>
+                                            <td class="fw-semibold" style="font-size: 12.5px;">@(isRtl && !string.IsNullOrWhiteSpace(perm.Description) ? perm.Description : Localizer[perm.Screen])</td>
                                             <td>
                                                 <span class="badge bg-light text-dark border me-1">@perm.Action</span>
                                                 <span class="text-muted" style="font-size: 11.5px;">@(isRtl ? perm.NameAr : perm.NameEn)</span>

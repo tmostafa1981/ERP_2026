@@ -96,7 +96,7 @@
                                 <div class="border rounded p-3 mb-3 bg-white hover-shadow">
                                     <div class="d-flex align-items-center justify-content-between pb-2 mb-2 border-bottom">
                                         <div class="fw-bold text-secondary" style="font-size: 13.5px;">
-                                            <i class="fa-solid fa-desktop text-info me-2 ms-0"></i>@Localizer[scr.ScreenName]
+                                            <i class="fa-solid fa-desktop text-info me-2 ms-0"></i>@(!string.IsNullOrEmpty(scr.ScreenTitleAr) && isRtl ? scr.ScreenTitleAr : Localizer[scr.ScreenName])
                                         </div>
                                         <button type="button" class="btn btn-link text-decoration-none btn-sm p-0 fw-semibold text-primary" onclick="toggleScreenPermissions(this)" style="font-size: 11.5px;">
                                             <i class="fa-solid fa-check-square me-1"></i> @Localizer["ToggleScreen"]

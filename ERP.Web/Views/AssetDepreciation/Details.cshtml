@@ -1,0 +1,219 @@
+@model ERP.Application.DTOs.FixedAssets.DepreciationRunDetailsDto
+@{
+    ViewData["Title"] = "تفاصيل عملية الإهلاك: " + Model.RunNumber;
+}
+
+<div class="container-fluid py-3">
+    <!-- Top Bar -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <div class="d-flex align-items-center gap-2">
+                <h3 class="mb-0 text-primary"><i class="fas fa-file-invoice-dollar me-2"></i>عملية إهلاك: @Model.RunNumber</h3>
+                @{
+                    var badgeClass = Model.Status switch {
+                        ERP.Domain.Enums.DepreciationRunStatus.Approved => "bg-success",
+                        ERP.Domain.Enums.DepreciationRunStatus.Reversed => "bg-danger",
+                        _ => "bg-warning text-dark"
+                    };
+                }
+                <span class="badge @badgeClass fs-6">@Model.StatusName</span>
+            </div>
+            <p class="text-muted small mb-0 mt-1">تاريخ التشغيل: <span class="fw-bold">@Model.RunDate.ToString("yyyy-MM-dd")</span> | الفترة: <span class="fw-bold">@Model.FiscalYearName - @Model.FiscalPeriodName</span></p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (Model.Status == ERP.Domain.Enums.DepreciationRunStatus.Draft)
+            {
+                <form asp-action="Approve" asp-route-id="@Model.Id" method="post" class="d-inline" onsubmit="return confirm('هل أنت متأكد من اعتماد عملية الإهلاك وترحيل القيد المحاسبي؟');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check-circle me-1"></i>اعتماد وترحيل القيد
+                    </button>
+                </form>
+            }
+            @if (Model.Status == ERP.Domain.Enums.DepreciationRunStatus.Approved)
+            {
+                <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#reverseModal">
+                    <i class="fas fa-undo me-1"></i>عكس عملية الإهلاك
+                </button>
+            }
+            <a asp-action="Print" asp-route-id="@Model.Id" target="_blank" class="btn btn-outline-secondary">
+                <i class="fas fa-print me-1"></i>طباعة التقرير
+            </a>
+            <a asp-action="Index" class="btn btn-secondary">العودة</a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-1"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-1"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Stat Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-light">
+                <div class="card-body py-3">
+                    <div class="text-muted small">إجمالي قيمة الإهلاك المحسوب</div>
+                    <h4 class="mb-0 fw-bold text-success">@Model.TotalDepreciationAmount.ToString("N2")</h4>
+                    <div class="small text-muted mt-1">المبلغ المرحل للأستاذ العام</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-light">
+                <div class="card-body py-3">
+                    <div class="text-muted small">عدد الأصول المشمولة</div>
+                    <h4 class="mb-0 fw-bold text-primary">@Model.AssetsCount <small class="fs-6 text-muted">أصل</small></h4>
+                    <div class="small text-muted mt-1">الفرع: @Model.BranchName</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-light">
+                <div class="card-body py-3">
+                    <div class="text-muted small">القيد المحاسبي الأساسي</div>
+                    @if (Model.JournalEntryId.HasValue)
+                    {
+                        <h5 class="mb-0 fw-bold mt-1">
+                            <a asp-controller="JournalEntries" asp-action="Details" asp-route-id="@Model.JournalEntryId" class="text-decoration-none">
+                                <i class="fas fa-file-invoice me-1"></i>@(Model.JournalEntryNumber ?? $"قيد #{Model.JournalEntryId}")
+                            </a>
+                        </h5>
+                        <span class="badge bg-success small mt-1">مرحل</span>
+                    }
+                    else
+                    {
+                        <h6 class="mb-0 text-muted mt-2">لم يرحل بعد (مسودة)</h6>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-light">
+                <div class="card-body py-3">
+                    <div class="text-muted small">قيد العكس (إن وجد)</div>
+                    @if (Model.ReversalJournalEntryId.HasValue)
+                    {
+                        <h5 class="mb-0 fw-bold mt-1">
+                            <a asp-controller="JournalEntries" asp-action="Details" asp-route-id="@Model.ReversalJournalEntryId" class="text-danger text-decoration-none">
+                                <i class="fas fa-undo me-1"></i>@(Model.ReversalJournalEntryNumber ?? $"قيد عكس #{Model.ReversalJournalEntryId}")
+                            </a>
+                        </h5>
+                        <div class="small text-muted mt-1">تاريخ العكس: @Model.ReversedAt?.ToString("yyyy-MM-dd")</div>
+                    }
+                    else
+                    {
+                        <h6 class="mb-0 text-muted mt-2">—</h6>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Notes))
+    {
+        <div class="alert alert-info py-2 mb-3">
+            <i class="fas fa-info-circle me-1"></i><strong>ملاحظات:</strong> @Model.Notes
+        </div>
+    }
+
+    <!-- Lines Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-bold"><i class="fas fa-list me-1"></i>تفاصيل سطور إهلاك الأصول</span>
+            <span class="badge bg-secondary">@Model.Lines.Count سطر</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>كود الأصل</th>
+                            <th class="text-start">اسم الأصل</th>
+                            <th>الفرع</th>
+                            <th>مركز التكلفة</th>
+                            <th>التكلفة وقت التشغيل</th>
+                            <th>مجمع الإهلاك السابق</th>
+                            <th class="table-success fw-bold">قسط الإهلاك الحالي</th>
+                            <th>مجمع الإهلاك اللاحق</th>
+                            <th>القيمة الدفترية بعد</th>
+                            <th>حساب المصروف</th>
+                            <th>حساب المجمع</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ int idx = 1; }
+                        @foreach (var line in Model.Lines)
+                        {
+                            <tr>
+                                <td>@(idx++)</td>
+                                <td class="fw-bold">
+                                    <a asp-controller="FixedAssets" asp-action="Details" asp-route-id="@line.AssetId" class="text-decoration-none">
+                                        @line.AssetCode
+                                    </a>
+                                </td>
+                                <td class="text-start">@line.AssetName</td>
+                                <td>@line.BranchName</td>
+                                <td class="small text-muted">@(line.CostCenterName ?? "—")</td>
+                                <td>@line.AssetCostAtRun.ToString("N2")</td>
+                                <td class="text-muted">@line.PriorAccumulatedDepreciation.ToString("N2")</td>
+                                <td class="table-success fw-bold text-success">@line.DepreciationAmount.ToString("N2")</td>
+                                <td class="text-warning">@line.PostAccumulatedDepreciation.ToString("N2")</td>
+                                <td class="fw-bold text-primary">@line.BookValueAfter.ToString("N2")</td>
+                                <td class="small text-muted">@line.ExpenseAccountCode</td>
+                                <td class="small text-muted">@line.AccumulatedAccountCode</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light fw-bold">
+                        <tr>
+                            <td colspan="7" class="text-end">الإجمالي:</td>
+                            <td class="table-success text-success fs-6">@Model.TotalDepreciationAmount.ToString("N2")</td>
+                            <td colspan="4"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reversal Modal -->
+<div class="modal fade" id="reverseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Reverse" asp-route-id="@Model.Id" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-undo me-2"></i>عكس عملية الإهلاك</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning small">
+                        سيتم إنشاء قيد يومية عكسي مطابق (يعكس المدين دائن والدائن مدين) واسترجاع مجمع الإهلاك والقيمة الدفترية للأصول المشمولة إلى وضعها قبل هذه العملية.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">تاريخ قيد العكس <span class="text-danger">*</span></label>
+                        <input type="date" name="reversalDate" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        <div class="form-text small">يجب أن يكون التاريخ ضمن فترة مالية مفتوحة.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-danger">تأكيد عكس العملية وترحيل القيد العكسي</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

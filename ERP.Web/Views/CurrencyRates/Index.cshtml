@@ -1,0 +1,295 @@
+@model IEnumerable<ERP.Application.DTOs.CurrencyDailyRateDto>
+@using ERP.Domain.Entities
+@{
+    ViewData["Title"] = "سجل أسعار صرف العملات اليومية";
+    var baseCurrency = ViewBag.BaseCurrency as Currency;
+    var currencies = ViewBag.Currencies as List<Currency> ?? new List<Currency>();
+    var allCurrencies = ViewBag.AllCurrencies as List<Currency> ?? new List<Currency>();
+    var fromDate = (DateTime)ViewBag.FromDate;
+    var toDate = (DateTime)ViewBag.ToDate;
+    var selectedCurrencyId = ViewBag.SelectedCurrencyId as int?;
+}
+
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between pb-3 mb-3 border-bottom gap-2">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: var(--erp-text-dark); font-size: 18px;">
+            <i class="fa-solid fa-chart-line text-primary me-2 ms-0"></i> سجل أسعار صرف العملات اليومية
+        </h4>
+        <span class="text-muted" style="font-size: 12.5px;">
+            إدارة ومتابعة أسعار صرف العملات الأجنبية مقابل العملة الأساسية حسب التاريخ
+        </span>
+    </div>
+
+    <div class="d-flex gap-2">
+        <a asp-controller="Currency" asp-action="Index" class="btn btn-erp-outline btn-sm">
+            <i class="fa-solid fa-coins me-1"></i> دليل العملات
+        </a>
+        <button type="button" class="btn btn-erp-primary btn-sm" onclick="openCreateModal()">
+            <i class="fa-solid fa-plus me-1"></i> تسجيل سعر صرف يومي
+        </button>
+    </div>
+</div>
+
+<!-- Base Currency Info Card -->
+<div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center justify-content-between shadow-sm border-info-subtle">
+    <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-circle-info fs-5 text-info"></i>
+        <div>
+            <strong>العملة الأساسية للنظام:</strong>
+            <span class="badge bg-primary fs-6 ms-1 me-1">@(baseCurrency?.Code ?? "EGP") - @(baseCurrency?.LocalizedName ?? "جنيه مصري")</span>
+            <span class="text-muted small">(سعر الصرف دائمًا 1.000000 مقابل نفسها وتُسعر باقي العملات الأجنبية مقابلها).</span>
+        </div>
+    </div>
+    <span class="badge bg-light text-dark border">
+        إجمالي السجلات المعروضة: <strong>@Model.Count()</strong>
+    </span>
+</div>
+
+<!-- Filters Toolbar -->
+<div class="erp-card mb-3">
+    <div class="erp-card-body p-2">
+        <form method="get" asp-action="Index" class="row g-2 align-items-center">
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white">من تاريخ:</span>
+                    <input type="date" name="fromDate" value="@fromDate.ToString("yyyy-MM-dd")" class="form-control erp-form-control" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white">إلى تاريخ:</span>
+                    <input type="date" name="toDate" value="@toDate.ToString("yyyy-MM-dd")" class="form-control erp-form-control" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white">العملة:</span>
+                    <select name="currencyId" class="form-select erp-form-control">
+                        <option value="">-- كل العملات --</option>
+                        @foreach (var c in currencies)
+                        {
+                            <option value="@c.Id" selected="@(selectedCurrencyId == c.Id)">@c.Code - @c.LocalizedName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-erp-primary btn-sm px-3">
+                    <i class="fa-solid fa-filter me-1"></i> تصفية
+                </button>
+                <a asp-action="Index" class="btn btn-erp-outline btn-sm">
+                    إلغاء التصفية
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Data Grid -->
+<div class="erp-table-container">
+    <table class="table erp-table mb-0 align-middle">
+        <thead>
+            <tr>
+                <th style="width: 130px;">التاريخ</th>
+                <th style="width: 100px;">العملة</th>
+                <th style="width: 160px;">اسم العملة</th>
+                <th style="width: 80px;" class="text-center">الرمز</th>
+                <th style="width: 160px;" class="text-end">سعر الصرف (مقابل @(baseCurrency?.Code ?? "EGP"))</th>
+                <th>ملاحظات</th>
+                <th style="width: 140px;">المسجل</th>
+                <th style="width: 150px;">تاريخ التسجيل</th>
+                <th style="width: 100px;" class="text-center">الإجراءات</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (!Model.Any())
+            {
+                <tr>
+                    <td colspan="9" class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-calendar-xmark fa-2x mb-2 d-block"></i>
+                        لا توجد أسعار صرف مسجلة في هذه الفترة المحددة.
+                    </td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td class="fw-bold font-monospace">@item.RateDate.ToString("yyyy-MM-dd")</td>
+                        <td>
+                            <span class="badge bg-secondary-subtle text-dark border">@item.CurrencyCode</span>
+                        </td>
+                        <td>@item.CurrencyName</td>
+                        <td class="text-center font-monospace">@(item.CurrencySymbol ?? "-")</td>
+                        <td class="text-end font-monospace fw-bold fs-6 text-primary">
+                            @item.ExchangeRate.ToString("N4")
+                        </td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(item.Notes) ? "-" : item.Notes)</td>
+                        <td class="small">@(string.IsNullOrWhiteSpace(item.CreatedByUserId) ? "-" : item.CreatedByUserId)</td>
+                        <td class="small font-monospace text-muted">@item.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-erp-outline btn-sm" title="تعديل"
+                                        onclick="openEditModal(@item.Id, @item.CurrencyId, '@item.RateDate.ToString("yyyy-MM-dd")', @item.ExchangeRate, '@(item.Notes?.Replace("'", "\\'"))')">
+                                    <i class="fa-solid fa-pen-to-square text-primary"></i>
+                                </button>
+                                <button type="button" class="btn btn-erp-outline btn-sm" title="حذف"
+                                        onclick="confirmDeleteRate(@item.Id, '@item.CurrencyCode', '@item.RateDate.ToString("yyyy-MM-dd")')">
+                                    <i class="fa-solid fa-trash text-danger"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal: Create / Edit Rate -->
+<div class="modal fade" id="rateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content erp-card border-0 shadow">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fs-6 fw-bold" id="rateModalTitle">
+                    <i class="fa-solid fa-chart-line text-primary me-2"></i> تسجيل سعر صرف يومي
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="rateForm" onsubmit="submitRateForm(event)">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="rateId" name="Id" value="" />
+                <div class="modal-body p-3">
+                    <div class="alert alert-danger d-none" id="rateErrorAlert"></div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">العملة <span class="text-danger">*</span>:</label>
+                            <select id="rateCurrencyId" name="CurrencyId" class="form-select form-select-sm" required>
+                                <option value="">-- اختر العملة --</option>
+                                @foreach (var c in currencies)
+                                {
+                                    <option value="@c.Id" data-rate="@c.ExchangeRate">@c.Code - @c.LocalizedName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">التاريخ <span class="text-danger">*</span>:</label>
+                            <input type="date" id="rateDate" name="RateDate" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">
+                                سعر الصرف مقابل (@(baseCurrency?.Code ?? "EGP")) <span class="text-danger">*</span>:
+                            </label>
+                            <input type="number" step="0.0001" min="0.0001" id="rateExchangeRate" name="ExchangeRate" class="form-control form-control-sm font-monospace fs-6" required placeholder="مثال: 48.5000" />
+                            <small class="text-muted">أدخل قيمة 1 وحدة من العملة الأجنبية مقابل العملة الأساسية.</small>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">ملاحظات:</label>
+                            <textarea id="rateNotes" name="Notes" class="form-control form-control-sm" rows="2" placeholder="ملاحظات اختيارية (مثال: السعر الرسمي للبنك المركزي)"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 bg-light">
+                    <button type="button" class="btn btn-erp-outline btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-erp-primary btn-sm" id="btnSaveRate">
+                        <i class="fa-solid fa-save me-1"></i> حفظ سعر الصرف
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let rateModalInstance = null;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const modalEl = document.getElementById('rateModal');
+        if (modalEl) {
+            rateModalInstance = new bootstrap.Modal(modalEl);
+        }
+    });
+
+    function openCreateModal() {
+        document.getElementById('rateForm').reset();
+        document.getElementById('rateId').value = '';
+        document.getElementById('rateDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('rateModalTitle').innerHTML = '<i class="fa-solid fa-chart-line text-primary me-2"></i> تسجيل سعر صرف يومي جديد';
+        document.getElementById('rateErrorAlert').classList.add('d-none');
+        if (rateModalInstance) rateModalInstance.show();
+    }
+
+    function openEditModal(id, currencyId, rateDate, exchangeRate, notes) {
+        document.getElementById('rateForm').reset();
+        document.getElementById('rateId').value = id;
+        document.getElementById('rateCurrencyId').value = currencyId;
+        document.getElementById('rateDate').value = rateDate;
+        document.getElementById('rateExchangeRate').value = exchangeRate;
+        document.getElementById('rateNotes').value = notes || '';
+        document.getElementById('rateModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-primary me-2"></i> تعديل سعر الصرف اليومي';
+        document.getElementById('rateErrorAlert').classList.add('d-none');
+        if (rateModalInstance) rateModalInstance.show();
+    }
+
+    function submitRateForm(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnSaveRate');
+        const alertEl = document.getElementById('rateErrorAlert');
+        alertEl.classList.add('d-none');
+        btn.disabled = true;
+
+        const formData = new FormData(document.getElementById('rateForm'));
+
+        fetch('@Url.Action("Save", "CurrencyRates")', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            btn.disabled = false;
+            if (data.success) {
+                if (rateModalInstance) rateModalInstance.hide();
+                window.location.reload();
+            } else {
+                alertEl.textContent = data.message || 'حدث خطأ أثناء حفظ سعر الصرف.';
+                alertEl.classList.remove('d-none');
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            alertEl.textContent = 'حدث خطأ في الاتصال بالخادم.';
+            alertEl.classList.remove('d-none');
+        });
+    }
+
+    function confirmDeleteRate(id, currencyCode, rateDate) {
+        if (!confirm(`هل أنت متأكد من حذف سعر صرف عملة (${currencyCode}) لتاريخ (${rateDate})؟`)) {
+            return;
+        }
+
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        const formData = new FormData();
+        formData.append('id', id);
+        formData.append('__RequestVerificationToken', token);
+
+        fetch('@Url.Action("Delete", "CurrencyRates")', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert(data.message || 'فشل حذف سعر الصرف.');
+            }
+        })
+        .catch(err => {
+            alert('حدث خطأ أثناء محاولة الحذف.');
+        });
+    }
+</script>
+}

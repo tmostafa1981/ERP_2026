@@ -52,11 +52,11 @@
     <div class="erp-card-body p-2">
         <form method="get" asp-action="Index" class="row g-2 align-items-center">
             <div class="col-md-5 col-lg-4">
-                <select name="itemId" class="form-select form-select-sm erp-form-control">
+                <select name="itemId" class="form-select form-select-sm erp-form-control erp-select2" data-lookup-entity="item" data-placeholder="-- @Localizer["Items"] (@Localizer["All"]) --" onchange="this.form.submit()">
                     <option value="">-- @Localizer["Items"] (@Localizer["All"]) --</option>
-                    @foreach (var i in items)
+                    @if (ViewBag.ItemId != null && currentItem != null)
                     {
-                        <option value="@i.Id" selected="@(ViewBag.ItemId != null && (int)ViewBag.ItemId == i.Id)">@i.LocalizedName (@i.Code)</option>
+                        <option value="@currentItem.Id" selected="selected">@currentItem!.LocalizedName (@currentItem!.Code)</option>
                     }
                 </select>
             </div>
@@ -182,11 +182,8 @@
                                                 </div>
                                                 <div class="mb-2">
                                                     <label class="form-label small fw-bold">@Localizer["Unit"] <span class="text-danger">*</span></label>
-                                                    <select name="UnitId" class="form-select form-select-sm" required>
-                                                        @foreach (var u in units)
-                                                        {
-                                                            <option value="@u.Id" selected="@(item.UnitId == u.Id)">@u.LocalizedName (@u.Code)</option>
-                                                        }
+                                                    <select name="UnitId" class="form-select form-select-sm erp-select2" required data-lookup-entity="unit" data-placeholder="-- @Localizer["Select"] --">
+                                                        <option value="@item.UnitId" selected="selected">@(item.Unit?.LocalizedName ?? "") (@(item.Unit?.Code ?? ""))</option>
                                                     </select>
                                                 </div>
                                                 <div class="mb-2">
@@ -274,22 +271,18 @@
                 <div class="modal-body p-3">
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["Items"] <span class="text-danger">*</span></label>
-                        <select name="ItemId" class="form-select form-select-sm" required>
+                        <select name="ItemId" class="form-select form-select-sm erp-select2" required data-lookup-entity="item" data-placeholder="-- @Localizer["Select"] --">
                             <option value="">-- @Localizer["Select"] --</option>
-                            @foreach (var i in items)
+                            @if (currentItem != null)
                             {
-                                <option value="@i.Id" selected="@(ViewBag.ItemId != null && (int)ViewBag.ItemId == i.Id)">@i.LocalizedName (@i.Code)</option>
+                                <option value="@currentItem.Id" selected="selected">@currentItem.LocalizedName (@currentItem.Code)</option>
                             }
                         </select>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-bold">@Localizer["Unit"] <span class="text-danger">*</span></label>
-                        <select name="UnitId" class="form-select form-select-sm" required>
+                        <select name="UnitId" class="form-select form-select-sm erp-select2" required data-lookup-entity="unit" data-placeholder="-- @Localizer["Select"] --">
                             <option value="">-- @Localizer["Select"] --</option>
-                            @foreach (var u in units)
-                            {
-                                <option value="@u.Id">@u.LocalizedName (@u.Code)</option>
-                            }
                         </select>
                     </div>
                     <div class="mb-2">

@@ -2,6 +2,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Infrastructure.Data;
 using ERP.Web.Authorization;
+using ERP.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,16 +18,23 @@ namespace ERP.Web.Controllers
         private readonly ErpDbContext _context;
         private readonly ICurrentUserContext _currentUser;
         private readonly IAuditService _audit;
+        private readonly ICodeSequenceService _sequenceService;
 
         private const string SC_Code   = "ITMG001";
         private const string SC_Name   = "ItemGroups";
         private const string SC_Module = "MasterData";
+        private const string EntityName = "ItemGroup";
 
-        public ItemGroupController(ErpDbContext context, ICurrentUserContext currentUser, IAuditService audit)
+        public ItemGroupController(
+            ErpDbContext context,
+            ICurrentUserContext currentUser,
+            IAuditService audit,
+            ICodeSequenceService sequenceService)
         {
-            _context     = context;
-            _currentUser = currentUser;
-            _audit       = audit;
+            _context         = context;
+            _currentUser     = currentUser;
+            _audit           = audit;
+            _sequenceService = sequenceService;
         }
 
         [HttpGet]
@@ -64,11 +72,16 @@ namespace ERP.Web.Controllers
                 .Take(pageSize)
                 .ToListAsync();
 
-            ViewBag.SearchString = searchString;
-            ViewBag.ParentId     = parentId;
-            ViewBag.CurrentPage  = page;
-            ViewBag.TotalPages   = (int)Math.Ceiling(totalCount / (double)pageSize);
-            ViewBag.TotalCount   = totalCount;
+            var seqConfig = await _sequenceService.GetConfigAsync(EntityName);
+
+            ViewBag.SearchString    = searchString;
+            ViewBag.ParentId        = parentId;
+            ViewBag.CurrentPage     = page;
+            ViewBag.TotalPages      = (int)Math.Ceiling(totalCount / (double)pageSize);
+            ViewBag.TotalCount      = totalCount;
+            ViewBag.NextCode        = seqConfig.PreviewCode;
+            ViewBag.IsAutoCode      = seqConfig.IsAuto;
+            ViewBag.IsManualAllowed = seqConfig.IsManualAllowed;
 
             return View(items);
         }
@@ -76,27 +89,37 @@ namespace ERP.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [HasPermission("MasterData.ItemGroups.Add")]
-        public async Task<IActionResult> Create(ItemGroup model)
+        public async Task<IActionResult> Create(ItemGroup model, bool? isManualCode = null)
         {
+            // Auto-number logic
+            bool shouldAutoCode = isManualCode.HasValue
+                ? (!isManualCode.Value && await _sequenceService.IsAutoEnabledAsync(EntityName))
+                : (string.IsNullOrWhiteSpace(model.Code) || (await _sequenceService.IsAutoEnabledAsync(EntityName) && !await _sequenceService.IsManualAllowedAsync(EntityName)));
+
+            if (shouldAutoCode)
+            {
+                model.Code = await _sequenceService.GetNextCodeAsync(EntityName);
+            }
+
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "Item Group Code is required.");
+                ModelState.AddModelError("Code", "كود مجموعة الأصناف مطلوب.");
             else if (await _context.ItemGroups.AnyAsync(ig => ig.Code == model.Code.Trim()))
-                ModelState.AddModelError("Code", "Item Group Code already exists.");
+                ModelState.AddModelError("Code", "كود مجموعة الأصناف موجود بالفعل.");
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "اسم مجموعة الأصناف بالعربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (model.ParentId.HasValue && model.ParentId.Value > 0 && !await _context.ItemGroups.AnyAsync(ig => ig.Id == model.ParentId.Value))
-                ModelState.AddModelError("ParentId", "Selected parent group is invalid.");
+                ModelState.AddModelError("ParentId", "المجموعة الرئيسية المحددة غير صالحة.");
 
             if (ModelState.IsValid)
             {
                 model.Code      = model.Code.Trim();
-                model.NameAr    = model.NameAr.Trim();
-                model.NameEn    = model.NameEn.Trim();
+                model.NameAr    = model.NameAr?.Trim() ?? string.Empty;
+                model.NameEn    = string.IsNullOrWhiteSpace(model.NameEn) ? model.NameAr : model.NameEn.Trim();
                 model.ParentId  = model.ParentId > 0 ? model.ParentId : null;
                 model.CreatedAt = DateTime.UtcNow;
 
@@ -104,13 +127,19 @@ namespace ERP.Web.Controllers
                 await _context.SaveChangesAsync();
 
                 await _audit.LogCreateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "ItemGroup",
+                    entityName: EntityName,
                     entityId:   model.Id.ToString(),
                     newValues: new { model.Id, model.Code, model.NameAr, model.NameEn, model.ParentId, model.IsActive });
 
-                TempData["SuccessMessage"] = "Item Group created successfully.";
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم إضافة مجموعة الأصناف بنجاح.");
+
+                TempData["SuccessMessage"] = "تم إضافة مجموعة الأصناف بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(ModelState, "يرجى تصحيح أخطاء الإدخال الموضحة أدناه.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
@@ -121,48 +150,117 @@ namespace ERP.Web.Controllers
         [HasPermission("MasterData.ItemGroups.Edit")]
         public async Task<IActionResult> Edit(ItemGroup model)
         {
+            var entity = await _context.ItemGroups.FindAsync(model.Id);
+            if (entity == null)
+            {
+                if (Request.IsAjaxRequest())
+                    return this.JsonValidationFailure(new[] { "مجموعة الأصناف غير موجودة أو تم حذفها." });
+                return NotFound();
+            }
+
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "Item Group Code is required.");
+                ModelState.AddModelError("Code", "كود مجموعة الأصناف مطلوب.");
             else if (await _context.ItemGroups.AnyAsync(ig => ig.Code == model.Code.Trim() && ig.Id != model.Id))
-                ModelState.AddModelError("Code", "Item Group Code already exists.");
+                ModelState.AddModelError("Code", "كود مجموعة الأصناف موجود بالفعل.");
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "اسم مجموعة الأصناف بالعربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
-            if (model.ParentId.HasValue && model.ParentId.Value == model.Id)
-                ModelState.AddModelError("ParentId", "A group cannot be its own parent.");
+            if (model.ParentId.HasValue && model.ParentId.Value > 0)
+            {
+                if (model.ParentId.Value == model.Id)
+                {
+                    ModelState.AddModelError("ParentId", "لا يمكن للمجموعة أن تكون مجموعة رئيسية لنفسها.");
+                }
+                else if (!await _context.ItemGroups.AnyAsync(ig => ig.Id == model.ParentId.Value))
+                {
+                    ModelState.AddModelError("ParentId", "المجموعة الرئيسية المحددة غير صالحة.");
+                }
+                else if (await IsDescendantGroupAsync(model.ParentId.Value, model.Id))
+                {
+                    ModelState.AddModelError("ParentId", "لا يمكن تعيين مجموعة فرعية كمجموعة رئيسية (منع تكوين حلقة دائرية).");
+                }
+            }
 
             if (ModelState.IsValid)
             {
-                var entity = await _context.ItemGroups.FindAsync(model.Id);
-                if (entity == null) return NotFound();
-
-                var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.ParentId, entity.IsActive };
+                var oldValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.ParentId,
+                    entity.IsActive,
+                    OldCode = entity.Code
+                };
 
                 entity.Code      = model.Code.Trim();
-                entity.NameAr    = model.NameAr.Trim();
-                entity.NameEn    = model.NameEn.Trim();
+                entity.NameAr    = model.NameAr?.Trim() ?? string.Empty;
+                entity.NameEn    = string.IsNullOrWhiteSpace(model.NameEn) ? entity.NameAr : model.NameEn.Trim();
                 entity.ParentId  = model.ParentId > 0 ? model.ParentId : null;
                 entity.IsActive  = model.IsActive;
                 entity.UpdatedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
+                var newValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.ParentId,
+                    entity.IsActive,
+                    NewCode = entity.Code
+                };
+
                 await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "ItemGroup",
+                    entityName: EntityName,
                     entityId:   entity.Id.ToString(),
                     oldValues:  oldValues,
-                    newValues: new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.ParentId, entity.IsActive });
+                    newValues:  newValues);
 
-                TempData["SuccessMessage"] = "Item Group updated successfully.";
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم تحديث مجموعة الأصناف بنجاح.");
+
+                TempData["SuccessMessage"] = "تم تحديث مجموعة الأصناف بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
 
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure(ModelState, "يرجى تصحيح أخطاء الإدخال الموضحة أدناه.");
+
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index));
+        }
+
+        private async Task<bool> IsDescendantGroupAsync(int potentialChildId, int ancestorId)
+        {
+            var currentId = (int?)potentialChildId;
+            var visited = new HashSet<int>();
+
+            while (currentId.HasValue && currentId.Value > 0)
+            {
+                if (currentId.Value == ancestorId)
+                    return true;
+
+                if (!visited.Add(currentId.Value))
+                    break;
+
+                var parentId = await _context.ItemGroups
+                    .AsNoTracking()
+                    .Where(g => g.Id == currentId.Value)
+                    .Select(g => g.ParentId)
+                    .FirstOrDefaultAsync();
+
+                currentId = parentId;
+            }
+
+            return false;
         }
 
         [HttpPost]
@@ -179,27 +277,35 @@ namespace ERP.Web.Controllers
 
             if (entity.SubGroups.Any())
             {
-                TempData["ErrorMessage"] = "Cannot delete item group because it contains subgroups.";
+                TempData["ErrorMessage"] = "لا يمكن حذف مجموعة الأصناف لوجود مجموعات فرعية تابعة لها.";
                 return RedirectToAction(nameof(Index));
             }
 
             if (entity.Items.Any())
             {
-                TempData["ErrorMessage"] = "Cannot delete item group because it has items assigned to it.";
+                TempData["ErrorMessage"] = "لا يمكن حذف مجموعة الأصناف لوجود أصناف مرتبطة بها.";
                 return RedirectToAction(nameof(Index));
             }
 
-            var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.IsActive };
+            var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.ParentId, entity.IsActive };
 
-            _context.ItemGroups.Remove(entity);
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.ItemGroups.Remove(entity);
+                await _context.SaveChangesAsync();
 
-            await _audit.LogDeleteAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "ItemGroup",
-                entityId:   id.ToString(),
-                oldValues:  oldValues);
+                await _audit.LogDeleteAsync(SC_Code, SC_Name, SC_Module,
+                    entityName: EntityName,
+                    entityId:   id.ToString(),
+                    oldValues:  oldValues);
 
-            TempData["SuccessMessage"] = "Item Group deleted successfully.";
+                TempData["SuccessMessage"] = "تم حذف مجموعة الأصناف بنجاح.";
+            }
+            catch (DbUpdateException)
+            {
+                TempData["ErrorMessage"] = "لا يمكن حذف مجموعة الأصناف لوجود سجلات مرتبطة بها.";
+            }
+
             return RedirectToAction(nameof(Index));
         }
 
@@ -218,7 +324,7 @@ namespace ERP.Web.Controllers
             await _context.SaveChangesAsync();
 
             await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "ItemGroup",
+                entityName: EntityName,
                 entityId:   id.ToString(),
                 oldValues:  oldValues,
                 newValues: new { entity.Id, entity.Code, entity.IsActive });

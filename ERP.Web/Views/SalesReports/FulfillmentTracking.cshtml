@@ -1,0 +1,187 @@
+@model ERP.Application.DTOs.Reports.SalesFulfillmentTrackingReportDto
+@{
+    ViewData["Title"] = "متابعة الفواتير واستكمال حركة المخزون";
+    Layout = "_Layout";
+    bool isRequested = ViewBag.IsRequested == true;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-list-check me-2"></i>متابعة الفواتير واستكمال حركة المخزون
+            </h4>
+            <span class="text-muted small">متابعة أوامر البيع والفواتير غير المحولة بالكامل والكميات المتبقية للتسليم</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.SalesReports.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة
+                    </button>
+                }
+                if (CurrentUserContext.HasPermission("Reports.SalesReports.Export,Reports.GeneralReports.Export"))
+                {
+                    <button onclick="exportTableToExcel('fulfillmentTable', 'SalesFulfillmentTracking')" class="btn btn-outline-success btn-sm fw-bold">
+                        <i class="fa-solid fa-file-excel me-1"></i> تصدير Excel
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> فهرس تقارير المبيعات
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="FulfillmentTracking">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" id="branchSelect" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">العميل</label>
+                        <div class="erp-lookup-picker" 
+                             data-type="customer" 
+                             data-input-name="CustomerId" 
+                             data-value="@Model.Filter.CustomerId" 
+                             data-text="@ViewBag.SelectedCustomerDisplay"
+                             data-placeholder="-- كافة العملاء (بحث بالكود / الاسم) --"
+                             data-branch-selector="#branchSelect">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="DateFrom" class="form-control form-control-sm" value="@(Model.Filter.DateFrom?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="DateTo" class="form-control form-control-sm" value="@(Model.Filter.DateTo?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> عرض التقرير
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-list-check fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث والضغط على "عرض التقرير"</h5>
+            <p class="text-muted small mb-0">اختر الفرع أو العميل والفترة الزمنية لمتابعة استكمال حركات تسليم المخزون.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Data Table -->
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table id="fulfillmentTable" class="table table-bordered table-hover table-striped align-middle mb-0 text-center" style="font-size: 0.85rem;">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>رقم المستند</th>
+                                <th>التاريخ</th>
+                                <th>نوع الحركة</th>
+                                <th class="text-start">العميل</th>
+                                <th>الفرع</th>
+                                <th>حالة التحويل</th>
+                                <th>الكمية المطلوبة</th>
+                                <th>الكمية المسلمة</th>
+                                <th>الكمية المتبقية</th>
+                                <th>نسبة الإنجاز</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Items.Any())
+                            {
+                                <tr>
+                                    <td colspan="10" class="py-4 text-muted">لا توجد أوامر بيع أو مستندات حجز معلقة.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var row in Model.Items)
+                                {
+                                    <tr>
+                                        <td class="font-monospace text-primary fw-bold">@row.DocumentNumber</td>
+                                        <td class="font-monospace">@row.DocumentDate.ToString("yyyy/MM/dd")</td>
+                                        <td><span class="badge bg-light text-dark border">@row.TransactionTypeName</span></td>
+                                        <td class="text-start fw-bold">@row.CustomerName</td>
+                                        <td>@row.BranchName</td>
+                                        <td>
+                                            <span class="badge @(row.IsFullyFulfilled ? "bg-success" : "bg-warning text-dark")">
+                                                @row.ConversionStatus
+                                            </span>
+                                        </td>
+                                        <td class="font-monospace">@row.TotalOrderedQuantity.ToString("G29")</td>
+                                        <td class="font-monospace text-success fw-bold">@row.TotalFulfilledQuantity.ToString("G29")</td>
+                                        <td class="font-monospace text-danger fw-bold">@row.RemainingQuantity.ToString("G29")</td>
+                                        <td>
+                                            <div class="progress" style="height: 16px;">
+                                                <div class="progress-bar @(row.FulfillmentPercentage >= 100 ? "bg-success" : "bg-info")" role="progressbar" 
+                                                     style="width: @(Math.Min(100, row.FulfillmentPercentage))%">
+                                                    @row.FulfillmentPercentage.ToString("F0")%
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<script>
+    function exportTableToExcel(tableId, filename) {
+        var table = document.getElementById(tableId);
+        if (!table) return;
+        var html = table.outerHTML;
+        var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    document.getElementById('branchSelect')?.addEventListener('change', function() {
+        var branchId = this.value;
+        var custSelect = document.getElementById('customerSelect');
+        if (custSelect) {
+            fetch('@Url.Action("GetCustomersByBranch", "SalesReports")?branchId=' + branchId)
+                .then(r => r.json())
+                .then(data => {
+                    custSelect.innerHTML = '<option value="">-- كل العملاء --</option>';
+                    data.forEach(item => {
+                        var opt = document.createElement('option');
+                        opt.value = item.id;
+                        opt.textContent = item.text;
+                        custSelect.appendChild(opt);
+                    });
+                });
+        }
+    });
+</script>

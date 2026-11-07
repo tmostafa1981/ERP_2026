@@ -1,0 +1,177 @@
+@model ERP.Application.DTOs.Reports.TopSellingAndStagnantItemsReportDto
+@{
+    ViewData["Title"] = "الأصناف الأكثر مبيعًا والأصناف الراكدة";
+    Layout = "_Layout";
+    bool isRequested = ViewBag.IsRequested == true;
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-arrow-trend-up me-2"></i>الأصناف الأكثر مبيعًا والأصناف الراكدة
+            </h4>
+            <span class="text-muted small">مقارنة بين الأصناف الرائدة في المبيعات مقابل الأصناف التي لم تشهد حركة بيع خلال الفترة</span>
+        </div>
+        <div class="d-flex gap-2">
+            @if (isRequested)
+            {
+                if (CurrentUserContext.HasPermission("Reports.SalesReports.Print,Reports.GeneralReports.Print"))
+                {
+                    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                        <i class="fa-solid fa-print me-1"></i> طباعة
+                    </button>
+                }
+            }
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> فهرس تقارير المبيعات
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="TopSellingAndStagnant">
+                <input type="hidden" name="submitted" value="true" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="BranchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">المجموعة</label>
+                        <select name="ItemGroupId" class="form-select form-select-sm" asp-items="ViewBag.ItemGroups">
+                            <option value="">-- كل المجموعات --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="DateFrom" class="form-control form-control-sm" value="@(Model.Filter.DateFrom?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="DateTo" class="form-control form-control-sm" value="@(Model.Filter.DateTo?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> عرض التقرير
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (!isRequested)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center my-4 bg-white rounded-3">
+            <div class="text-primary mb-3">
+                <i class="fa-solid fa-arrow-trend-up fa-3x"></i>
+            </div>
+            <h5 class="fw-bold text-dark">يرجى تحديد معايير البحث والضغط على "عرض التقرير"</h5>
+            <p class="text-muted small mb-0">اختر الفرع ومجموعة الأصناف والفترة الزمنية لعرض الأصناف الأكثر والأقل مبيعاً.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <!-- 1. Top Selling Items -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-success text-white py-2 fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="fa-solid fa-crown me-1"></i> الأصناف الأكثر مبيعًا (Top Selling)</span>
+                        <span class="badge bg-white text-success">@Model.TopSellingItems.Count</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>كود الصنف</th>
+                                        <th class="text-start">اسم الصنف</th>
+                                        <th>الكمية المباعة</th>
+                                        <th>القيمة الصافية</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!Model.TopSellingItems.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="5" class="py-3 text-muted">لا توجد مبيعات في الفترة.</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @for (int i = 0; i < Model.TopSellingItems.Count; i++)
+                                        {
+                                            var itm = Model.TopSellingItems[i];
+                                            <tr>
+                                                <td class="fw-bold">@(i + 1)</td>
+                                                <td class="font-monospace text-primary">@itm.ItemCode</td>
+                                                <td class="text-start fw-bold">@itm.ItemName</td>
+                                                <td class="font-monospace fw-bold text-success">@itm.SoldQuantity.ToString("G29")</td>
+                                                <td class="font-monospace text-end fw-bold">@itm.NetSalesValue.ToString("N2")</td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Non-Moving Items -->
+            <div class="col-lg-6">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-secondary text-white py-2 fw-bold d-flex justify-content-between align-items-center">
+                        <span><i class="fa-solid fa-pause me-1"></i> الأصناف التي لم تتحرك (Non-Moving)</span>
+                        <span class="badge bg-white text-secondary">@Model.NonMovingItems.Count</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm align-middle mb-0 text-center" style="font-size: 0.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>كود الصنف</th>
+                                        <th class="text-start">اسم الصنف</th>
+                                        <th>المجموعة</th>
+                                        <th>الحالة</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!Model.NonMovingItems.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="5" class="py-3 text-muted">جميع الأصناف النشطة شهدت حركة بيع!</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @for (int i = 0; i < Model.NonMovingItems.Count; i++)
+                                        {
+                                            var itm = Model.NonMovingItems[i];
+                                            <tr>
+                                                <td>@(i + 1)</td>
+                                                <td class="font-monospace text-muted">@itm.ItemCode</td>
+                                                <td class="text-start">@itm.ItemName</td>
+                                                <td>@itm.GroupName</td>
+                                                <td><span class="badge bg-warning-subtle text-dark border">بدون حركة بيع</span></td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

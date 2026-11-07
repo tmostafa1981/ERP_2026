@@ -1,0 +1,146 @@
+@model List<ERP.Application.DTOs.FixedAssets.AssetRegisterReportItemDto>
+@{
+    string reportType = ViewBag.ReportType ?? "Register";
+    string reportTitle = reportType switch
+    {
+        "Disposed" => "تقرير الأصول المستبعدة والمباعة",
+        "CIP" => "تقرير مشروعات تحت التنفيذ (الأصول تحت الإنشاء)",
+        "PendingDepreciation" => "تقرير الأصول غير المهلكة أو المتأخر إهلاكها",
+        _ => "تقرير سجل الأصول الثابتة الشامل"
+    };
+    ViewData["Title"] = reportTitle;
+    var filter = ViewBag.Filter as ERP.Application.DTOs.FixedAssets.AssetReportFilterDto ?? new();
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="mb-1 text-primary"><i class="fas fa-file-alt me-2"></i>@reportTitle</h3>
+            <p class="text-muted small mb-0">تحليل شامل لبيانات وتكاليف ومجمعات إهلاك وقيم الأصول الدفترية</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="ExportCsv" asp-route-reportType="@reportType" asp-route-branchId="@filter.BranchId" asp-route-assetCategoryId="@filter.AssetCategoryId" class="btn btn-outline-success">
+                <i class="fas fa-file-excel me-1"></i>تصدير CSV
+            </a>
+            <button onclick="window.print()" class="btn btn-outline-secondary">
+                <i class="fas fa-print me-1"></i>طباعة
+            </button>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs Between Reports -->
+    <div class="btn-group mb-3 d-flex flex-wrap" role="group">
+        <a asp-action="Index" asp-route-reportType="Register" class="btn @(reportType == "Register" ? "btn-primary" : "btn-outline-primary")">سجل الأصول الشامل</a>
+        <a asp-action="Index" asp-route-reportType="DepreciationHistory" class="btn @(reportType == "DepreciationHistory" ? "btn-primary" : "btn-outline-primary")">سجل الإهلاكات الدورية</a>
+        <a asp-action="Index" asp-route-reportType="Movements" class="btn @(reportType == "Movements" ? "btn-primary" : "btn-outline-primary")">حركات ونقل الأصول</a>
+        <a asp-action="Index" asp-route-reportType="Disposed" class="btn @(reportType == "Disposed" ? "btn-primary" : "btn-outline-primary")">الأصول المستبعدة</a>
+        <a asp-action="Index" asp-route-reportType="CIP" class="btn @(reportType == "CIP" ? "btn-primary" : "btn-outline-primary")">الأصول تحت الإنشاء (CIP)</a>
+        <a asp-action="Index" asp-route-reportType="PendingDepreciation" class="btn @(reportType == "PendingDepreciation" ? "btn-primary" : "btn-outline-primary")">أصول متأخرة الإهلاك</a>
+    </div>
+
+    <!-- Filter Form -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-3">
+            <form method="get" asp-action="Index" class="row g-2 align-items-end">
+                <input type="hidden" name="reportType" value="@reportType" />
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">بحث</label>
+                    <input type="text" name="SearchTerm" value="@filter.SearchTerm" class="form-control form-control-sm" placeholder="كود، اسم، سيريال..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">الفرع</label>
+                    <select name="BranchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                        <option value="">-- كافة الفروع --</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">المجموعة</label>
+                    <select name="AssetCategoryId" class="form-select form-select-sm" asp-items="ViewBag.Categories">
+                        <option value="">-- كافة المجموعات --</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">مركز التكلفة</label>
+                    <select name="CostCenterId" class="form-select form-select-sm" asp-items="ViewBag.CostCenters">
+                        <option value="">-- كافة المراكز --</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">حتى تاريخ</label>
+                    <input type="date" name="AsOfDate" value="@(filter.AsOfDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-sm btn-primary flex-fill">تصفية</button>
+                    <a asp-action="Index" asp-route-reportType="@reportType" class="btn btn-sm btn-outline-secondary">إلغاء</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>كود الأصل</th>
+                            <th class="text-start">اسم الأصل</th>
+                            <th>المجموعة</th>
+                            <th>الفرع</th>
+                            <th>مركز التكلفة</th>
+                            <th>العهدة</th>
+                            <th>تاريخ الشراء</th>
+                            <th>التكلفة الحالية</th>
+                            <th>مجمع الإهلاك</th>
+                            <th>القيمة الدفترية</th>
+                            <th>طريقة الإهلاك</th>
+                            <th>العمر (شهر)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model == null || !Model.Any())
+                        {
+                            <tr>
+                                <td colspan="12" class="text-muted py-5">لا توجد بيانات مطابقة لخيارات التصفية.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var a in Model)
+                            {
+                                <tr>
+                                    <td class="fw-bold">@a.AssetCode</td>
+                                    <td class="text-start">@a.AssetName</td>
+                                    <td>@a.CategoryName</td>
+                                    <td>@a.BranchName</td>
+                                    <td class="small text-muted">@(a.CostCenterName ?? "—")</td>
+                                    <td class="small">@(a.Custodian ?? "—")</td>
+                                    <td>@a.PurchaseDate.ToString("yyyy-MM-dd")</td>
+                                    <td class="fw-bold">@a.CurrentCost.ToString("N2")</td>
+                                    <td class="text-warning">@a.AccumulatedDepreciation.ToString("N2")</td>
+                                    <td class="fw-bold text-primary">@a.BookValue.ToString("N2")</td>
+                                    <td class="small">@a.DepreciationMethod</td>
+                                    <td>@a.UsefulLifeMonths</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="7" class="text-end">الإجمالي:</td>
+                                <td>@Model.Sum(x => x.CurrentCost).ToString("N2")</td>
+                                <td class="text-warning">@Model.Sum(x => x.AccumulatedDepreciation).ToString("N2")</td>
+                                <td class="text-primary">@Model.Sum(x => x.BookValue).ToString("N2")</td>
+                                <td colspan="2"></td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

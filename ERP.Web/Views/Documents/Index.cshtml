@@ -1,0 +1,221 @@
+@model IEnumerable<ERP.Application.DTOs.DocumentHeaderDto>
+@{
+    ViewData["Title"] = "سجل المستندات والحركات";
+    var allowedTypes = ViewBag.AllowedTypes as IEnumerable<ERP.Application.DTOs.TransactionTypeDto> ?? Enumerable.Empty<ERP.Application.DTOs.TransactionTypeDto>();
+    var selectedModule = ViewBag.SelectedModule as ERP.Domain.Enums.TransactionModule?;
+    var selectedTypeId = ViewBag.SelectedTransactionTypeId as int?;
+}
+
+<div class="container-fluid px-4 py-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i> سجل الحركات والمستندات
+            </h4>
+            <span class="text-muted small">عرض وإدارة فواتير المبيعات، المشتريات، وأذون الصرف والاستلام.</span>
+        </div>
+        <div class="d-flex gap-2">
+            <!-- Create New Document Dropdown -->
+            <div class="dropdown">
+                <button class="btn btn-primary btn-sm dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown">
+                    <i class="fa-solid fa-plus me-1"></i> إنشاء مستند جديد
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow">
+                    @foreach (var t in allowedTypes.Where(x => x.CanCreate))
+                    {
+                        <li>
+                            <a class="dropdown-item py-2" asp-action="Create" asp-route-transactionTypeId="@t.Id" asp-route-module="@t.Module">
+                                <span class="fw-bold">@t.LocalizedName</span>
+                                <span class="badge bg-light text-muted border ms-2 small">@t.Code</span>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2">
+            <form method="get" class="row g-2 align-items-center">
+                <div class="col-md-3">
+                    <select name="module" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- كل الأقسام --</option>
+                        <option value="Sales" selected="@(selectedModule == ERP.Domain.Enums.TransactionModule.Sales)">المبيعات</option>
+                        <option value="Purchase" selected="@(selectedModule == ERP.Domain.Enums.TransactionModule.Purchase)">المشتريات</option>
+                        <option value="Inventory" selected="@(selectedModule == ERP.Domain.Enums.TransactionModule.Inventory)">المخازن</option>
+                        <option value="Transfer" selected="@(selectedModule == ERP.Domain.Enums.TransactionModule.Transfer)">التحويلات</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <select name="transactionTypeId" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- كل أنواع الحركات --</option>
+                        @foreach (var t in allowedTypes)
+                        {
+                            <option value="@t.Id" selected="@(selectedTypeId == t.Id)">@t.LocalizedName (@t.Code)</option>
+                        }
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Documents List Table -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-dark small">
+                        <tr>
+                            <th style="width: 140px;">رقم المستند</th>
+                            <th style="width: 110px;">التاريخ</th>
+                            <th>نوع الحركة</th>
+                            <th>الطرف (عميل / مورد)</th>
+                            <th class="text-end" style="width: 130px;">إجمالي المستند</th>
+                            <th class="text-center" style="width: 100px;">الحالة</th>
+                            <th class="text-center" style="width: 120px;">حالة التحويل</th>
+                            <th style="width: 120px;">القيد المحاسبي</th>
+                            <th class="text-center" style="width: 120px;">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="9" class="text-center py-4 text-muted">
+                                    <i class="fa-solid fa-inbox fs-3 d-block mb-2 text-secondary"></i>
+                                    لا توجد مستندات مسجلة مطابقة لخيارات البحث.
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var doc in Model)
+                        {
+                            <tr>
+                                <td class="font-monospace fw-bold text-primary">
+                                    <a asp-action="Details" asp-route-id="@doc.Id" class="text-decoration-none">@doc.DocumentNumber</a>
+                                </td>
+                                <td>@doc.DocumentDate.ToString("yyyy-MM-dd")</td>
+                                <td>
+                                    <span class="fw-semibold">@doc.TransactionTypeName</span>
+                                    <span class="badge bg-light text-muted border ms-1 small">@doc.TransactionTypeCode</span>
+                                </td>
+                                <td>@(string.IsNullOrWhiteSpace(doc.PartyName) ? "-" : doc.PartyName)</td>
+                                <td class="text-end fw-bold text-dark font-monospace">@doc.TotalAmountNet.ToString("N2")</td>
+                                <td class="text-center">
+                                    @if (doc.Status == ERP.Domain.Enums.DocumentStatus.Posted)
+                                    {
+                                        <span class="badge bg-success">معتمد / نافذ</span>
+                                    }
+                                    else if (doc.Status == ERP.Domain.Enums.DocumentStatus.Cancelled)
+                                    {
+                                        <span class="badge bg-danger">ملغي</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@doc.Status</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (doc.ConversionStatus == ERP.Domain.Enums.DocumentConversionStatus.FullyConverted)
+                                    {
+                                        <span class="badge bg-info text-dark">محول كلياً</span>
+                                    }
+                                    else if (doc.ConversionStatus == ERP.Domain.Enums.DocumentConversionStatus.PartiallyConverted)
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border">محول جزئياً</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted border">غير محول</span>
+                                    }
+                                </td>
+                                <td class="font-monospace small">
+                                    @if (!string.IsNullOrEmpty(doc.JournalEntryNumber))
+                                    {
+                                        <span class="badge bg-light text-dark border">@doc.JournalEntryNumber</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        <a asp-action="Details" asp-route-id="@doc.Id" class="btn btn-outline-secondary" title="عرض التفاصيل">
+                                            <i class="fa-solid fa-eye"></i>
+                                        </a>
+                                        @if (doc.Status == ERP.Domain.Enums.DocumentStatus.Posted)
+                                        {
+                                            <a asp-action="Edit" asp-route-id="@doc.Id" class="btn btn-outline-primary" title="تعديل المستند">
+                                                <i class="fa-solid fa-pen"></i>
+                                            </a>
+                                        }
+                                        @if (doc.Status == ERP.Domain.Enums.DocumentStatus.Posted && doc.ConversionStatus != ERP.Domain.Enums.DocumentConversionStatus.FullyConverted)
+                                        {
+                                            <button type="button" class="btn btn-outline-info" title="تحويل المستند" onclick="location.href='@Url.Action("Convert", new { targetTransactionTypeId = 3 })'">
+                                                <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                                            </button>
+                                        }
+                                        <button type="button" class="btn btn-outline-danger btn-delete-doc" data-id="@doc.Id" data-number="@doc.DocumentNumber" data-status="@doc.Status" title="حذف المستند">
+                                            <i class="fa-solid fa-trash-can"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form id="afForm" style="display:none">
+    @Html.AntiForgeryToken()
+</form>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const token = document.querySelector('#afForm input[name="__RequestVerificationToken"]')?.value || '';
+
+            document.querySelectorAll('.btn-delete-doc').forEach(btn => {
+                btn.addEventListener('click', async function () {
+                    const docId = this.getAttribute('data-id');
+                    const docNum = this.getAttribute('data-number');
+                    const status = this.getAttribute('data-status');
+
+                    let confirmMsg = `هل أنت متأكد من حذف المسودة (${docNum})؟ لن يمكن التراجع عن هذه العملية!`;
+                    if (status === 'Posted') {
+                        confirmMsg = `⚠️ تحذير محاسبي ومخزني هام:\nالمستند رقم (${docNum}) مرحل بالفعل!\nحذف هذا المستند سيؤدي إلى إلغاء وحذف القيد المحاسبي المتولد، وإرجاع حركات السيريالات والمخزون وحذف المستند نهائياً.\nهل أنت متأكد من المتابعة والحذف؟`;
+                    }
+
+                    if (!confirm(confirmMsg)) return;
+
+                    this.disabled = true;
+                    try {
+                        const res = await fetch(`/Documents/Delete/${docId}`, {
+                            method: 'POST',
+                            headers: {
+                                'RequestVerificationToken': token
+                            }
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert(data.message || 'تم حذف المستند بنجاح!');
+                            window.location.reload();
+                        } else {
+                            alert('تعذر الحذف: ' + data.message);
+                            this.disabled = false;
+                        }
+                    } catch (e) {
+                        alert('حدث خطأ بالاتصال بالسيرفر: ' + e.message);
+                        this.disabled = false;
+                    }
+                });
+            });
+        });
+    </script>
+}

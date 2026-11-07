@@ -1,6 +1,7 @@
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Infrastructure.Data;
+using ERP.Web.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,7 @@ namespace ERP.Web.Controllers
         }
 
         [HttpGet]
+        [HasPermission("Organization.Company.View")]
         public async Task<IActionResult> Index()
         {
             var company = await _context.Companies.FirstOrDefaultAsync();
@@ -49,6 +51,7 @@ namespace ERP.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [HasPermission("Organization.Company.Edit")]
         public async Task<IActionResult> Edit(Company model)
         {
             if (string.IsNullOrWhiteSpace(model.NameAr) && string.IsNullOrWhiteSpace(model.NameEn))

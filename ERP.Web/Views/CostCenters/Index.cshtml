@@ -1,0 +1,413 @@
+@model IEnumerable<ERP.Domain.Entities.CostCenter>
+@{
+    ViewData["Title"] = "شجرة مراكز التكلفة";
+    var parentCenters = ViewBag.ParentCenters as List<ERP.Domain.Entities.CostCenter> ?? new List<ERP.Domain.Entities.CostCenter>();
+}
+
+<!-- jstree CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/themes/default/style.min.css" />
+
+<div class="container-fluid py-3">
+    <!-- Breadcrumb & Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0 text-primary">
+                <i class="fa-solid fa-bullseye me-2"></i> شجرة مراكز التكلفة (Cost Centers)
+            </h4>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">الرئيسية</a></li>
+                    <li class="breadcrumb-item">النواة المحاسبية</li>
+                    <li class="breadcrumb-item active" aria-current="page">مراكز التكلفة</li>
+                </ol>
+            </nav>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary" onclick="openCreateModal()">
+                <i class="fa-solid fa-plus me-1"></i> إضافة مركز تكلفة
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content: Tree on Left, Details on Right -->
+    <div class="row g-3">
+        <!-- Tree View Container -->
+        <div class="col-lg-5 col-md-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="fa-solid fa-diagram-project text-success me-1"></i> هيكل مراكز التكلفة</span>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-secondary" id="btnExpandAll" title="توسيع الكل">
+                            <i class="fa-solid fa-angles-down"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="btnCollapseAll" title="طي الكل">
+                            <i class="fa-solid fa-angles-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="btnRefreshTree" title="تحديث">
+                            <i class="fa-solid fa-rotate"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Tree Search -->
+                    <div class="input-group input-group-sm mb-3">
+                        <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass"></i></span>
+                        <input type="text" id="treeSearchInput" class="form-control" placeholder="بحث في مراكز التكلفة...">
+                    </div>
+
+                    <!-- jstree Container -->
+                    <div id="costCentersTree" class="p-2 border rounded bg-light" style="min-height: 420px; max-height: 600px; overflow-y: auto;">
+                        <div class="text-center py-5 text-muted">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <span class="ms-2">جاري تحميل الشجرة...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Details & Actions Panel -->
+        <div class="col-lg-7 col-md-6">
+            <div class="card shadow-sm border-0 h-100" id="detailsCard">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="fa-solid fa-circle-info text-info me-1"></i> تفاصيل المركز المحدد</span>
+                    <div id="selectedCenterActions" style="display: none;">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btnEditSelected">
+                            <i class="fa-solid fa-pen-to-square me-1"></i> تعديل
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success" id="btnAddChild">
+                            <i class="fa-solid fa-plus me-1"></i> إضافة فرعي
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="btnDeleteSelected">
+                            <i class="fa-solid fa-trash-can me-1"></i> حذف
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Placeholder when no node selected -->
+                    <div id="noSelectionAlert" class="text-center py-5 text-muted">
+                        <i class="fa-solid fa-hand-pointer fa-3x text-secondary opacity-50 mb-3"></i>
+                        <h5>حدد مركز تكلفة من الشجرة لعرض تفاصيله</h5>
+                        <p class="small text-muted">يمكنك النقر على أي مركز لاستعراض بياناته، وحالته التشغيلية، وحركاته المرتبطة.</p>
+                    </div>
+
+                    <!-- Details Display -->
+                    <div id="selectionDetails" style="display: none;">
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <label class="text-muted small">كود المركز:</label>
+                                <div class="fs-5 fw-bold text-success font-monospace" id="detailCode">-</div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="text-muted small">نوع المركز:</label>
+                                <div><span class="badge" id="detailTransactionalBadge">-</span></div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="text-muted small">الاسم بالعربية:</label>
+                                <div class="fw-bold" id="detailNameAr">-</div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="text-muted small">الاسم بالإنجليزية:</label>
+                                <div class="fw-bold" id="detailNameEn">-</div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="text-muted small">المركز الأب:</label>
+                                <div class="text-muted" id="detailParent">-</div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="text-muted small">عدد حركات القيود اليومية:</label>
+                                <div><span class="badge bg-info text-dark fs-6" id="detailLinesCount">0</span></div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="text-muted small">الحالة:</label>
+                                <div><span class="badge" id="detailStatusBadge">-</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Create / Edit Cost Center -->
+<div class="modal fade" id="centerModal" tabindex="-1" aria-labelledby="centerModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="centerForm" onsubmit="saveCenter(event)">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="centerId" name="Id" value="0" />
+                <input type="hidden" id="centerRowVersion" name="RowVersion" value="" />
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="centerModalLabel">
+                        <i class="fa-solid fa-bullseye me-1"></i> إضافة مركز تكلفة
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="modalAlert" class="alert alert-danger py-2 small" style="display: none;"></div>
+
+                    <!-- Code -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">كود المركز <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control font-monospace" id="centerCode" name="Code" required placeholder="مثال: CC-101, CC-ADM">
+                    </div>
+
+                    <!-- Name Ar -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">اسم المركز (عربي) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="centerNameAr" name="NameAr" required placeholder="مثال: الإدارة العامة، فرع المعادي">
+                    </div>
+
+                    <!-- Name En -->
+                    <div class="mb-3">
+                        <label class="form-label">اسم المركز (إنجليزي)</label>
+                        <input type="text" class="form-control" id="centerNameEn" name="NameEn" placeholder="مثال: General Administration">
+                    </div>
+
+                    <!-- Parent Center -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">المركز الأب (Parent)</label>
+                        <select class="form-select" id="centerParentId" name="ParentId">
+                            <option value="">-- مركز رئيسي (مستوى أول) --</option>
+                            @foreach (var c in parentCenters)
+                            {
+                                <option value="@c.Id">@c.Code - @c.LocalizedName</option>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Is Transactional -->
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="centerIsTransactional" name="IsTransactional" checked>
+                        <label class="form-check-label fw-bold" for="centerIsTransactional">يقبل حركات وتوجيه محاسبي (Transactional)</label>
+                        <small class="text-muted d-block">إذا تم إلغاء التفعيل، يعتبر المركز رئيسياً تجميعياً ولا يقبل التوجيه المباشر في القيود.</small>
+                    </div>
+
+                    <!-- Is Active -->
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="centerIsActive" name="IsActive" checked>
+                        <label class="form-check-label" for="centerIsActive">نشط ومتاح للاستخدام</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-success" id="btnSaveCenter">
+                        <span class="spinner-border spinner-border-sm me-1 d-none" id="saveSpinner"></span>
+                        <i class="fa-solid fa-floppy-disk me-1"></i> حفظ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- jstree JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/jstree.min.js"></script>
+
+    <script>
+        let currentSelectedNode = null;
+        let centerModalInstance = null;
+
+        $(document).ready(function () {
+            centerModalInstance = new bootstrap.Modal(document.getElementById('centerModal'));
+            loadTree();
+
+            // Search in tree
+            let to = false;
+            $('#treeSearchInput').keyup(function () {
+                if (to) { clearTimeout(to); }
+                to = setTimeout(function () {
+                    const v = $('#treeSearchInput').val();
+                    $('#costCentersTree').jstree(true).search(v);
+                }, 250);
+            });
+
+            // Expand / Collapse
+            $('#btnExpandAll').click(function () { $('#costCentersTree').jstree('open_all'); });
+            $('#btnCollapseAll').click(function () { $('#costCentersTree').jstree('close_all'); });
+            $('#btnRefreshTree').click(function () { loadTree(); });
+
+            // Actions
+            $('#btnEditSelected').click(function () {
+                if (currentSelectedNode) openEditModal(currentSelectedNode.data.id);
+            });
+
+            $('#btnAddChild').click(function () {
+                if (currentSelectedNode) openCreateChildModal(currentSelectedNode.data.id);
+            });
+
+            $('#btnDeleteSelected').click(function () {
+                if (currentSelectedNode) deleteCenter(currentSelectedNode.data.id, currentSelectedNode.data.code);
+            });
+        });
+
+        function loadTree() {
+            $('#costCentersTree').jstree('destroy');
+            $('#costCentersTree').jstree({
+                'core': {
+                    'data': {
+                        'url': '@Url.Action("GetTreeData", "CostCenters")',
+                        'dataType': 'json'
+                    },
+                    'themes': {
+                        'responsive': true,
+                        'stripes': true
+                    }
+                },
+                'plugins': ['search', 'types', 'wholerow']
+            }).on('changed.jstree', function (e, data) {
+                if (data && data.selected && data.selected.length) {
+                    const node = data.instance.get_node(data.selected[0]);
+                    currentSelectedNode = node;
+                    showDetails(node.data);
+                } else {
+                    currentSelectedNode = null;
+                    hideDetails();
+                }
+            });
+        }
+
+        function showDetails(d) {
+            if (!d) return;
+            $('#noSelectionAlert').hide();
+            $('#selectionDetails').show();
+            $('#selectedCenterActions').show();
+
+            $('#detailCode').text(d.code);
+            $('#detailNameAr').text(d.nameAr || '-');
+            $('#detailNameEn').text(d.nameEn || '-');
+            $('#detailLinesCount').text(d.linesCount || 0);
+
+            const tree = $('#costCentersTree').jstree(true);
+            const parentNode = tree.get_node(d.parentId ? d.parentId.toString() : '#');
+            $('#detailParent').text(parentNode && parentNode.text ? parentNode.text : 'مركز رئيسي (مستوى أول)');
+
+            if (d.isTransactional) {
+                $('#detailTransactionalBadge').removeClass('bg-secondary').addClass('bg-success').text('حساب حركة (يقبل التوجيه)');
+            } else {
+                $('#detailTransactionalBadge').removeClass('bg-success').addClass('bg-secondary').text('مركز رئيسي تجميعي');
+            }
+
+            if (d.isActive) {
+                $('#detailStatusBadge').removeClass('bg-secondary').addClass('bg-success').text('نشط');
+            } else {
+                $('#detailStatusBadge').removeClass('bg-success').addClass('bg-secondary').text('غير نشط');
+            }
+        }
+
+        function hideDetails() {
+            $('#noSelectionAlert').show();
+            $('#selectionDetails').hide();
+            $('#selectedCenterActions').hide();
+        }
+
+        function openCreateModal() {
+            $('#centerModalLabel').html('<i class="fa-solid fa-bullseye me-1"></i> إضافة مركز تكلفة');
+            $('#centerId').val('0');
+            $('#centerRowVersion').val('');
+            $('#centerCode').val('');
+            $('#centerNameAr').val('');
+            $('#centerNameEn').val('');
+            $('#centerParentId').val('');
+            $('#centerIsTransactional').prop('checked', true);
+            $('#centerIsActive').prop('checked', true);
+            $('#modalAlert').hide();
+            centerModalInstance.show();
+        }
+
+        function openCreateChildModal(parentId) {
+            openCreateModal();
+            $('#centerModalLabel').html('<i class="fa-solid fa-plus me-1"></i> إضافة مركز فرعي');
+            $('#centerParentId').val(parentId);
+        }
+
+        function openEditModal(id) {
+            $('#modalAlert').hide();
+            $.get('@Url.Action("GetById", "CostCenters")/' + id, function (res) {
+                if (res.success) {
+                    const d = res.data;
+                    $('#centerModalLabel').html('<i class="fa-solid fa-pen-to-square me-1"></i> تعديل مركز: ' + d.code);
+                    $('#centerId').val(d.id);
+                    $('#centerRowVersion').val(d.rowVersion || '');
+                    $('#centerCode').val(d.code);
+                    $('#centerNameAr').val(d.nameAr);
+                    $('#centerNameEn').val(d.nameEn);
+                    $('#centerParentId').val(d.parentId || '');
+                    $('#centerIsTransactional').prop('checked', d.isTransactional);
+                    $('#centerIsActive').prop('checked', d.isActive);
+                    centerModalInstance.show();
+                } else {
+                    alert(res.message);
+                }
+            });
+        }
+
+        function saveCenter(e) {
+            e.preventDefault();
+            $('#modalAlert').hide();
+            $('#saveSpinner').removeClass('d-none');
+            $('#btnSaveCenter').prop('disabled', true);
+
+            const isEdit = parseInt($('#centerId').val()) > 0;
+            const url = isEdit ? '@Url.Action("Edit", "CostCenters")' : '@Url.Action("Create", "CostCenters")';
+
+            const payload = {
+                Id: parseInt($('#centerId').val()),
+                Code: $('#centerCode').val(),
+                NameAr: $('#centerNameAr').val(),
+                NameEn: $('#centerNameEn').val(),
+                ParentId: $('#centerParentId').val() ? parseInt($('#centerParentId').val()) : null,
+                IsTransactional: $('#centerIsTransactional').is(':checked'),
+                IsActive: $('#centerIsActive').is(':checked'),
+                RowVersion: $('#centerRowVersion').val() ? $('#centerRowVersion').val() : null
+            };
+
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                $('#saveSpinner').addClass('d-none');
+                $('#btnSaveCenter').prop('disabled', false);
+
+                if (data.success) {
+                    centerModalInstance.hide();
+                    loadTree();
+                } else {
+                    $('#modalAlert').text(data.message).show();
+                }
+            })
+            .catch(err => {
+                $('#saveSpinner').addClass('d-none');
+                $('#btnSaveCenter').prop('disabled', false);
+                $('#modalAlert').text('حدث خطأ أثناء حفظ البيانات: ' + err).show();
+            });
+        }
+
+        function deleteCenter(id, code) {
+            if (!confirm(`هل أنت متأكد من حذف مركز التكلفة (${code})؟`)) return;
+
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            $.post('@Url.Action("Delete", "CostCenters")', { id: id, __RequestVerificationToken: token }, function (res) {
+                if (res.success) {
+                    hideDetails();
+                    loadTree();
+                } else {
+                    alert(res.message);
+                }
+            }).fail(function () {
+                alert('حدث خطأ أثناء محاولة الحذف.');
+            });
+        }
+    </script>
+}

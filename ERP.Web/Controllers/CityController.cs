@@ -2,6 +2,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Infrastructure.Data;
 using ERP.Web.Authorization;
+using ERP.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,16 +18,23 @@ namespace ERP.Web.Controllers
         private readonly ErpDbContext _context;
         private readonly ICurrentUserContext _currentUser;
         private readonly IAuditService _audit;
+        private readonly ICodeSequenceService _sequenceService;
 
         private const string SC_Code   = "CIT001";
         private const string SC_Name   = "Cities";
         private const string SC_Module = "MasterData";
+        private const string EntityName = "City";
 
-        public CityController(ErpDbContext context, ICurrentUserContext currentUser, IAuditService audit)
+        public CityController(
+            ErpDbContext context,
+            ICurrentUserContext currentUser,
+            IAuditService audit,
+            ICodeSequenceService sequenceService)
         {
-            _context     = context;
-            _currentUser = currentUser;
-            _audit       = audit;
+            _context         = context;
+            _currentUser     = currentUser;
+            _audit           = audit;
+            _sequenceService = sequenceService;
         }
 
         [HttpGet]
@@ -62,11 +70,16 @@ namespace ERP.Web.Controllers
                 .Take(pageSize)
                 .ToListAsync();
 
-            ViewBag.SearchString   = searchString;
-            ViewBag.GovernorateId  = governorateId;
-            ViewBag.CurrentPage    = page;
-            ViewBag.TotalPages     = (int)Math.Ceiling(totalCount / (double)pageSize);
-            ViewBag.TotalCount     = totalCount;
+            var seqConfig = await _sequenceService.GetConfigAsync(EntityName);
+
+            ViewBag.SearchString    = searchString;
+            ViewBag.GovernorateId   = governorateId;
+            ViewBag.CurrentPage     = page;
+            ViewBag.TotalPages      = (int)Math.Ceiling(totalCount / (double)pageSize);
+            ViewBag.TotalCount      = totalCount;
+            ViewBag.NextCode        = seqConfig.PreviewCode;
+            ViewBag.IsAutoCode      = seqConfig.IsAuto;
+            ViewBag.IsManualAllowed = seqConfig.IsManualAllowed;
 
             return View(items);
         }
@@ -89,40 +102,56 @@ namespace ERP.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [HasPermission("MasterData.Cities.Add")]
-        public async Task<IActionResult> Create(City model)
+        public async Task<IActionResult> Create(City model, bool? isManualCode = null)
         {
+            // Auto-number logic
+            bool shouldAutoCode = isManualCode.HasValue
+                ? (!isManualCode.Value && await _sequenceService.IsAutoEnabledAsync(EntityName))
+                : (string.IsNullOrWhiteSpace(model.Code) || (await _sequenceService.IsAutoEnabledAsync(EntityName) && !await _sequenceService.IsManualAllowedAsync(EntityName)));
+
+            if (shouldAutoCode)
+            {
+                model.Code = await _sequenceService.GetNextCodeAsync(EntityName);
+            }
+
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "City Code is required.");
+                ModelState.AddModelError("Code", "كود المدينة مطلوب.");
             else if (await _context.Cities.AnyAsync(c => c.Code == model.Code.Trim()))
-                ModelState.AddModelError("Code", "City Code already exists.");
+                ModelState.AddModelError("Code", "كود المدينة مسجل مسبقاً.");
 
             if (model.GovernorateId <= 0 || !await _context.Governorates.AnyAsync(g => g.Id == model.GovernorateId))
-                ModelState.AddModelError("GovernorateId", "Please select a valid governorate.");
+                ModelState.AddModelError("GovernorateId", "يرجى اختيار المحافظة التابعة لها المدينة.");
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "الاسم العربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (ModelState.IsValid)
             {
                 model.Code      = model.Code.Trim();
-                model.NameAr    = model.NameAr.Trim();
-                model.NameEn    = model.NameEn.Trim();
+                model.NameAr    = model.NameAr?.Trim() ?? string.Empty;
+                model.NameEn    = string.IsNullOrWhiteSpace(model.NameEn) ? model.NameAr : model.NameEn.Trim();
                 model.CreatedAt = DateTime.UtcNow;
 
                 _context.Cities.Add(model);
                 await _context.SaveChangesAsync();
 
                 await _audit.LogCreateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "City",
+                    entityName: EntityName,
                     entityId:   model.Id.ToString(),
                     newValues: new { model.Id, model.Code, model.NameAr, model.NameEn, model.GovernorateId, model.IsActive });
+
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم حفظ المدينة بنجاح.", Url.Action(nameof(Index), new { governorateId = model.GovernorateId }));
 
                 TempData["SuccessMessage"] = "City created successfully.";
                 return RedirectToAction(nameof(Index), new { governorateId = model.GovernorateId });
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure("لا يمكن حفظ المدينة. يرجى مراجعة الأخطاء الموضحة وتصحيحها.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index), new { governorateId = model.GovernorateId });
@@ -134,44 +163,70 @@ namespace ERP.Web.Controllers
         public async Task<IActionResult> Edit(City model)
         {
             if (string.IsNullOrWhiteSpace(model.Code))
-                ModelState.AddModelError("Code", "City Code is required.");
+                ModelState.AddModelError("Code", "كود المدينة مطلوب.");
             else if (await _context.Cities.AnyAsync(c => c.Code == model.Code.Trim() && c.Id != model.Id))
-                ModelState.AddModelError("Code", "City Code already exists.");
+                ModelState.AddModelError("Code", "كود المدينة مسجل مسبقاً لصالح مدينة أخرى.");
 
             if (model.GovernorateId <= 0 || !await _context.Governorates.AnyAsync(g => g.Id == model.GovernorateId))
-                ModelState.AddModelError("GovernorateId", "Please select a valid governorate.");
+                ModelState.AddModelError("GovernorateId", "يرجى اختيار المحافظة التابعة لها المدينة.");
 
             if (string.IsNullOrWhiteSpace(model.NameAr))
-                ModelState.AddModelError("NameAr", "Arabic Name is required.");
+                ModelState.AddModelError("NameAr", "الاسم العربي مطلوب.");
 
             if (string.IsNullOrWhiteSpace(model.NameEn))
-                ModelState.AddModelError("NameEn", "English Name is required.");
+                model.NameEn = model.NameAr?.Trim() ?? string.Empty;
 
             if (ModelState.IsValid)
             {
                 var entity = await _context.Cities.FindAsync(model.Id);
                 if (entity == null) return NotFound();
 
-                var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.GovernorateId, entity.IsActive };
+                var oldValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.GovernorateId,
+                    entity.IsActive,
+                    OldCode = entity.Code
+                };
 
                 entity.Code          = model.Code.Trim();
-                entity.NameAr        = model.NameAr.Trim();
-                entity.NameEn        = model.NameEn.Trim();
+                entity.NameAr        = model.NameAr?.Trim() ?? string.Empty;
+                entity.NameEn        = string.IsNullOrWhiteSpace(model.NameEn) ? (model.NameAr?.Trim() ?? string.Empty) : model.NameEn.Trim();
                 entity.GovernorateId = model.GovernorateId;
                 entity.IsActive      = model.IsActive;
                 entity.UpdatedAt     = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
+                var newValues = new
+                {
+                    entity.Id,
+                    entity.Code,
+                    entity.NameAr,
+                    entity.NameEn,
+                    entity.GovernorateId,
+                    entity.IsActive,
+                    NewCode = entity.Code
+                };
+
                 await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                    entityName: "City",
+                    entityName: EntityName,
                     entityId:   entity.Id.ToString(),
                     oldValues:  oldValues,
-                    newValues: new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.GovernorateId, entity.IsActive });
+                    newValues:  newValues);
+
+                if (Request.IsAjaxRequest())
+                    return this.JsonSuccess("تم تحديث بيانات المدينة بنجاح.", Url.Action(nameof(Index), new { governorateId = entity.GovernorateId }));
 
                 TempData["SuccessMessage"] = "City updated successfully.";
-                return RedirectToAction(nameof(Index), new { governorateId = model.GovernorateId });
+                return RedirectToAction(nameof(Index), new { governorateId = entity.GovernorateId });
             }
+
+            if (Request.IsAjaxRequest())
+                return this.JsonValidationFailure("لا يمكن حفظ التعديلات. يرجى مراجعة الأخطاء الموضحة وتصحيحها.");
 
             TempData["ErrorMessage"] = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
             return RedirectToAction(nameof(Index), new { governorateId = model.GovernorateId });
@@ -185,18 +240,36 @@ namespace ERP.Web.Controllers
             var entity = await _context.Cities.FindAsync(id);
             if (entity == null) return NotFound();
 
+            // Delete Protection: Check for associated customers or vendors
+            bool hasCustomers = await _context.Customers.AnyAsync(c => c.CityId == id);
+            bool hasVendors = await _context.Vendors.AnyAsync(v => v.CityId == id);
+
+            if (hasCustomers || hasVendors)
+            {
+                TempData["ErrorMessage"] = "لا يمكن حذف المدينة لوجود عملاء أو موردين مرتبطين بها.";
+                return RedirectToAction(nameof(Index), new { governorateId = entity.GovernorateId });
+            }
+
             var oldValues = new { entity.Id, entity.Code, entity.NameAr, entity.NameEn, entity.GovernorateId, entity.IsActive };
 
-            _context.Cities.Remove(entity);
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.Cities.Remove(entity);
+                await _context.SaveChangesAsync();
 
-            await _audit.LogDeleteAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "City",
-                entityId:   id.ToString(),
-                oldValues:  oldValues);
+                await _audit.LogDeleteAsync(SC_Code, SC_Name, SC_Module,
+                    entityName: EntityName,
+                    entityId:   id.ToString(),
+                    oldValues:  oldValues);
 
-            TempData["SuccessMessage"] = "City deleted successfully.";
-            return RedirectToAction(nameof(Index));
+                TempData["SuccessMessage"] = "تم حذف المدينة بنجاح.";
+            }
+            catch (DbUpdateException)
+            {
+                TempData["ErrorMessage"] = "لا يمكن حذف المدينة لوجود سجلات مرتبطة بها.";
+            }
+
+            return RedirectToAction(nameof(Index), new { governorateId = entity.GovernorateId });
         }
 
         [HttpPost]
@@ -214,13 +287,13 @@ namespace ERP.Web.Controllers
             await _context.SaveChangesAsync();
 
             await _audit.LogUpdateAsync(SC_Code, SC_Name, SC_Module,
-                entityName: "City",
+                entityName: EntityName,
                 entityId:   id.ToString(),
                 oldValues:  oldValues,
                 newValues: new { entity.Id, entity.Code, entity.IsActive });
 
             TempData["SuccessMessage"] = $"City status changed to {(entity.IsActive ? "Active" : "Inactive")}.";
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(Index), new { governorateId = entity.GovernorateId });
         }
     }
 }
