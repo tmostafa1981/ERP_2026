@@ -1,0 +1,208 @@
+@model IEnumerable<ERP.Application.DTOs.InventoryCosting.CostAdjustmentRecordDto>
+@{
+    ViewData["Title"] = "سجل تدقيق تسويات إعادة احتساب التكلفة";
+    Layout = "_Layout";
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-clock-rotate-left me-2"></i>سجل تدقيق تسويات إعادة احتساب التكلفة (Audit Trail)
+            </h4>
+            <span class="text-muted small">تتبع عمليات إعادة التشغيل الزمني لتكلفة المبيعات وفروق COGS الناتجة عن تعديل المشتريات بأثر رجعي</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                <i class="fa-solid fa-print me-1"></i> طباعة
+            </button>
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة لاستعلام التكلفة
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm bg-warning bg-opacity-10 border-start border-warning border-4">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-bold d-block">إجمالي فروق تكلفة البضاعة المباعة (COGS Differences)</span>
+                            <h3 class="fw-bold text-dark mb-0 mt-1">@(((decimal)(ViewBag.TotalDifference ?? 0m)).ToString("N2")) <small class="fs-6">ج.م</small></h3>
+                        </div>
+                        <div class="bg-warning text-dark p-3 rounded-circle">
+                            <i class="fa-solid fa-scale-balanced fa-xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm bg-danger bg-opacity-10 border-start border-danger border-4">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-bold d-block">حركات مسجلة لفترات مالية مغلقة (رحلت كقيود تسوية)</span>
+                            <h3 class="fw-bold text-danger mb-0 mt-1">@(ViewBag.ClosedPeriodsCount ?? 0) <small class="fs-6">حركة</small></h3>
+                        </div>
+                        <div class="bg-danger text-white p-3 rounded-circle">
+                            <i class="fa-solid fa-lock fa-xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="AdjustmentAuditTrail">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">رقم دفعة التسوية (Batch No)</label>
+                        <input type="text" name="batchNumber" value="@ViewBag.BatchNumber" class="form-control form-control-sm" placeholder="RECALC-..." />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="branchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-2 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm flex-grow-1 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> تصفية
+                        </button>
+                        <a asp-action="AdjustmentAuditTrail" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-bordered">
+                    <thead class="table-dark small">
+                        <tr>
+                            <th>رقم الدفعة</th>
+                            <th>تاريخ الحركة</th>
+                            <th>فاتورة الشراء الأصلية</th>
+                            <th>المستند المتأثر (مبيعات/تحويل)</th>
+                            <th>الصنف</th>
+                            <th>المستودع</th>
+                            <th>التكلفة السابقة</th>
+                            <th>التكلفة المعاد احتسابها</th>
+                            <th>فرق التكلفة</th>
+                            <th>حالة الفترة</th>
+                            <th>القيد المحاسبي المرتبط</th>
+                            <th>السبب</th>
+                        </tr>
+                    </thead>
+                    <tbody class="small">
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="12" class="text-center py-4 text-muted">
+                                    <i class="fa-regular fa-clipboard fa-2x mb-2 d-block"></i>
+                                    لا توجد سجلات تسوية تكلفة مسجلة حتى الآن.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var r in Model)
+                            {
+                                <tr>
+                                    <td class="font-monospace small"><span class="badge bg-secondary">@r.BatchNumber</span></td>
+                                    <td>@r.MovementDate.ToString("yyyy-MM-dd")</td>
+                                    <td class="fw-bold font-monospace">
+                                        <a asp-controller="Documents" asp-action="Details" asp-route-id="@r.SourceDocumentHeaderId" class="text-decoration-none">
+                                            @r.SourceDocumentNumber
+                                        </a>
+                                    </td>
+                                    <td class="fw-bold font-monospace">
+                                        @if (r.AffectedDocumentHeaderId.HasValue)
+                                        {
+                                            <a asp-controller="Documents" asp-action="Details" asp-route-id="@r.AffectedDocumentHeaderId" class="text-decoration-none">
+                                                @r.AffectedDocumentNumber
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span>-</span>
+                                        }
+                                    </td>
+                                    <td class="text-start">
+                                        <div class="fw-bold">@r.ItemName</div>
+                                        <small class="text-muted font-monospace">@r.ItemCode</small>
+                                    </td>
+                                    <td>@r.WarehouseName</td>
+                                    <td>@r.OriginalUnitCost.ToString("N4")</td>
+                                    <td class="fw-bold text-primary">@r.RecalculatedUnitCost.ToString("N4")</td>
+                                    <td class="fw-bold @(r.CostDifference > 0 ? "text-danger" : "text-success")">
+                                        @(r.CostDifference > 0 ? $"+{r.CostDifference:N2}" : r.CostDifference.ToString("N2"))
+                                    </td>
+                                    <td>
+                                        @if (r.IsClosedPeriod)
+                                        {
+                                            <span class="badge bg-danger" title="فترة مغلقة - تم حماية القيد الأصلي وتوليد قيد تسوية بفترة مفتوحة">
+                                                <i class="fa-solid fa-lock me-1"></i> مغلقة
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success">
+                                                <i class="fa-solid fa-lock-open me-1"></i> مفتوحة
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (r.AdjustmentJournalEntryId.HasValue)
+                                        {
+                                            <a asp-controller="JournalEntries" asp-action="Details" asp-route-id="@r.AdjustmentJournalEntryId" class="badge bg-primary text-decoration-none p-2">
+                                                <i class="fa-solid fa-book me-1"></i> @r.AdjustmentJournalEntryNumber
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td class="text-start small text-muted">@r.Reason</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    @if (Model.Any())
+                    {
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="8" class="text-end">إجمالي فروق التكلفة المسجلة:</td>
+                                <td class="fs-6 @(((decimal)(ViewBag.TotalDifference ?? 0m)) > 0 ? "text-danger" : "text-success")">
+                                    @(((decimal)(ViewBag.TotalDifference ?? 0m)).ToString("N2"))
+                                </td>
+                                <td colspan="3"></td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

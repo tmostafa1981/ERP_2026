@@ -18,6 +18,8 @@ namespace ERP.Domain.Entities
 
         public ItemSerialStatus Status { get; set; } = ItemSerialStatus.Available;
 
+        public decimal UnitCost { get; set; } = 0m;
+
         public DateTime InDate { get; set; } = DateTime.UtcNow;
         public DateTime? OutDate { get; set; }
 

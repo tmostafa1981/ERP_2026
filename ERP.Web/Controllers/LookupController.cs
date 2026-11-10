@@ -236,6 +236,8 @@ namespace ERP.Web.Controllers
             int targetBranchId = _currentUser.BranchId > 0 ? _currentUser.BranchId : (branchId ?? 0);
             if (targetBranchId > 0)
             {
+                if (!_currentUser.CanAccessBranch(targetBranchId))
+                    return Forbid();
                 query = query.Where(c => c.BranchId == targetBranchId);
             }
 
@@ -282,6 +284,8 @@ namespace ERP.Web.Controllers
             int targetBranchId = _currentUser.BranchId > 0 ? _currentUser.BranchId : (branchId ?? 0);
             if (targetBranchId > 0)
             {
+                if (!_currentUser.CanAccessBranch(targetBranchId))
+                    return Forbid();
                 query = query.Where(c => c.BranchId == targetBranchId);
             }
 

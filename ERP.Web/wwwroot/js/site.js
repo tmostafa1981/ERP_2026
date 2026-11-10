@@ -141,6 +141,20 @@ function initErpModalForms() {
         $form.find('.is-invalid').removeClass('is-invalid');
         $form.find('.invalid-feedback').remove();
 
+        // 1b. Client-side required GL account check for Customer / Vendor forms
+        if ($form.hasClass('cust-vendor-account-required-form')) {
+            var accVal = $form.find('input[name="FinancialAccountId"]').val();
+            if (!accVal || parseInt(accVal, 10) <= 0) {
+                renderValidationErrors(
+                    $form,
+                    $modalBody,
+                    'يرجى تحديد الحساب المالي المرتبط في دليل الحسابات (لا يمكن الحفظ بدون تسجيل الحساب).',
+                    { FinancialAccountId: ['يرجى اختيار الحساب المالي من دليل الحسابات.'] }
+                );
+                return;
+            }
+        }
+
         // 2. Set loading state on submit button
         var originalBtnHtml = $submitBtn.html();
         $submitBtn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin me-1 ms-0"></i> جاري الحفظ...');

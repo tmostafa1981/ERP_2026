@@ -654,9 +654,8 @@ namespace ERP.Tests.Unit
             var defaultCustCat = await _db.CustomerCategories
                 .FirstOrDefaultAsync(cc => cc.BranchId == createdBranch.Id && cc.IsDefault);
             Assert.NotNull(defaultCustCat);
-            Assert.Equal("ALX", defaultCustCat.Code);
-            Assert.Equal("فرع الإسكندرية", defaultCustCat.NameAr);
-            Assert.Equal("Alexandria Branch", defaultCustCat.NameEn);
+            Assert.Equal("EGP-MAC", defaultCustCat.Code);
+            Assert.Equal("عملاء مصري ماكينات", defaultCustCat.NameAr);
             Assert.True(defaultCustCat.IsDefault);
 
             // Verify Default Vendor Category auto-created

@@ -351,6 +351,30 @@
                                             </div>
                                             <span class="text-muted" style="font-size: 0.7rem;">(حـ/ الخصم المسموح به / المكتسب)</span>
                                         </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold mb-1">حساب تكلفة المبيعات الافتراضي (COGS)</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="account"
+                                                 data-input-name="DefaultCogsAccountId"
+                                                 data-value="@t.DefaultCogsAccountId"
+                                                 data-text="@(t.DefaultCogsAccountId.HasValue && glDict.TryGetValue(t.DefaultCogsAccountId.Value, out var cogsTxt) ? cogsTxt : t.DefaultCogsAccountName)"
+                                                 data-placeholder="-- اختياري - ابحث برقم أو اسم الحساب --"
+                                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(حـ/ تكلفة البضاعة المباعة للترحيل الآلي للقيود)</span>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold mb-1">حساب المخزون الافتراضي (Inventory)</label>
+                                            <div class="erp-lookup-picker"
+                                                 data-type="account"
+                                                 data-input-name="DefaultInventoryAccountId"
+                                                 data-value="@t.DefaultInventoryAccountId"
+                                                 data-text="@(t.DefaultInventoryAccountId.HasValue && glDict.TryGetValue(t.DefaultInventoryAccountId.Value, out var invTxt) ? invTxt : t.DefaultInventoryAccountName)"
+                                                 data-placeholder="-- اختياري - ابحث برقم أو اسم الحساب --"
+                                                 data-extra-filters='{"transactionalOnly":"true"}'>
+                                            </div>
+                                            <span class="text-muted" style="font-size: 0.7rem;">(حـ/ بضاعة بالمستودع للطرف الدائن في قيد التكلفة)</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -565,6 +589,26 @@
                                         </div>
                                         <span class="text-muted" style="font-size: 0.7rem;">(حـ/ الخصم المسموح به / المكتسب)</span>
                                     </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold mb-1">حساب تكلفة المبيعات الافتراضي (COGS)</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="account"
+                                             data-input-name="DefaultCogsAccountId"
+                                             data-placeholder="-- اختياري - ابحث برقم أو اسم الحساب --"
+                                             data-extra-filters='{"transactionalOnly":"true"}'>
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(حـ/ تكلفة البضاعة المباعة للترحيل الآلي للقيود)</span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold mb-1">حساب المخزون الافتراضي (Inventory)</label>
+                                        <div class="erp-lookup-picker"
+                                             data-type="account"
+                                             data-input-name="DefaultInventoryAccountId"
+                                             data-placeholder="-- اختياري - ابحث برقم أو اسم الحساب --"
+                                             data-extra-filters='{"transactionalOnly":"true"}'>
+                                        </div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">(حـ/ بضاعة بالمستودع للطرف الدائن في قيد التكلفة)</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -647,3 +691,18 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            if (window.ErpLookup && typeof window.ErpLookup.init === 'function') {
+                window.ErpLookup.init();
+            }
+            $('.modal').on('shown.bs.modal', function () {
+                if (window.ErpLookup && typeof window.ErpLookup.init === 'function') {
+                    window.ErpLookup.init(this);
+                }
+            });
+        });
+    </script>
+}

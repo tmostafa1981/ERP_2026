@@ -23,6 +23,9 @@ namespace ERP.Domain.Entities
         public decimal TaxAmount { get; set; } = 0m;
         public decimal LineTotal { get; set; }
 
+        public decimal UnitCost { get; set; } = 0m;
+        public decimal TotalCost { get; set; } = 0m;
+
         public int? WarehouseId { get; set; }
         public int? CostCenterId { get; set; }
         public string? Notes { get; set; }

@@ -1,0 +1,185 @@
+@model IEnumerable<ERP.Web.Controllers.SalesProfitabilityLineDto>
+@{
+    ViewData["Title"] = "تقرير ربحية المبيعات وتكلفة البضاعة المباعة (COGS)";
+    Layout = "_Layout";
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-chart-line me-2"></i>تقرير أرباح المبيعات وتكلفة البضاعة المباعة (Sales Profitability & COGS)
+            </h4>
+            <span class="text-muted small">مقارنة إيرادات المبيعات المحققة مقابل تكلفة البضاعة المباعة الفعلية واحتساب مجمل الربح وهامش الربحية</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                <i class="fa-solid fa-print me-1"></i> طباعة
+            </button>
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> استعلام تكلفة المخزون
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-primary bg-opacity-10 border-start border-primary border-4">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-bold d-block">إجمالي صافي المبيعات</span>
+                    <h3 class="fw-bold text-primary mb-0 mt-1">@(((decimal)(ViewBag.TotalSales ?? 0m)).ToString("N2")) <small class="fs-6">ج.م</small></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-danger bg-opacity-10 border-start border-danger border-4">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-bold d-block">إجمالي تكلفة المبيعات (COGS)</span>
+                    <h3 class="fw-bold text-danger mb-0 mt-1">@(((decimal)(ViewBag.TotalCogs ?? 0m)).ToString("N2")) <small class="fs-6">ج.م</small></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-success bg-opacity-10 border-start border-success border-4">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-bold d-block">مجمل الربح (Gross Profit)</span>
+                    <h3 class="fw-bold text-success mb-0 mt-1">@(((decimal)(ViewBag.TotalProfit ?? 0m)).ToString("N2")) <small class="fs-6">ج.م</small></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm bg-info bg-opacity-10 border-start border-info border-4">
+                <div class="card-body p-3">
+                    <span class="text-muted small fw-bold d-block">متوسط هامش الربح %</span>
+                    <h3 class="fw-bold text-info mb-0 mt-1">@(((decimal)(ViewBag.OverallMargin ?? 0m)).ToString("N2"))%</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="Profitability">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="branchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">العميل</label>
+                        <select name="customerId" class="form-select form-select-sm" asp-items="ViewBag.Customers">
+                            <option value="">-- كل العملاء --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الصنف</label>
+                        <select name="itemId" class="form-select form-select-sm" asp-items="ViewBag.Items">
+                            <option value="">-- كل الأصناف --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-12 d-flex justify-content-end gap-2 mt-2">
+                        <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> عرض التقرير
+                        </button>
+                        <a asp-action="Profitability" class="btn btn-outline-secondary btn-sm" title="إعادة ضبط">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-bordered">
+                    <thead class="table-dark small">
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>رقم الفاتورة</th>
+                            <th>الفرع</th>
+                            <th>كود الصنف</th>
+                            <th class="text-start">اسم الصنف</th>
+                            <th>الكمية المباعة</th>
+                            <th>إيراد المبيعات (EGP)</th>
+                            <th>تكلفة الوحدة (EGP)</th>
+                            <th>إجمالي تكلفة المبيعات COGS</th>
+                            <th>مجمل الربح (EGP)</th>
+                            <th>هامش الربح %</th>
+                        </tr>
+                    </thead>
+                    <tbody class="small">
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="11" class="text-center py-4 text-muted">
+                                    <i class="fa-regular fa-chart-bar fa-2x mb-2 d-block"></i>
+                                    لا توجد مبيعات مسجلة مطابقة لمعايير البحث المحددة.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var line in Model)
+                            {
+                                <tr>
+                                    <td>@line.DocumentDate.ToString("yyyy-MM-dd")</td>
+                                    <td class="fw-bold font-monospace">
+                                        <a asp-controller="Documents" asp-action="Details" asp-route-id="@line.DocumentId" class="text-decoration-none">
+                                            @line.DocumentNumber
+                                        </a>
+                                    </td>
+                                    <td><span class="badge bg-secondary">@line.BranchName</span></td>
+                                    <td class="font-monospace">@line.ItemCode</td>
+                                    <td class="text-start fw-bold">@line.ItemName</td>
+                                    <td class="fw-bold">@line.Quantity.ToString("N2")</td>
+                                    <td class="fw-bold text-primary">@line.SalesRevenue.ToString("N2")</td>
+                                    <td>@line.UnitCost.ToString("N4")</td>
+                                    <td class="fw-bold text-danger">@line.CostOfGoodsSold.ToString("N2")</td>
+                                    <td class="fw-bold @(line.GrossProfit >= 0 ? "text-success" : "text-danger")">
+                                        @line.GrossProfit.ToString("N2")
+                                    </td>
+                                    <td>
+                                        <span class="badge @(line.ProfitMarginPercentage >= 20 ? "bg-success" : (line.ProfitMarginPercentage >= 0 ? "bg-warning text-dark" : "bg-danger"))">
+                                            @line.ProfitMarginPercentage.ToString("N2")%
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    @if (Model.Any())
+                    {
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="6" class="text-end">الإجمــــــــــاليات:</td>
+                                <td class="text-primary fs-6">@(((decimal)(ViewBag.TotalSales ?? 0m)).ToString("N2"))</td>
+                                <td>-</td>
+                                <td class="text-danger fs-6">@(((decimal)(ViewBag.TotalCogs ?? 0m)).ToString("N2"))</td>
+                                <td class="text-success fs-6">@(((decimal)(ViewBag.TotalProfit ?? 0m)).ToString("N2"))</td>
+                                <td>
+                                    <span class="badge bg-primary fs-6">@(((decimal)(ViewBag.OverallMargin ?? 0m)).ToString("N2"))%</span>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

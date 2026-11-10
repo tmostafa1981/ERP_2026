@@ -1,55 +1,212 @@
 @model IEnumerable<ERP.Application.DTOs.DocumentHeaderDto>
+@using ERP.Domain.Enums
 @{
     ViewData["Title"] = "سجل المستندات والحركات";
     var allowedTypes = ViewBag.AllowedTypes as IEnumerable<ERP.Application.DTOs.TransactionTypeDto> ?? Enumerable.Empty<ERP.Application.DTOs.TransactionTypeDto>();
-    var selectedModule = ViewBag.SelectedModule as ERP.Domain.Enums.TransactionModule?;
+    var allCreatableTypes = ViewBag.AllCreatableTypes as IEnumerable<ERP.Application.DTOs.TransactionTypeDto> ?? allowedTypes.Where(x => x.CanCreate);
+    var selectedModule = ViewBag.SelectedModule as TransactionModule?;
     var selectedTypeId = ViewBag.SelectedTransactionTypeId as int?;
+    var selectedStatus = ViewBag.SelectedStatus as DocumentStatus?;
+    var searchTerm = ViewBag.SearchTerm as string ?? "";
+
+    var salesCreatable = allCreatableTypes.Where(t => t.Module == TransactionModule.Sales).ToList();
+    var purchaseCreatable = allCreatableTypes.Where(t => t.Module == TransactionModule.Purchase).ToList();
+    var inventoryCreatable = allCreatableTypes.Where(t => t.Module == TransactionModule.Inventory).ToList();
+    var transferCreatable = allCreatableTypes.Where(t => t.Module == TransactionModule.Transfer).ToList();
 }
+
+<style>
+    .doc-type-dropdown-menu {
+        max-height: 450px;
+        overflow-y: auto;
+        min-width: 340px;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18) !important;
+        z-index: 1060;
+    }
+    .doc-type-dropdown-menu::-webkit-scrollbar {
+        width: 6px;
+    }
+    .doc-type-dropdown-menu::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1;
+        border-radius: 4px;
+    }
+    .doc-category-header {
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        font-weight: 700;
+        padding: 6px 14px 4px;
+        background-color: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        border-bottom: 1px solid #edf2f7;
+    }
+    .doc-category-header:first-of-type {
+        border-top: none;
+    }
+    .doc-type-item {
+        padding: 6px 14px;
+        font-size: 0.85rem;
+        transition: background-color 0.15s ease;
+    }
+    .doc-type-item:hover {
+        background-color: #eff6ff;
+    }
+</style>
 
 <div class="container-fluid px-4 py-3">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <div>
             <h4 class="fw-bold mb-0 text-dark">
                 <i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i> سجل الحركات والمستندات
             </h4>
-            <span class="text-muted small">عرض وإدارة فواتير المبيعات، المشتريات، وأذون الصرف والاستلام.</span>
+            <span class="text-muted small">عرض وإدارة فواتير المبيعات، المشتريات، وأذون الصرف والاستلام وحركات الفروع.</span>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
             <!-- Create New Document Dropdown -->
-            <div class="dropdown">
-                <button class="btn btn-primary btn-sm dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown">
+            <div class="dropdown" id="createDocDropdownWrapper">
+                <button class="btn btn-primary btn-sm dropdown-toggle fw-bold shadow-sm" type="button" id="btnCreateDocDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="fa-solid fa-plus me-1"></i> إنشاء مستند جديد
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow">
-                    @foreach (var t in allowedTypes.Where(x => x.CanCreate))
-                    {
-                        <li>
-                            <a class="dropdown-item py-2" asp-action="Create" asp-route-transactionTypeId="@t.Id" asp-route-module="@t.Module">
-                                <span class="fw-bold">@t.LocalizedName</span>
-                                <span class="badge bg-light text-muted border ms-2 small">@t.Code</span>
-                            </a>
-                        </li>
-                    }
-                </ul>
+                <div class="dropdown-menu dropdown-menu-end shadow doc-type-dropdown-menu p-0" aria-labelledby="btnCreateDocDropdown">
+                    <!-- Search Input Inside Dropdown -->
+                    <div class="p-2 border-bottom sticky-top bg-white">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light border-end-0"><i class="fa-solid fa-search text-muted"></i></span>
+                            <input type="text" id="docTypeSearchInput" class="form-control border-start-0" placeholder="بحث سريع عن نوع الحركة..." autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div id="docTypeListContainer">
+                        @if (salesCreatable.Any())
+                        {
+                            <div class="doc-category-header text-primary">
+                                <i class="fa-solid fa-cart-shopping me-1"></i> حركات المبيعات (@salesCreatable.Count)
+                            </div>
+                            @foreach (var t in salesCreatable)
+                            {
+                                <a class="dropdown-item doc-type-item d-flex justify-content-between align-items-center" asp-action="Create" asp-route-transactionTypeId="@t.Id" asp-route-module="@t.Module" data-search-text="@t.LocalizedName @t.Code">
+                                    <div>
+                                        <span class="fw-bold text-dark">@t.LocalizedName</span>
+                                        @if (t.Code.Contains("MAIN"))
+                                        {
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size: 0.65rem;">المركز الرئيسي</span>
+                                        }
+                                        else if (t.Code.Contains("BRANCH"))
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.65rem;">الفرع</span>
+                                        }
+                                    </div>
+                                    <span class="badge bg-light text-muted border font-monospace ms-2 small">@t.Code</span>
+                                </a>
+                            }
+                        }
+
+                        @if (purchaseCreatable.Any())
+                        {
+                            <div class="doc-category-header text-success">
+                                <i class="fa-solid fa-boxes-packing me-1"></i> حركات المشتريات (@purchaseCreatable.Count)
+                            </div>
+                            @foreach (var t in purchaseCreatable)
+                            {
+                                <a class="dropdown-item doc-type-item d-flex justify-content-between align-items-center" asp-action="Create" asp-route-transactionTypeId="@t.Id" asp-route-module="@t.Module" data-search-text="@t.LocalizedName @t.Code">
+                                    <div>
+                                        <span class="fw-bold text-dark">@t.LocalizedName</span>
+                                        @if (t.Code.Contains("MAIN"))
+                                        {
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size: 0.65rem;">المركز الرئيسي</span>
+                                        }
+                                        else if (t.Code.Contains("BRANCH"))
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.65rem;">الفرع</span>
+                                        }
+                                    </div>
+                                    <span class="badge bg-light text-muted border font-monospace ms-2 small">@t.Code</span>
+                                </a>
+                            }
+                        }
+
+                        @if (inventoryCreatable.Any())
+                        {
+                            <div class="doc-category-header text-warning">
+                                <i class="fa-solid fa-warehouse me-1"></i> حركات المخازن (@inventoryCreatable.Count)
+                            </div>
+                            @foreach (var t in inventoryCreatable)
+                            {
+                                <a class="dropdown-item doc-type-item d-flex justify-content-between align-items-center" asp-action="Create" asp-route-transactionTypeId="@t.Id" asp-route-module="@t.Module" data-search-text="@t.LocalizedName @t.Code">
+                                    <div>
+                                        <span class="fw-bold text-dark">@t.LocalizedName</span>
+                                    </div>
+                                    <span class="badge bg-light text-muted border font-monospace ms-2 small">@t.Code</span>
+                                </a>
+                            }
+                        }
+
+                        @if (transferCreatable.Any())
+                        {
+                            <div class="doc-category-header text-info">
+                                <i class="fa-solid fa-right-left me-1"></i> حركات التحويلات بين الفروع (@transferCreatable.Count)
+                            </div>
+                            @foreach (var t in transferCreatable)
+                            {
+                                <a class="dropdown-item doc-type-item d-flex justify-content-between align-items-center" asp-action="Create" asp-route-transactionTypeId="@t.Id" asp-route-module="@t.Module" data-search-text="@t.LocalizedName @t.Code">
+                                    <div>
+                                        <span class="fw-bold text-dark">@t.LocalizedName</span>
+                                    </div>
+                                    <span class="badge bg-light text-muted border font-monospace ms-2 small">@t.Code</span>
+                                </a>
+                            }
+                        }
+                    </div>
+                </div>
             </div>
+
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm" title="إعادة تعيين وعرض كل الحركات">
+                <i class="fa-solid fa-rotate me-1"></i> كل الحركات
+            </a>
         </div>
     </div>
 
-    <!-- Filter Bar -->
-    <div class="card shadow-sm border-0 mb-3">
+    <!-- Quick Module Navigation Tabs -->
+    <ul class="nav nav-pills mb-3 border-bottom pb-2">
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(!selectedModule.HasValue ? "active fw-bold" : "")" asp-action="Index">
+                <i class="fa-solid fa-layer-group me-1"></i> الكل
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(selectedModule == TransactionModule.Sales ? "active fw-bold" : "")" asp-action="Index" asp-route-module="Sales">
+                <i class="fa-solid fa-cart-shopping me-1"></i> المبيعات
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(selectedModule == TransactionModule.Purchase ? "active fw-bold" : "")" asp-action="Index" asp-route-module="Purchase">
+                <i class="fa-solid fa-boxes-packing me-1"></i> المشتريات
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(selectedModule == TransactionModule.Inventory ? "active fw-bold" : "")" asp-action="Index" asp-route-module="Inventory">
+                <i class="fa-solid fa-warehouse me-1"></i> المخازن
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-3 @(selectedModule == TransactionModule.Transfer ? "active fw-bold" : "")" asp-action="Index" asp-route-module="Transfer">
+                <i class="fa-solid fa-right-left me-1"></i> التحويلات
+            </a>
+        </li>
+    </ul>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-3 bg-light">
         <div class="card-body py-2">
             <form method="get" class="row g-2 align-items-center">
-                <div class="col-md-3">
-                    <select name="module" class="form-select form-select-sm" onchange="this.form.submit()">
-                        <option value="">-- كل الأقسام --</option>
-                        <option value="Sales" selected="@(selectedModule == ERP.Domain.Enums.TransactionModule.Sales)">المبيعات</option>
-                        <option value="Purchase" selected="@(selectedModule == ERP.Domain.Enums.TransactionModule.Purchase)">المشتريات</option>
-                        <option value="Inventory" selected="@(selectedModule == ERP.Domain.Enums.TransactionModule.Inventory)">المخازن</option>
-                        <option value="Transfer" selected="@(selectedModule == ERP.Domain.Enums.TransactionModule.Transfer)">التحويلات</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
+                @if (selectedModule.HasValue)
+                {
+                    <input type="hidden" name="module" value="@selectedModule.Value" />
+                }
+                
+                <div class="col-md-3 col-sm-6">
                     <select name="transactionTypeId" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">-- كل أنواع الحركات --</option>
                         @foreach (var t in allowedTypes)
@@ -57,6 +214,30 @@
                             <option value="@t.Id" selected="@(selectedTypeId == t.Id)">@t.LocalizedName (@t.Code)</option>
                         }
                     </select>
+                </div>
+
+                <div class="col-md-2 col-sm-6">
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- كل الحالات --</option>
+                        <option value="Posted" selected="@(selectedStatus == DocumentStatus.Posted)">معتمد / نافذ</option>
+                        <option value="Draft" selected="@(selectedStatus == DocumentStatus.Draft)">مسودة</option>
+                        <option value="Cancelled" selected="@(selectedStatus == DocumentStatus.Cancelled)">ملغي</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4 col-sm-8">
+                    <div class="input-group input-group-sm">
+                        <input type="text" name="searchTerm" class="form-control" placeholder="بحث برقم المستند أو الطرف أو القيد..." value="@searchTerm" />
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa-solid fa-search me-1"></i> بحث
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-md-3 col-sm-4 text-end">
+                    <a asp-action="Index" class="btn btn-outline-secondary btn-sm w-100" title="مسح التصفية والبحث">
+                        <i class="fa-solid fa-filter-circle-xmark me-1"></i> مسح التصفية
+                    </a>
                 </div>
             </form>
         </div>
@@ -66,18 +247,18 @@
     <div class="card shadow-sm border-0">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.85rem;">
+                <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.85rem; min-width: 900px;">
                     <thead class="table-dark small">
                         <tr>
                             <th style="width: 140px;">رقم المستند</th>
-                            <th style="width: 110px;">التاريخ</th>
+                            <th style="width: 105px;">التاريخ</th>
                             <th>نوع الحركة</th>
                             <th>الطرف (عميل / مورد)</th>
                             <th class="text-end" style="width: 130px;">إجمالي المستند</th>
                             <th class="text-center" style="width: 100px;">الحالة</th>
-                            <th class="text-center" style="width: 120px;">حالة التحويل</th>
+                            <th class="text-center" style="width: 110px;">حالة التحويل</th>
                             <th style="width: 120px;">القيد المحاسبي</th>
-                            <th class="text-center" style="width: 120px;">إجراءات</th>
+                            <th class="text-center" style="width: 130px;">إجراءات</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -104,11 +285,11 @@
                                 <td>@(string.IsNullOrWhiteSpace(doc.PartyName) ? "-" : doc.PartyName)</td>
                                 <td class="text-end fw-bold text-dark font-monospace">@doc.TotalAmountNet.ToString("N2")</td>
                                 <td class="text-center">
-                                    @if (doc.Status == ERP.Domain.Enums.DocumentStatus.Posted)
+                                    @if (doc.Status == DocumentStatus.Posted)
                                     {
                                         <span class="badge bg-success">معتمد / نافذ</span>
                                     }
-                                    else if (doc.Status == ERP.Domain.Enums.DocumentStatus.Cancelled)
+                                    else if (doc.Status == DocumentStatus.Cancelled)
                                     {
                                         <span class="badge bg-danger">ملغي</span>
                                     }
@@ -118,11 +299,11 @@
                                     }
                                 </td>
                                 <td class="text-center">
-                                    @if (doc.ConversionStatus == ERP.Domain.Enums.DocumentConversionStatus.FullyConverted)
+                                    @if (doc.ConversionStatus == DocumentConversionStatus.FullyConverted)
                                     {
                                         <span class="badge bg-info text-dark">محول كلياً</span>
                                     }
-                                    else if (doc.ConversionStatus == ERP.Domain.Enums.DocumentConversionStatus.PartiallyConverted)
+                                    else if (doc.ConversionStatus == DocumentConversionStatus.PartiallyConverted)
                                     {
                                         <span class="badge bg-primary-subtle text-primary border">محول جزئياً</span>
                                     }
@@ -146,15 +327,15 @@
                                         <a asp-action="Details" asp-route-id="@doc.Id" class="btn btn-outline-secondary" title="عرض التفاصيل">
                                             <i class="fa-solid fa-eye"></i>
                                         </a>
-                                        @if (doc.Status == ERP.Domain.Enums.DocumentStatus.Posted)
+                                        @if (doc.Status == DocumentStatus.Posted)
                                         {
                                             <a asp-action="Edit" asp-route-id="@doc.Id" class="btn btn-outline-primary" title="تعديل المستند">
                                                 <i class="fa-solid fa-pen"></i>
                                             </a>
                                         }
-                                        @if (doc.Status == ERP.Domain.Enums.DocumentStatus.Posted && doc.ConversionStatus != ERP.Domain.Enums.DocumentConversionStatus.FullyConverted)
+                                        @if (doc.Status == DocumentStatus.Posted && doc.ConversionStatus != DocumentConversionStatus.FullyConverted)
                                         {
-                                            <button type="button" class="btn btn-outline-info" title="تحويل المستند" onclick="location.href='@Url.Action("Convert", new { targetTransactionTypeId = 3 })'">
+                                            <button type="button" class="btn btn-outline-info btn-convert-doc" data-id="@doc.Id" title="تحويل المستند إلى المرحلة التالية">
                                                 <i class="fa-solid fa-arrow-right-arrow-left"></i>
                                             </button>
                                         }
@@ -181,6 +362,77 @@
         document.addEventListener("DOMContentLoaded", function () {
             const token = document.querySelector('#afForm input[name="__RequestVerificationToken"]')?.value || '';
 
+            // Dropdown quick search filter
+            const searchInput = document.getElementById('docTypeSearchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', function () {
+                    const q = this.value.trim().toLowerCase();
+                    const items = document.querySelectorAll('#docTypeListContainer .doc-type-item');
+                    items.forEach(el => {
+                        const txt = (el.getAttribute('data-search-text') || el.textContent).toLowerCase();
+                        if (!q || txt.includes(q)) {
+                            el.style.display = 'flex';
+                        } else {
+                            el.style.setProperty('display', 'none', 'important');
+                        }
+                    });
+
+                    // Hide empty category headers when filtering
+                    document.querySelectorAll('#docTypeListContainer .doc-category-header').forEach(hdr => {
+                        let next = hdr.nextElementSibling;
+                        let anyVisible = false;
+                        while (next && next.classList.contains('doc-type-item')) {
+                            if (next.style.display !== 'none') {
+                                anyVisible = true;
+                                break;
+                            }
+                            next = next.nextElementSibling;
+                        }
+                        hdr.style.display = (anyVisible || !q) ? 'block' : 'none';
+                    });
+                });
+            }
+
+            // Close dropdown immediately when an item is clicked
+            document.querySelectorAll('#docTypeListContainer .dropdown-item').forEach(item => {
+                item.addEventListener('click', function () {
+                    const dropdownMenu = document.querySelector('#createDocDropdownWrapper .dropdown-menu');
+                    const dropdownToggle = document.querySelector('#btnCreateDocDropdown');
+                    if (dropdownMenu) dropdownMenu.classList.remove('show');
+                    if (dropdownToggle) {
+                        dropdownToggle.classList.remove('show');
+                        dropdownToggle.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            });
+
+            // Conversion handler
+            document.querySelectorAll('.btn-convert-doc').forEach(btn => {
+                btn.addEventListener('click', async function () {
+                    const docId = this.getAttribute('data-id');
+                    try {
+                        const res = await fetch(`/Documents/GetAllowedTargetsApi?sourceDocumentId=${docId}`);
+                        const data = await res.json();
+                        if (data.success && data.targets && data.targets.length > 0) {
+                            if (data.targets.length === 1) {
+                                window.location.href = `/Documents/Convert?targetTransactionTypeId=${data.targets[0].id}&sourceId=${docId}`;
+                            } else {
+                                let options = data.targets.map(t => `${t.id}: ${t.localizedName || t.nameAr}`).join('\n');
+                                let chosenId = prompt(`اختر رقم نوع المستند المستهدف للتحويل:\n${options}`, data.targets[0].id);
+                                if (chosenId) {
+                                    window.location.href = `/Documents/Convert?targetTransactionTypeId=${chosenId}&sourceId=${docId}`;
+                                }
+                            }
+                        } else {
+                            window.location.href = `/Documents/Convert?sourceId=${docId}`;
+                        }
+                    } catch (e) {
+                        window.location.href = `/Documents/Convert?sourceId=${docId}`;
+                    }
+                });
+            });
+
+            // Delete handler
             document.querySelectorAll('.btn-delete-doc').forEach(btn => {
                 btn.addEventListener('click', async function () {
                     const docId = this.getAttribute('data-id');
@@ -215,6 +467,15 @@
                         this.disabled = false;
                     }
                 });
+            });
+        });
+
+        // Ensure dropdowns are cleanly hidden if restored via browser back/forward (BFCache)
+        window.addEventListener('pageshow', function () {
+            document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
+            document.querySelectorAll('.dropdown-toggle.show').forEach(t => {
+                t.classList.remove('show');
+                t.setAttribute('aria-expanded', 'false');
             });
         });
     </script>

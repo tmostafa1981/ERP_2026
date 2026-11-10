@@ -146,6 +146,8 @@ namespace ERP.Tests.Unit
                         IsCreditAllowed = false,
                         CodeSequencePrefix = "INV-",
                         DefaultWarehouseId = 1,
+                        DefaultDebitAccountId = 101,
+                        DefaultCreditAccountId = 401,
                         IsActive = true
                     },
                     new TransactionType
@@ -436,6 +438,27 @@ namespace ERP.Tests.Unit
             Assert.Equal(DocumentConversionStatus.FullyConverted, quoteAfter2!.ConversionStatus);
             Assert.Equal(100, quoteAfter2.Lines[0].ConvertedQuantity);
             Assert.Equal(0, quoteAfter2.Lines[0].RemainingQuantity);
+        }
+
+        [Fact]
+        public async Task ConversionService_Should_Return_Allowed_Target_Types()
+        {
+            var dbName = Guid.NewGuid().ToString();
+            using var context = CreateDbContext(dbName);
+            await SeedBaseDataAsync(context);
+            var (_, _, convService, _) = CreateServices(context);
+
+            context.TransactionTypeConversions.Add(new TransactionTypeConversion
+            {
+                SourceTransactionTypeId = 1,
+                TargetTransactionTypeId = 2,
+                IsActive = true
+            });
+            await context.SaveChangesAsync();
+
+            var targets = await convService.GetAllowedTargetTypesAsync(1);
+            Assert.NotEmpty(targets);
+            Assert.Contains(targets, t => t.Id == 2);
         }
     }
 }

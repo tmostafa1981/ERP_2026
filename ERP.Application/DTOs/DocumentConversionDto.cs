@@ -6,6 +6,7 @@ namespace ERP.Application.DTOs
     public class ConvertDocumentRequestDto
     {
         public int TargetTransactionTypeId { get; set; }
+        public int? WarehouseId { get; set; }
         public DateTime DocumentDate { get; set; } = DateTime.Today;
         public List<int> SourceDocumentIds { get; set; } = new();
         public List<ConvertDocumentLineSelectionDto> SelectedLines { get; set; } = new();
@@ -43,5 +44,6 @@ namespace ERP.Application.DTOs
         public decimal RemainingQuantity { get; set; }
         public decimal UnitPrice { get; set; }
         public int? WarehouseId { get; set; }
+        public bool IsSerial { get; set; }
     }
 }

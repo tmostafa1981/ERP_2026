@@ -424,6 +424,10 @@
             initLookupPickers(context);
         },
 
+        init: function (context) {
+            initLookupPickers(context);
+        },
+
         setPickerValue: function (selector, id, displayText) {
             var $el = $(selector);
             var $picker = $el.hasClass('erp-lookup-picker') ? $el : $el.closest('.erp-lookup-picker');

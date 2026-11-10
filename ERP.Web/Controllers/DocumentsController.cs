@@ -48,7 +48,7 @@ namespace ERP.Web.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> Index(TransactionModule? module, int? transactionTypeId, DocumentStatus? status)
+        public async Task<IActionResult> Index(TransactionModule? module, int? transactionTypeId, DocumentStatus? status, string? searchTerm)
         {
             int branchId = _currentUser.BranchId;
             if (branchId <= 0)
@@ -56,13 +56,32 @@ namespace ERP.Web.Controllers
                 TempData["ErrorMessage"] = "يجب اختيار فرع صالح أولاً لمتابعة المستندات.";
                 return RedirectToAction("Index", "Home");
             }
+
+            // Always fetch all creatable types across all modules for the "إنشاء مستند جديد" dropdown
+            var allCreatableTypes = await _ttService.GetAllowedTypesAsync(_currentUser.UserId ?? "", branchId, null);
+            ViewBag.AllCreatableTypes = allCreatableTypes.Where(t => t.CanCreate).OrderBy(t => t.Module).ThenBy(t => t.Code).ToList();
+
+            // Filter dropdown types (filtered by module if selected)
             var allowedTypes = await _ttService.GetAllowedTypesAsync(_currentUser.UserId ?? "", branchId, module);
             ViewBag.AllowedTypes = allowedTypes;
             ViewBag.SelectedModule = module;
             ViewBag.SelectedTransactionTypeId = transactionTypeId;
             ViewBag.SelectedStatus = status;
+            ViewBag.SearchTerm = searchTerm;
 
             var docs = await _docService.GetDocumentsListAsync(branchId, module, transactionTypeId, status);
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                var term = searchTerm.Trim().ToLower();
+                docs = docs.Where(d =>
+                    (!string.IsNullOrEmpty(d.DocumentNumber) && d.DocumentNumber.ToLower().Contains(term)) ||
+                    (!string.IsNullOrEmpty(d.PartyName) && d.PartyName.ToLower().Contains(term)) ||
+                    (!string.IsNullOrEmpty(d.JournalEntryNumber) && d.JournalEntryNumber.ToLower().Contains(term)) ||
+                    (!string.IsNullOrEmpty(d.TransactionTypeName) && d.TransactionTypeName.ToLower().Contains(term)) ||
+                    (!string.IsNullOrEmpty(d.TransactionTypeCode) && d.TransactionTypeCode.ToLower().Contains(term))
+                ).ToList();
+            }
+
             return View(docs);
         }
 
@@ -344,15 +363,51 @@ namespace ERP.Web.Controllers
         // ─── Document Conversion APIs ──────────────────────────────────────────
 
         [HttpGet]
-        public async Task<IActionResult> Convert(int targetTransactionTypeId)
+        public async Task<IActionResult> Convert(int? targetTransactionTypeId, int? sourceId)
         {
             int branchId = _currentUser.BranchId;
-            var targetTT = await _ttService.GetByIdAsync(targetTransactionTypeId, _currentUser.UserId ?? "");
+
+            if ((!targetTransactionTypeId.HasValue || targetTransactionTypeId.Value <= 0) && sourceId.HasValue && sourceId.Value > 0)
+            {
+                var doc = await _context.DocumentHeaders.AsNoTracking().FirstOrDefaultAsync(d => d.Id == sourceId.Value);
+                if (doc != null)
+                {
+                    var targets = await _conversionService.GetAllowedTargetTypesAsync(doc.TransactionTypeId);
+                    if (targets.Any())
+                    {
+                        targetTransactionTypeId = targets.First().Id;
+                    }
+                }
+            }
+
+            if (!targetTransactionTypeId.HasValue || targetTransactionTypeId.Value <= 0)
+            {
+                TempData["ErrorMessage"] = "يرجى تحديد نوع المستند المستهدف للتحويل.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var targetTT = await _ttService.GetByIdAsync(targetTransactionTypeId.Value, _currentUser.UserId ?? "");
             if (targetTT == null) return NotFound();
 
             ViewBag.TargetType = targetTT;
-            var sources = await _conversionService.GetAvailableSourceDocumentsAsync(targetTransactionTypeId, branchId);
+            ViewBag.PreSelectedSourceId = sourceId;
+            ViewBag.Warehouses = await _context.Warehouses
+                .Where(w => w.IsActive && w.BranchId == branchId)
+                .OrderBy(w => w.Code)
+                .Select(w => new { w.Id, w.Code, w.LocalizedName })
+                .ToListAsync();
+            var sources = await _conversionService.GetAvailableSourceDocumentsAsync(targetTransactionTypeId.Value, branchId);
             return View(sources);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAllowedTargetsApi(int sourceDocumentId)
+        {
+            var doc = await _context.DocumentHeaders.AsNoTracking().FirstOrDefaultAsync(d => d.Id == sourceDocumentId);
+            if (doc == null) return Json(new { success = false, message = "المستند غير موجود." });
+
+            var targets = await _conversionService.GetAllowedTargetTypesAsync(doc.TransactionTypeId);
+            return Json(new { success = true, targets });
         }
 
         [HttpGet]

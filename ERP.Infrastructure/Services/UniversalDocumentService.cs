@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -24,8 +25,16 @@ namespace ERP.Infrastructure.Services
         private readonly IFiscalPeriodService _fiscalPeriodService;
         private readonly IInventoryAvailabilityService? _availabilityService;
         private readonly ICurrencyRateService _currencyRateService;
-        private static readonly SemaphoreSlim _numberLock = new(1, 1);
+        private readonly IInventoryCostingService _costingService;
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> _branchNumberLocks = new();
+        private static readonly ConcurrentDictionary<int, SemaphoreSlim> _branchJournalLocks = new();
         public static readonly SemaphoreSlim JournalNumberLock = new(1, 1);
+
+        private static SemaphoreSlim GetBranchNumberLock(int branchId) =>
+            _branchNumberLocks.GetOrAdd(branchId, _ => new SemaphoreSlim(1, 1));
+
+        public static SemaphoreSlim GetBranchJournalLock(int branchId) =>
+            _branchJournalLocks.GetOrAdd(branchId, _ => new SemaphoreSlim(1, 1));
 
         public UniversalDocumentService(
             ErpDbContext context,
@@ -36,7 +45,8 @@ namespace ERP.Infrastructure.Services
             IAuditService audit,
             IFiscalPeriodService fiscalPeriodService,
             IInventoryAvailabilityService? availabilityService = null,
-            ICurrencyRateService? currencyRateService = null)
+            ICurrencyRateService? currencyRateService = null,
+            IInventoryCostingService? costingService = null)
         {
             _context = context;
             _ttService = ttService;
@@ -47,6 +57,7 @@ namespace ERP.Infrastructure.Services
             _fiscalPeriodService = fiscalPeriodService;
             _availabilityService = availabilityService ?? new InventoryAvailabilityService(context);
             _currencyRateService = currencyRateService ?? new CurrencyRateService(context, audit, currentUser);
+            _costingService = costingService ?? new InventoryCostingService(context, audit, fiscalPeriodService);
         }
 
         public async Task<(bool Success, string Message, int? DocumentId, string? DocumentNumber)> CreateDocumentAsync(
@@ -358,7 +369,8 @@ namespace ERP.Infrastructure.Services
             return await strategy.ExecuteAsync<(bool Success, string Message, int? DocumentId, string? DocumentNumber)>(async () =>
             {
                 using var transaction = await _context.Database.BeginTransactionAsync();
-                await _numberLock.WaitAsync();
+                var branchLock = GetBranchNumberLock(branchId);
+                await branchLock.WaitAsync();
                 try
                 {
                     // Strict Server-side Inventory Availability Validation inside Transaction
@@ -433,6 +445,23 @@ namespace ERP.Infrastructure.Services
                         }
                     }
 
+                    // 1.5 Process Inventory Costing (Moving Average & Unit Costing)
+                    if (tt.AffectsInventory)
+                    {
+                        if (tt.InventoryEffect == InventoryEffect.ReceiveStock || (tt.Module == TransactionModule.Sales && tt.BaseNature == DocumentBaseNature.Return))
+                        {
+                            await _costingService.ProcessReceiptCostAsync(header);
+                        }
+                        else if (tt.InventoryEffect == InventoryEffect.IssueStock || (tt.Module == TransactionModule.Purchase && tt.BaseNature == DocumentBaseNature.Return))
+                        {
+                            await _costingService.ProcessIssueCostAsync(header);
+                        }
+                        else if (tt.Module == TransactionModule.Transfer)
+                        {
+                            await _costingService.ProcessTransferCostAsync(header);
+                        }
+                    }
+
                     // 2. Process Accounting Effect (Automated Journal Entry) immediately inside transaction
                     if (tt.AccountingEffect != AccountingEffect.None)
                     {
@@ -478,7 +507,7 @@ namespace ERP.Infrastructure.Services
                 }
                 finally
                 {
-                    _numberLock.Release();
+                    branchLock.Release();
                 }
             });
         }
@@ -540,6 +569,20 @@ namespace ERP.Infrastructure.Services
                     return (false, updCurrError ?? "خطأ في التحقق من عملة وسعر صرف المستند.");
 
                 targetRate = updResolvedRate;
+            }
+
+            // Purchase Quantity Reduction Validation: prevent reducing quantities below consumed amounts in subsequent issues
+            if (header.Status == DocumentStatus.Posted && tt.Module == TransactionModule.Purchase && tt.BaseNature != DocumentBaseNature.Return && dto.Lines != null)
+            {
+                foreach (var lineDto in dto.Lines)
+                {
+                    int whId = lineDto.WarehouseId ?? dto.WarehouseId ?? tt.DefaultWarehouseId ?? 0;
+                    decimal conv = lineDto.ConversionRate > 0 ? lineDto.ConversionRate : 1.0m;
+                    decimal newBaseQty = lineDto.Quantity * conv;
+                    var (canModify, qtyError) = await _costingService.ValidatePurchaseQuantityReductionAsync(header.Id, lineDto.ItemId, whId, newBaseQty);
+                    if (!canModify)
+                        return (false, qtyError ?? "لا يمكن تخفيض الكمية المشتراة لاستهلاك جزء منها في حركات صرف لاحقة.");
+                }
             }
 
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -917,6 +960,27 @@ namespace ERP.Infrastructure.Services
 
                     await _context.SaveChangesAsync();
 
+                    // Process Inventory Costing updates & chronological replay if applicable
+                    if (header.Status == DocumentStatus.Posted && tt.AffectsInventory)
+                    {
+                        if (tt.InventoryEffect == InventoryEffect.ReceiveStock || (tt.Module == TransactionModule.Sales && tt.BaseNature == DocumentBaseNature.Return))
+                        {
+                            await _costingService.ProcessReceiptCostAsync(header);
+                            if (tt.Module == TransactionModule.Purchase && tt.BaseNature != DocumentBaseNature.Return)
+                            {
+                                await _costingService.RecalculateCostsAfterPurchaseModificationAsync(header.Id, userId);
+                            }
+                        }
+                        else if (tt.InventoryEffect == InventoryEffect.IssueStock || (tt.Module == TransactionModule.Purchase && tt.BaseNature == DocumentBaseNature.Return))
+                        {
+                            await _costingService.ProcessIssueCostAsync(header);
+                        }
+                        else if (tt.Module == TransactionModule.Transfer)
+                        {
+                            await _costingService.ProcessTransferCostAsync(header);
+                        }
+                    }
+
                     // Regenerate accounting entry if applicable
                     if (tt.AccountingEffect != AccountingEffect.None)
                     {
@@ -1162,6 +1226,23 @@ namespace ERP.Infrastructure.Services
                 }
             }
 
+            // 1.5 Process Inventory Costing (Moving Average & Unit Costing)
+            if (tt.AffectsInventory)
+            {
+                if (tt.InventoryEffect == InventoryEffect.ReceiveStock || (tt.Module == TransactionModule.Sales && tt.BaseNature == DocumentBaseNature.Return))
+                {
+                    await _costingService.ProcessReceiptCostAsync(doc);
+                }
+                else if (tt.InventoryEffect == InventoryEffect.IssueStock || (tt.Module == TransactionModule.Purchase && tt.BaseNature == DocumentBaseNature.Return))
+                {
+                    await _costingService.ProcessIssueCostAsync(doc);
+                }
+                else if (tt.Module == TransactionModule.Transfer)
+                {
+                    await _costingService.ProcessTransferCostAsync(doc);
+                }
+            }
+
             // 2. Process Accounting Effect (Automated Journal Entry)
             int? jeId = null;
             if (tt.AccountingEffect != AccountingEffect.None)
@@ -1205,6 +1286,7 @@ namespace ERP.Infrastructure.Services
         {
             var doc = await _context.DocumentHeaders
                 .Include(h => h.TransactionType)
+                .Include(h => h.Lines)
                 .FirstOrDefaultAsync(h => h.Id == documentId);
 
             if (doc == null) return (false, "المستند غير موجود.");
@@ -1234,6 +1316,20 @@ namespace ERP.Infrastructure.Services
                 if (soldOrUsed.Any())
                 {
                     return (false, $"لا يمكن إلغاء ترحيل مستند التوريد ({doc.DocumentNumber}) لوجود سيريالات تم بيعها أو صرفها في حركات لاحقة: {string.Join(", ", soldOrUsed)}. يجب إلغاء حركات البيع أو الصرف المرتبطة بها أولاً.");
+                }
+
+                // Inventory Quantity Reduction validation: Cannot unpost if quantities were already consumed
+                if (tt.Module == TransactionModule.Purchase)
+                {
+                    foreach (var line in doc.Lines)
+                    {
+                        int whId = line.WarehouseId ?? doc.WarehouseId ?? tt.DefaultWarehouseId ?? 0;
+                        var (canModify, qtyError) = await _costingService.ValidatePurchaseQuantityReductionAsync(doc.Id, line.ItemId, whId, 0m);
+                        if (!canModify)
+                        {
+                            return (false, qtyError ?? $"لا يمكن إلغاء ترحيل مستند التوريد ({doc.DocumentNumber}) لاستهلاك جزء من كمياته في حركات بيع أو صرف لاحقة.");
+                        }
+                    }
                 }
             }
 
@@ -1265,6 +1361,12 @@ namespace ERP.Infrastructure.Services
             doc.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            // Recompute inventory costs after purchase unposting if applicable
+            if (tt.InventoryEffect == InventoryEffect.ReceiveStock && tt.Module == TransactionModule.Purchase)
+            {
+                await _costingService.RecalculateCostsAfterPurchaseModificationAsync(doc.Id, userId);
+            }
 
             await _audit.LogAsync(new AuditLogEntry
             {
@@ -1510,7 +1612,9 @@ namespace ERP.Infrastructure.Services
             var existingNumbers = await _context.DocumentHeaders
                 .IgnoreQueryFilters()
                 .Where(h => h.BranchId == branchId && h.FiscalYearId == fiscalYearId && h.DocumentNumber.StartsWith(fullPrefix))
+                .OrderByDescending(h => h.Id)
                 .Select(h => h.DocumentNumber)
+                .Take(200)
                 .ToListAsync();
 
             long maxNumber = 0;
@@ -1541,7 +1645,8 @@ namespace ERP.Infrastructure.Services
         private async Task<(bool Success, string Message, int? JournalEntryId)> GenerateJournalEntryAsync(
             DocumentHeader doc, TransactionType tt, string userId)
         {
-            await JournalNumberLock.WaitAsync();
+            var jvLock = GetBranchJournalLock(doc.BranchId);
+            await jvLock.WaitAsync();
             try
             {
                 var fy = await _context.FiscalYears.FindAsync(doc.FiscalYearId);
@@ -1551,7 +1656,9 @@ namespace ERP.Infrastructure.Services
                 var existingJVNumbers = await _context.JournalEntryHeaders
                     .IgnoreQueryFilters()
                     .Where(h => h.BranchId == doc.BranchId && h.FiscalYearId == doc.FiscalYearId && h.EntryNumber.StartsWith(jvPrefix))
+                    .OrderByDescending(h => h.Id)
                     .Select(h => h.EntryNumber)
+                    .Take(200)
                     .ToListAsync();
 
                 long maxJV = 0;
@@ -1645,8 +1752,7 @@ namespace ERP.Infrastructure.Services
                     customerAccId = cust?.FinancialAccountId ?? cust?.CustomerCategory?.ControlAccountId ?? tt.DefaultDebitAccountId ?? 0;
                     if (customerAccId <= 0)
                     {
-                        var fallbackDeb = await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Assets && a.IsActive && !a.IsGroup);
-                        customerAccId = fallbackDeb?.Id ?? 1;
+                        return (false, "لا يمكن ترحيل المستند: لم يتم تحديد الحساب المالي للعميل أو الفئة أو الحساب المدين الافتراضي لنوع الحركة.", null);
                     }
 
                     if (doc.CashBankAccountId.HasValue && doc.CashBankAccountId.Value > 0)
@@ -1655,9 +1761,11 @@ namespace ERP.Infrastructure.Services
                     }
                     else
                     {
-                        var defCash = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "110101" && a.IsActive && !a.IsGroup)
-                                   ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Assets && a.IsActive && !a.IsGroup);
-                        cashAccId = defCash?.Id ?? 1;
+                        cashAccId = tt.DefaultDebitAccountId ?? 0;
+                    }
+                    if (cashAccId <= 0)
+                    {
+                        return (false, "لا يمكن ترحيل المستند النقدي: لم يتم تحديد حساب الخزينة / البنك للمستند أو الحساب المدين الافتراضي لنوع الحركة.", null);
                     }
                 }
                 else
@@ -1676,31 +1784,37 @@ namespace ERP.Infrastructure.Services
                     if (partyAccId <= 0) partyAccId = tt.DefaultDebitAccountId ?? 0;
                     if (partyAccId <= 0)
                     {
-                        var fallbackDeb = await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Assets && a.IsActive && !a.IsGroup);
-                        partyAccId = fallbackDeb?.Id ?? 1;
+                        return (false, "لا يمكن ترحيل المستند: لم يتم تحديد الحساب المالي للعميل أو الخزينة أو الحساب المدين الافتراضي لنوع الحركة.", null);
                     }
                 }
 
                 int revenueAccId = tt.DefaultCreditAccountId ?? 0;
                 if (revenueAccId <= 0)
                 {
-                    var fallbackCred = await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Revenues && a.IsActive && !a.IsGroup);
-                    revenueAccId = fallbackCred?.Id ?? 2;
+                    return (false, $"لا يمكن ترحيل المستند: لم يتم تحديد حساب الإيرادات (الحساب الدائن الافتراضي) في إعدادات نوع الحركة '{tt.LocalizedName}'.", null);
                 }
 
                 int taxAccId = tt.DefaultTaxAccountId ?? 0;
-                if (taxAccId <= 0)
+                if (doc.TaxAmount > 0 && taxAccId <= 0)
                 {
                     var vatAcc = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "210201" && a.IsActive && !a.IsGroup);
-                    taxAccId = vatAcc?.Id ?? 30;
+                    taxAccId = vatAcc?.Id ?? 0;
+                    if (taxAccId <= 0)
+                    {
+                        return (false, $"لا يمكن ترحيل المستند لوجود ضريبة بدون تحديد حساب الضريبة في إعدادات نوع الحركة '{tt.LocalizedName}'.", null);
+                    }
                 }
 
                 int discountAccId = tt.DefaultDiscountAccountId ?? 0;
-                if (discountAccId <= 0)
+                if (itemLinesDiscountLocal > 0 && discountAccId <= 0)
                 {
                     var discAcc = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "410202" && a.IsActive && !a.IsGroup)
                                ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "410201" && a.IsActive && !a.IsGroup);
-                    discountAccId = discAcc?.Id ?? 41;
+                    discountAccId = discAcc?.Id ?? 0;
+                    if (discountAccId <= 0)
+                    {
+                        return (false, $"لا يمكن ترحيل المستند لوجود خصم أصناف بدون تحديد حساب الخصم في إعدادات نوع الحركة '{tt.LocalizedName}'.", null);
+                    }
                 }
 
                 bool isReturn = tt.BaseNature == DocumentBaseNature.Return;
@@ -1872,6 +1986,82 @@ namespace ERP.Infrastructure.Services
                             CreatedAt = DateTime.UtcNow
                         });
                     }
+
+                    // 7. Automatic COGS Journal Entry: Debit COGS, Credit Inventory
+                    if (tt.AffectsInventory && doc.Lines != null && doc.Lines.Any())
+                    {
+                        var inventoryLines = doc.Lines
+                            .Where(l => (l.Item == null || !l.Item.IsService) && l.TotalCost > 0)
+                            .ToList();
+
+                        decimal totalCogsLocal = inventoryLines.Sum(l => l.TotalCost);
+                        if (totalCogsLocal > 0)
+                        {
+                            int cogsAccId = tt.DefaultCogsAccountId ?? 0;
+                            if (cogsAccId <= 0)
+                            {
+                                var cogsAcc = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "510101" && a.IsActive && !a.IsGroup)
+                                           ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code.StartsWith("51") && a.IsActive && !a.IsGroup);
+                                cogsAccId = cogsAcc?.Id ?? 0;
+                            }
+
+                            if (cogsAccId <= 0)
+                            {
+                                return (false, $"لا يمكن ترحيل المستند: لم يتم تحديد حساب تكلفة البضاعة المباعة في نوع الحركة ({tt.LocalizedName}) ولا يوجد حساب برمز 510101 في شجرة الحسابات.", null);
+                            }
+
+                            // Debit: Cost of Goods Sold
+                            je.Lines.Add(new JournalEntryLine
+                            {
+                                LineNumber = lineNum++,
+                                AccountId = cogsAccId,
+                                DebitLocal = totalCogsLocal,
+                                CreditLocal = 0m,
+                                DebitForeign = 0m,
+                                CreditForeign = 0m,
+                                CurrencyId = doc.CurrencyId,
+                                ExchangeRate = doc.ExchangeRate,
+                                Description = $"{tt.LocalizedName} - {doc.DocumentNumber} (تكلفة البضاعة المباعة COGS)",
+                                CreatedAt = DateTime.UtcNow
+                            });
+
+                            // Credit: Inventory by Warehouse
+                            var invGroups = inventoryLines.GroupBy(l => l.WarehouseId ?? doc.WarehouseId ?? tt.DefaultWarehouseId ?? 0);
+                            foreach (var grp in invGroups)
+                            {
+                                int whId = grp.Key;
+                                var wh = whId > 0 ? await _context.Warehouses.FindAsync(whId) : null;
+                                int invAccId = wh?.InventoryAccountId ?? tt.DefaultInventoryAccountId ?? 0;
+                                if (invAccId <= 0)
+                                {
+                                    var invAcc = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "110301" && a.IsActive && !a.IsGroup)
+                                              ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code.StartsWith("1103") && a.IsActive && !a.IsGroup)
+                                              ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code.StartsWith("11") && a.IsActive && !a.IsGroup);
+                                    invAccId = invAcc?.Id ?? 0;
+                                }
+
+                                if (invAccId <= 0)
+                                {
+                                    return (false, $"لا يمكن ترحيل المستند: لم يتم تحديد حساب المخزون للمستودع ولا الحساب الافتراضي في نوع الحركة ({tt.LocalizedName}) ولا حساب برمز 110301 في شجرة الحسابات.", null);
+                                }
+
+                                decimal whCostLocal = grp.Sum(l => l.TotalCost);
+                                je.Lines.Add(new JournalEntryLine
+                                {
+                                    LineNumber = lineNum++,
+                                    AccountId = invAccId,
+                                    DebitLocal = 0m,
+                                    CreditLocal = whCostLocal,
+                                    DebitForeign = 0m,
+                                    CreditForeign = 0m,
+                                    CurrencyId = doc.CurrencyId,
+                                    ExchangeRate = doc.ExchangeRate,
+                                    Description = $"{tt.LocalizedName} - {doc.DocumentNumber} (تخفيض المخزون بتكلفة البضاعة المباعة)",
+                                    CreatedAt = DateTime.UtcNow
+                                });
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -2040,6 +2230,82 @@ namespace ERP.Infrastructure.Services
                             CreatedAt = DateTime.UtcNow
                         });
                     }
+
+                    // Automatic Sales Return COGS reversal: Debit Inventory, Credit COGS
+                    if (tt.AffectsInventory && doc.Lines != null && doc.Lines.Any())
+                    {
+                        var inventoryLines = doc.Lines
+                            .Where(l => (l.Item == null || !l.Item.IsService) && l.TotalCost > 0)
+                            .ToList();
+
+                        decimal totalCogsLocal = inventoryLines.Sum(l => l.TotalCost);
+                        if (totalCogsLocal > 0)
+                        {
+                            int cogsAccId = tt.DefaultCogsAccountId ?? 0;
+                            if (cogsAccId <= 0)
+                            {
+                                var cogsAcc = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "510101" && a.IsActive && !a.IsGroup)
+                                           ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code.StartsWith("51") && a.IsActive && !a.IsGroup);
+                                cogsAccId = cogsAcc?.Id ?? 0;
+                            }
+
+                            if (cogsAccId <= 0)
+                            {
+                                return (false, $"لا يمكن ترحيل المستند: لم يتم تحديد حساب تكلفة البضاعة المباعة في نوع الحركة ({tt.LocalizedName}) ولا يوجد حساب برمز 510101 في شجرة الحسابات.", null);
+                            }
+
+                            // Debit: Inventory by Warehouse (restore historical inventory value)
+                            var invGroups = inventoryLines.GroupBy(l => l.WarehouseId ?? doc.WarehouseId ?? tt.DefaultWarehouseId ?? 0);
+                            foreach (var grp in invGroups)
+                            {
+                                int whId = grp.Key;
+                                var wh = whId > 0 ? await _context.Warehouses.FindAsync(whId) : null;
+                                int invAccId = wh?.InventoryAccountId ?? tt.DefaultInventoryAccountId ?? 0;
+                                if (invAccId <= 0)
+                                {
+                                    var invAcc = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "110301" && a.IsActive && !a.IsGroup)
+                                              ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code.StartsWith("1103") && a.IsActive && !a.IsGroup)
+                                              ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code.StartsWith("11") && a.IsActive && !a.IsGroup);
+                                    invAccId = invAcc?.Id ?? 0;
+                                }
+
+                                if (invAccId <= 0)
+                                {
+                                    return (false, $"لا يمكن ترحيل المستند: لم يتم تحديد حساب المخزون للمستودع ولا الحساب الافتراضي في نوع الحركة ({tt.LocalizedName}) ولا حساب برمز 110301 في شجرة الحسابات.", null);
+                                }
+
+                                decimal whCostLocal = grp.Sum(l => l.TotalCost);
+                                je.Lines.Add(new JournalEntryLine
+                                {
+                                    LineNumber = lineNum++,
+                                    AccountId = invAccId,
+                                    DebitLocal = whCostLocal,
+                                    CreditLocal = 0m,
+                                    DebitForeign = 0m,
+                                    CreditForeign = 0m,
+                                    CurrencyId = doc.CurrencyId,
+                                    ExchangeRate = doc.ExchangeRate,
+                                    Description = $"{tt.LocalizedName} - {doc.DocumentNumber} (إعادة إثبات المخزون بالتكلفة التاريخية)",
+                                    CreatedAt = DateTime.UtcNow
+                                });
+                            }
+
+                            // Credit: Cost of Goods Sold (reduce COGS)
+                            je.Lines.Add(new JournalEntryLine
+                            {
+                                LineNumber = lineNum++,
+                                AccountId = cogsAccId,
+                                DebitLocal = 0m,
+                                CreditLocal = totalCogsLocal,
+                                DebitForeign = 0m,
+                                CreditForeign = 0m,
+                                CurrencyId = doc.CurrencyId,
+                                ExchangeRate = doc.ExchangeRate,
+                                Description = $"{tt.LocalizedName} - {doc.DocumentNumber} (تسوية تكلفة البضاعة المباعة COGS)",
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
+                    }
                 }
             }
             else if (tt.Module == TransactionModule.Purchase)
@@ -2058,8 +2324,7 @@ namespace ERP.Infrastructure.Services
                     vendorAccId = vend?.FinancialAccountId ?? vend?.VendorCategory?.ControlAccountId ?? tt.DefaultCreditAccountId ?? 0;
                     if (vendorAccId <= 0)
                     {
-                        var fallbackCred = await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Liabilities && a.IsActive && !a.IsGroup);
-                        vendorAccId = fallbackCred?.Id ?? 3;
+                        return (false, "لا يمكن ترحيل المستند: لم يتم تحديد الحساب المالي للمورد أو الفئة أو الحساب الدائن الافتراضي لنوع الحركة.", null);
                     }
 
                     if (doc.CashBankAccountId.HasValue && doc.CashBankAccountId.Value > 0)
@@ -2068,9 +2333,11 @@ namespace ERP.Infrastructure.Services
                     }
                     else
                     {
-                        var defCash = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "110101" && a.IsActive && !a.IsGroup)
-                                   ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Assets && a.IsActive && !a.IsGroup);
-                        cashAccId = defCash?.Id ?? 1;
+                        cashAccId = tt.DefaultCreditAccountId ?? 0;
+                    }
+                    if (cashAccId <= 0)
+                    {
+                        return (false, "لا يمكن ترحيل المستند النقدي: لم يتم تحديد حساب الخزينة / البنك للمستند أو الحساب الدائن الافتراضي لنوع الحركة.", null);
                     }
                 }
                 else
@@ -2089,35 +2356,35 @@ namespace ERP.Infrastructure.Services
                     if (partyAccId <= 0) partyAccId = tt.DefaultCreditAccountId ?? 0;
                     if (partyAccId <= 0)
                     {
-                        var fallbackCred = await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Liabilities && a.IsActive && !a.IsGroup);
-                        partyAccId = fallbackCred?.Id ?? 3;
+                        return (false, "لا يمكن ترحيل المستند: لم يتم تحديد الحساب المالي للمورد أو الخزينة أو الحساب الدائن الافتراضي لنوع الحركة.", null);
                     }
                 }
 
                 int expenseAccId = tt.DefaultDebitAccountId ?? 0;
                 if (expenseAccId <= 0)
                 {
-                    var fallbackExp = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "110301" && a.IsActive && !a.IsGroup)
-                                   ?? await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Expenses && a.IsActive && !a.IsGroup);
-                    expenseAccId = fallbackExp?.Id ?? 45;
+                    return (false, $"لا يمكن ترحيل المستند: لم يتم تحديد حساب المشتريات / المخزون (الحساب المدين الافتراضي) في إعدادات نوع الحركة '{tt.LocalizedName}'.", null);
                 }
 
                 int taxAccId = tt.DefaultTaxAccountId ?? 0;
-                if (taxAccId <= 0)
+                if (doc.TaxAmount > 0 && taxAccId <= 0)
                 {
                     var vatAcc = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "210201" && a.IsActive && !a.IsGroup);
-                    taxAccId = vatAcc?.Id ?? 30;
+                    taxAccId = vatAcc?.Id ?? 0;
+                    if (taxAccId <= 0)
+                    {
+                        return (false, $"لا يمكن ترحيل المستند لوجود ضريبة بدون تحديد حساب الضريبة في إعدادات نوع الحركة '{tt.LocalizedName}'.", null);
+                    }
                 }
 
                 int discountAccId = tt.DefaultDiscountAccountId ?? 0;
-                if (discountAccId <= 0)
+                if (itemLinesDiscountLocal > 0 && discountAccId <= 0)
                 {
                     var discAcc = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code == "510201" && a.IsActive && !a.IsGroup);
                     discountAccId = discAcc?.Id ?? 0;
                     if (discountAccId <= 0)
                     {
-                        var anyCost = await _context.GLAccounts.FirstOrDefaultAsync(a => a.Code.StartsWith("51") && a.IsActive && !a.IsGroup);
-                        discountAccId = anyCost?.Id ?? 45;
+                        return (false, $"لا يمكن ترحيل المستند لوجود خصم أصناف بدون تحديد حساب الخصم في إعدادات نوع الحركة '{tt.LocalizedName}'.", null);
                     }
                 }
 
@@ -2466,15 +2733,9 @@ namespace ERP.Infrastructure.Services
                 int debitAccId = tt.DefaultDebitAccountId ?? 0;
                 int creditAccId = tt.DefaultCreditAccountId ?? 0;
 
-                if (debitAccId <= 0)
+                if (debitAccId <= 0 || creditAccId <= 0)
                 {
-                    var fallbackDeb = await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Assets && a.IsActive && !a.IsGroup);
-                    debitAccId = fallbackDeb?.Id ?? 1;
-                }
-                if (creditAccId <= 0)
-                {
-                    var fallbackCred = await _context.GLAccounts.FirstOrDefaultAsync(a => a.AccountCategory == AccountCategory.Revenues && a.IsActive && !a.IsGroup);
-                    creditAccId = fallbackCred?.Id ?? 2;
+                    return (false, $"لا يمكن ترحيل المستند: يرجى تحديد الحساب المدين والحساب الدائن الافتراضي في إعدادات نوع الحركة '{tt.LocalizedName}'.", null);
                 }
 
                 je.Lines.Add(new JournalEntryLine
@@ -2506,6 +2767,18 @@ namespace ERP.Infrastructure.Services
                 });
             }
 
+                // Recalculate totals from lines to ensure strict mathematical balancing
+                decimal totalDebits = Math.Round(je.Lines.Sum(l => l.DebitLocal), 4);
+                decimal totalCredits = Math.Round(je.Lines.Sum(l => l.CreditLocal), 4);
+
+                if (Math.Abs(totalDebits - totalCredits) > 0.005m)
+                {
+                    return (false, $"القيد المحاسبي غير متوازن: إجمالي المدين ({totalDebits}) لا يساوي إجمالي الدائن ({totalCredits}).", null);
+                }
+
+                je.TotalDebitLocal = totalDebits;
+                je.TotalCreditLocal = totalCredits;
+
                 _context.JournalEntryHeaders.Add(je);
                 await _context.SaveChangesAsync();
                 return (true, "تم إنشاء القيد بنجاح.", je.Id);
@@ -2517,7 +2790,7 @@ namespace ERP.Infrastructure.Services
             }
             finally
             {
-                JournalNumberLock.Release();
+                jvLock.Release();
             }
         }
 

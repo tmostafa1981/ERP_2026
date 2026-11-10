@@ -199,6 +199,18 @@
         </div>
     </div>
 
+    <!-- Conversion Import Helper Banner (For Delivery Notes & Invoices based on previous vouchers) -->
+    <div v-if="currentType.baseNature === 3 || currentType.baseNature === 4 || (currentType.baseNature === 1 && currentType.inventoryEffect === 0)" class="alert alert-info py-2 px-3 d-flex flex-wrap justify-content-between align-items-center mb-3 shadow-sm border-info-subtle">
+        <div class="small">
+            <i class="fa-solid fa-circle-info me-2 text-primary fs-6"></i>
+            <strong>استدعاء بنود:</strong>
+            <span>هل تريد استدعاء أصناف هذا المستند تلقائياً من مستند سابق (أمر شغل / أمر شراء / إذن تسليم أو استلام)؟</span>
+        </div>
+        <a :href="'@Url.Action("Convert", "Documents")?targetTransactionTypeId=' + currentType.id" class="btn btn-sm btn-primary fw-bold">
+            <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> فتح معالج الاستدعاء والتحويل
+        </a>
+    </div>
+
     <!-- 2. Detail Lines Card -->
     <div class="card shadow-sm border-0 mb-3">
         <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">

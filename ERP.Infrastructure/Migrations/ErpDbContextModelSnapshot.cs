@@ -863,6 +863,108 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("Companies");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.CostAdjustmentRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("AdjustmentJournalEntryId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("AffectedDocumentHeaderId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("AffectedDocumentLineId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AffectedMovementType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BatchNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("CostDifference")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("EffectiveDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsClosedPeriod")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("MovementDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("OriginalTotalCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("OriginalUnitCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("RecalculatedTotalCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("RecalculatedUnitCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("SourceDocumentHeaderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdjustmentJournalEntryId");
+
+                    b.HasIndex("AffectedDocumentHeaderId")
+                        .HasDatabaseName("IX_CostAdjustmentRecords_AffectedDoc");
+
+                    b.HasIndex("AffectedDocumentLineId");
+
+                    b.HasIndex("BatchNumber")
+                        .HasDatabaseName("IX_CostAdjustmentRecords_BatchNumber");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("SourceDocumentHeaderId")
+                        .HasDatabaseName("IX_CostAdjustmentRecords_SourceDoc");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("ItemId", "WarehouseId", "BranchId")
+                        .HasDatabaseName("IX_CostAdjustmentRecords_Item_WH_Branch");
+
+                    b.ToTable("CostAdjustmentRecords", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.CostCenter", b =>
                 {
                     b.Property<int>("Id")
@@ -1570,6 +1672,14 @@ namespace ERP.Infrastructure.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
+                    b.Property<decimal>("TotalCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("UnitCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<int>("UnitId")
                         .HasColumnType("int");
 
@@ -2246,6 +2356,95 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("Items", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ItemCostHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DocumentHeaderId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("DocumentLineId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("MovementDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("MovementType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("PostAverageCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("PostQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("PostTotalCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("PreAverageCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("PreQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("PreTotalCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("TotalCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("UnitCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("DocumentHeaderId")
+                        .HasDatabaseName("IX_ItemCostHistories_DocumentHeaderId");
+
+                    b.HasIndex("DocumentLineId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("ItemId", "WarehouseId", "BranchId", "MovementDate")
+                        .HasDatabaseName("IX_ItemCostHistories_Item_WH_Branch_Date");
+
+                    b.ToTable("ItemCostHistories", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ItemGroup", b =>
                 {
                     b.Property<int>("Id")
@@ -2474,6 +2673,10 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("UnitCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -2563,6 +2766,68 @@ namespace ERP.Infrastructure.Migrations
                         .HasDatabaseName("IX_ItemUnits_ItemId_UnitId");
 
                     b.ToTable("ItemUnits", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ItemWarehouseCost", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("CurrentQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("ItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LastDocumentId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("LastUpdatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("MovingAverageCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<decimal>("TotalCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("LastDocumentId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("ItemId", "WarehouseId", "BranchId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ItemWarehouseCosts_Item_WH_Branch");
+
+                    b.ToTable("ItemWarehouseCosts", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.JournalEntryHeader", b =>
@@ -3291,6 +3556,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("DefaultCashBankAccountId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("DefaultCogsAccountId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("DefaultCreditAccountId")
                         .HasColumnType("int");
 
@@ -3301,6 +3569,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<int?>("DefaultDiscountAccountId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("DefaultInventoryAccountId")
                         .HasColumnType("int");
 
                     b.Property<int?>("DefaultTaxAccountId")
@@ -3362,6 +3633,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("DefaultCashBankAccountId");
 
+                    b.HasIndex("DefaultCogsAccountId");
+
                     b.HasIndex("DefaultCreditAccountId");
 
                     b.HasIndex("DefaultCustomerId");
@@ -3369,6 +3642,8 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("DefaultDebitAccountId");
 
                     b.HasIndex("DefaultDiscountAccountId");
+
+                    b.HasIndex("DefaultInventoryAccountId");
 
                     b.HasIndex("DefaultTaxAccountId");
 
@@ -4633,6 +4908,62 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Branch");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.CostAdjustmentRecord", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.JournalEntryHeader", "AdjustmentJournalEntry")
+                        .WithMany()
+                        .HasForeignKey("AdjustmentJournalEntryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.DocumentHeader", "AffectedDocumentHeader")
+                        .WithMany()
+                        .HasForeignKey("AffectedDocumentHeaderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.DocumentLine", "AffectedDocumentLine")
+                        .WithMany()
+                        .HasForeignKey("AffectedDocumentLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.DocumentHeader", "SourceDocumentHeader")
+                        .WithMany()
+                        .HasForeignKey("SourceDocumentHeaderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AdjustmentJournalEntry");
+
+                    b.Navigation("AffectedDocumentHeader");
+
+                    b.Navigation("AffectedDocumentLine");
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("SourceDocumentHeader");
+
+                    b.Navigation("Warehouse");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.CostCenter", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.CostCenter", "Parent")
@@ -5075,6 +5406,48 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("ItemGroup");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ItemCostHistory", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.DocumentHeader", "DocumentHeader")
+                        .WithMany()
+                        .HasForeignKey("DocumentHeaderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.DocumentLine", "DocumentLine")
+                        .WithMany()
+                        .HasForeignKey("DocumentLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("DocumentHeader");
+
+                    b.Navigation("DocumentLine");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("Warehouse");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ItemGroup", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.ItemGroup", "ParentGroup")
@@ -5175,6 +5548,40 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Item");
 
                     b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ItemWarehouseCost", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.DocumentHeader", "LastDocument")
+                        .WithMany()
+                        .HasForeignKey("LastDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("LastDocument");
+
+                    b.Navigation("Warehouse");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.JournalEntryHeader", b =>
@@ -5397,6 +5804,11 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("DefaultCashBankAccountId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("ERP.Domain.Entities.GLAccount", "DefaultCogsAccount")
+                        .WithMany()
+                        .HasForeignKey("DefaultCogsAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ERP.Domain.Entities.GLAccount", "DefaultCreditAccount")
                         .WithMany()
                         .HasForeignKey("DefaultCreditAccountId")
@@ -5415,6 +5827,11 @@ namespace ERP.Infrastructure.Migrations
                     b.HasOne("ERP.Domain.Entities.GLAccount", "DefaultDiscountAccount")
                         .WithMany()
                         .HasForeignKey("DefaultDiscountAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.GLAccount", "DefaultInventoryAccount")
+                        .WithMany()
+                        .HasForeignKey("DefaultInventoryAccountId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Entities.GLAccount", "DefaultTaxAccount")
@@ -5436,6 +5853,8 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Navigation("DefaultCashBankAccount");
 
+                    b.Navigation("DefaultCogsAccount");
+
                     b.Navigation("DefaultCreditAccount");
 
                     b.Navigation("DefaultCustomer");
@@ -5443,6 +5862,8 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("DefaultDebitAccount");
 
                     b.Navigation("DefaultDiscountAccount");
+
+                    b.Navigation("DefaultInventoryAccount");
 
                     b.Navigation("DefaultTaxAccount");
 

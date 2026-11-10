@@ -48,6 +48,8 @@ namespace ERP.Infrastructure.Services
                 .Include(t => t.DefaultCreditAccount)
                 .Include(t => t.DefaultTaxAccount)
                 .Include(t => t.DefaultDiscountAccount)
+                .Include(t => t.DefaultCogsAccount)
+                .Include(t => t.DefaultInventoryAccount)
                 .Where(t => t.IsActive && (t.BranchId == null || t.BranchId == branchId));
 
             if (module.HasValue)
@@ -99,6 +101,8 @@ namespace ERP.Infrastructure.Services
                 .Include(t => t.DefaultCreditAccount)
                 .Include(t => t.DefaultTaxAccount)
                 .Include(t => t.DefaultDiscountAccount)
+                .Include(t => t.DefaultCogsAccount)
+                .Include(t => t.DefaultInventoryAccount)
                 .FirstOrDefaultAsync(t => t.Id == id);
 
             if (entity == null) return null;
@@ -171,6 +175,8 @@ namespace ERP.Infrastructure.Services
                 .Include(t => t.DefaultCreditAccount)
                 .Include(t => t.DefaultTaxAccount)
                 .Include(t => t.DefaultDiscountAccount)
+                .Include(t => t.DefaultCogsAccount)
+                .Include(t => t.DefaultInventoryAccount)
                 .AsQueryable();
 
             if (module.HasValue)
@@ -336,6 +342,10 @@ namespace ERP.Infrastructure.Services
                 DefaultTaxAccountName = t.DefaultTaxAccount?.LocalizedName,
                 DefaultDiscountAccountId = t.DefaultDiscountAccountId,
                 DefaultDiscountAccountName = t.DefaultDiscountAccount?.LocalizedName,
+                DefaultCogsAccountId = t.DefaultCogsAccountId,
+                DefaultCogsAccountName = t.DefaultCogsAccount?.LocalizedName,
+                DefaultInventoryAccountId = t.DefaultInventoryAccountId,
+                DefaultInventoryAccountName = t.DefaultInventoryAccount?.LocalizedName,
                 DefaultCustomerId = t.DefaultCustomerId,
                 DefaultCustomerName = t.DefaultCustomer?.LocalizedName,
                 DefaultVendorId = t.DefaultVendorId,

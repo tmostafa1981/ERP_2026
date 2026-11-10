@@ -126,18 +126,54 @@ namespace ERP.Web.Controllers
                 _context.Branches.Add(model);
                 await _context.SaveChangesAsync();
 
-                // 1. Create Default Customer Category
-                var defaultCustCat = new CustomerCategory
-                {
-                    BranchId  = model.Id,
-                    Code      = model.BranchCode,
-                    NameAr    = !string.IsNullOrWhiteSpace(model.NameAr) ? model.NameAr.Trim() : model.Name,
-                    NameEn    = !string.IsNullOrWhiteSpace(model.NameEn) ? model.NameEn.Trim() : model.Name,
-                    IsDefault = true,
-                    IsActive  = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.CustomerCategories.Add(defaultCustCat);
+                // 1. Create Default Customer Categories
+                bool isSpareParts = (!string.IsNullOrWhiteSpace(model.NameAr) ? model.NameAr : model.Name).Contains("قطع غيار");
+                _context.CustomerCategories.AddRange(
+                    new CustomerCategory
+                    {
+                        BranchId = model.Id,
+                        Code = "EGP-MAC",
+                        NameAr = "عملاء مصري ماكينات",
+                        NameEn = "Egyptian Customers - Machines",
+                        ControlAccountId = 620,
+                        IsDefault = !isSpareParts,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new CustomerCategory
+                    {
+                        BranchId = model.Id,
+                        Code = "EGP-SPR",
+                        NameAr = "عملاء مصري قطع غيار",
+                        NameEn = "Egyptian Customers - Spare Parts",
+                        ControlAccountId = 622,
+                        IsDefault = isSpareParts,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new CustomerCategory
+                    {
+                        BranchId = model.Id,
+                        Code = "USD-MAC",
+                        NameAr = "عملاء دولار ماكينات",
+                        NameEn = "Dollar Customers - Machines",
+                        ControlAccountId = 624,
+                        IsDefault = false,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new CustomerCategory
+                    {
+                        BranchId = model.Id,
+                        Code = "USD-SPR",
+                        NameAr = "عملاء دولار قطع غيار",
+                        NameEn = "Dollar Customers - Spare Parts",
+                        ControlAccountId = 626,
+                        IsDefault = false,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    }
+                );
 
                 // 2. Create Default Vendor Category
                 var defaultVendCat = new VendorCategory

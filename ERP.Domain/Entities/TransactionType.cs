@@ -19,6 +19,7 @@ namespace ERP.Domain.Entities
 
         public InventoryEffect InventoryEffect { get; set; }
         public AccountingEffect AccountingEffect { get; set; }
+        public bool AffectsInventory => InventoryEffect == InventoryEffect.IssueStock || InventoryEffect == InventoryEffect.ReceiveStock;
 
         public bool IsCashAllowed { get; set; } = true;
         public bool IsCreditAllowed { get; set; } = true;
@@ -36,6 +37,8 @@ namespace ERP.Domain.Entities
         public int? DefaultCreditAccountId { get; set; }
         public int? DefaultTaxAccountId { get; set; }
         public int? DefaultDiscountAccountId { get; set; }
+        public int? DefaultCogsAccountId { get; set; }
+        public int? DefaultInventoryAccountId { get; set; }
 
         public int? DefaultCustomerId { get; set; }
         public int? DefaultVendorId { get; set; }
@@ -55,6 +58,8 @@ namespace ERP.Domain.Entities
         public GLAccount? DefaultCreditAccount { get; set; }
         public GLAccount? DefaultTaxAccount { get; set; }
         public GLAccount? DefaultDiscountAccount { get; set; }
+        public GLAccount? DefaultCogsAccount { get; set; }
+        public GLAccount? DefaultInventoryAccount { get; set; }
 
         public ICollection<UserTransactionTypePermission> UserPermissions { get; set; } = new List<UserTransactionTypePermission>();
         public ICollection<TransactionTypeConversion> SourceConversions { get; set; } = new List<TransactionTypeConversion>();

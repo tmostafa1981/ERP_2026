@@ -1,0 +1,187 @@
+@model IEnumerable<ERP.Application.DTOs.InventoryCosting.ItemWarehouseCostDto>
+@{
+    ViewData["Title"] = "استعلام متوسط تكلفة المخزون والتقييم";
+    Layout = "_Layout";
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-coins me-2"></i>استعلام متوسط تكلفة المخزون (Moving Weighted Average)
+            </h4>
+            <span class="text-muted small">تقييم المخزون الفعلي، متوسط التكلفة المرجح على مستوى الصنف والمخزن والفرع</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                <i class="fa-solid fa-print me-1"></i> طباعة
+            </button>
+            <a asp-action="AdjustmentAuditTrail" class="btn btn-outline-warning btn-sm fw-bold">
+                <i class="fa-solid fa-clock-rotate-left me-1"></i> سجل تسويات التكلفة
+            </a>
+            <a asp-action="Profitability" class="btn btn-outline-success btn-sm fw-bold">
+                <i class="fa-solid fa-chart-line me-1"></i> تقرير ربحية المبيعات وCOGS
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-primary bg-opacity-10 border-start border-primary border-4">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-bold d-block">إجمالي القيمة الدفترية للمخزون</span>
+                            <h3 class="fw-bold text-primary mb-0 mt-1">@(((decimal)(ViewBag.TotalValuation ?? 0m)).ToString("N2")) <small class="fs-6">ج.م</small></h3>
+                        </div>
+                        <div class="bg-primary text-white p-3 rounded-circle">
+                            <i class="fa-solid fa-vault fa-xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-success bg-opacity-10 border-start border-success border-4">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-bold d-block">إجمالي كميات المخزون</span>
+                            <h3 class="fw-bold text-success mb-0 mt-1">@(((decimal)(ViewBag.TotalQuantity ?? 0m)).ToString("N2"))</h3>
+                        </div>
+                        <div class="bg-success text-white p-3 rounded-circle">
+                            <i class="fa-solid fa-boxes-stacked fa-xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-info bg-opacity-10 border-start border-info border-4">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-bold d-block">عدد الأصناف المسعرة</span>
+                            <h3 class="fw-bold text-info mb-0 mt-1">@(ViewBag.TotalItemsCount ?? 0)</h3>
+                        </div>
+                        <div class="bg-info text-white p-3 rounded-circle">
+                            <i class="fa-solid fa-tags fa-xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="Index">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="branchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">المستودع</label>
+                        <select name="warehouseId" class="form-select form-select-sm" asp-items="ViewBag.Warehouses">
+                            <option value="">-- كل المستودعات --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1">بحث بكود أو اسم الصنف</label>
+                        <input type="text" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="أدخل كود أو اسم الصنف..." />
+                    </div>
+                    <div class="col-md-2 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm flex-grow-1 fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> تصفية
+                        </button>
+                        <a asp-action="Index" class="btn btn-outline-secondary btn-sm" title="إعادة ضبط">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-bordered">
+                    <thead class="table-dark small">
+                        <tr>
+                            <th>#</th>
+                            <th>الفرع</th>
+                            <th>المستودع</th>
+                            <th>كود الصنف</th>
+                            <th class="text-start">اسم الصنف</th>
+                            <th>الرصيد الفعلي الحالي</th>
+                            <th>متوسط التكلفة المتحرك (EGP)</th>
+                            <th>إجمالي التكلفة الدفترية (EGP)</th>
+                            <th>آخر تحديث</th>
+                            <th class="d-print-none">سجل الحركات</th>
+                        </tr>
+                    </thead>
+                    <tbody class="small">
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="10" class="text-center py-4 text-muted">
+                                    <i class="fa-regular fa-folder-open fa-2x mb-2 d-block"></i>
+                                    لا توجد بيانات أرصدة أو تكلفة مسجلة مطابقة لمعايير البحث.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            int index = 1;
+                            foreach (var item in Model)
+                            {
+                                <tr>
+                                    <td>@index</td>
+                                    <td><span class="badge bg-secondary">@item.BranchName</span></td>
+                                    <td>@item.WarehouseName</td>
+                                    <td class="fw-bold font-monospace">@item.ItemCode</td>
+                                    <td class="text-start fw-bold">@item.ItemName</td>
+                                    <td class="fw-bold">@item.CurrentQuantity.ToString("N2")</td>
+                                    <td class="fw-bold text-success">@item.MovingAverageCost.ToString("N4")</td>
+                                    <td class="fw-bold text-primary">@item.TotalCost.ToString("N2")</td>
+                                    <td class="text-muted">@item.LastUpdatedDate.ToString("yyyy-MM-dd")</td>
+                                    <td class="d-print-none">
+                                        <a asp-action="CostHistory" 
+                                           asp-route-itemId="@item.ItemId" 
+                                           asp-route-warehouseId="@item.WarehouseId" 
+                                           asp-route-branchId="@item.BranchId"
+                                           class="btn btn-sm btn-outline-info py-0 px-2 fw-bold"
+                                           title="عرض تاريخ وتطور التكلفة">
+                                            <i class="fa-solid fa-timeline me-1"></i> التاريخ
+                                        </a>
+                                    </td>
+                                </tr>
+                                index++;
+                            }
+                        }
+                    </tbody>
+                    @if (Model.Any())
+                    {
+                        <tfoot class="table-light fw-bold">
+                            <tr>
+                                <td colspan="5" class="text-end">الإجمــــــــــاليات:</td>
+                                <td>@(((decimal)(ViewBag.TotalQuantity ?? 0m)).ToString("N2"))</td>
+                                <td>-</td>
+                                <td class="text-primary fs-6">@(((decimal)(ViewBag.TotalValuation ?? 0m)).ToString("N2"))</td>
+                                <td colspan="2"></td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

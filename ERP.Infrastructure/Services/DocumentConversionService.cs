@@ -36,6 +36,28 @@ namespace ERP.Infrastructure.Services
                                c.IsActive);
         }
 
+        public async Task<List<TransactionTypeDto>> GetAllowedTargetTypesAsync(int sourceTransactionTypeId)
+        {
+            var targets = await _context.TransactionTypeConversions
+                .AsNoTracking()
+                .Include(c => c.TargetTransactionType)
+                .Where(c => c.SourceTransactionTypeId == sourceTransactionTypeId && c.IsActive && c.TargetTransactionType != null && c.TargetTransactionType.IsActive)
+                .Select(c => c.TargetTransactionType!)
+                .ToListAsync();
+
+            return targets.Select(t => new TransactionTypeDto
+            {
+                Id = t.Id,
+                Code = t.Code,
+                NameAr = t.NameAr,
+                NameEn = t.NameEn,
+                LocalizedName = t.LocalizedName,
+                Module = t.Module,
+                BaseNature = t.BaseNature,
+                CodeSequencePrefix = t.CodeSequencePrefix
+            }).ToList();
+        }
+
         public async Task<List<AvailableForConversionDocumentDto>> GetAvailableSourceDocumentsAsync(
             int targetTransactionTypeId, int branchId, int? partyId = null)
         {
@@ -94,7 +116,8 @@ namespace ERP.Infrastructure.Services
                         ConvertedQuantity = l.ConvertedQuantity,
                         RemainingQuantity = l.RemainingQuantity,
                         UnitPrice = l.UnitPrice,
-                        WarehouseId = l.WarehouseId
+                        WarehouseId = l.WarehouseId,
+                        IsSerial = l.Item != null && l.Item.TrackingType == ERP.Domain.Enums.ItemTrackingType.SerialNumber
                     }).ToList();
 
                 if (availableLines.Any())
@@ -163,6 +186,19 @@ namespace ERP.Infrastructure.Services
 
             var firstSource = sourceHeaders.First();
 
+            int? chosenWarehouseId = request.WarehouseId 
+                ?? firstSource.WarehouseId 
+                ?? targetTT.DefaultWarehouseId;
+
+            if ((!chosenWarehouseId.HasValue || chosenWarehouseId.Value <= 0) && targetTT.InventoryEffect != ERP.Domain.Enums.InventoryEffect.None)
+            {
+                chosenWarehouseId = await _context.Warehouses
+                    .Where(w => w.IsActive && w.BranchId == branchId)
+                    .OrderBy(w => w.Code)
+                    .Select(w => (int?)w.Id)
+                    .FirstOrDefaultAsync();
+            }
+
             // Build new document DTO
             var newDocDto = new DocumentHeaderDto
             {
@@ -173,7 +209,7 @@ namespace ERP.Infrastructure.Services
                 PartyId = firstSource.PartyId,
                 PaymentMethod = firstSource.PaymentMethod,
                 CashBankAccountId = firstSource.CashBankAccountId,
-                WarehouseId = firstSource.WarehouseId ?? targetTT.DefaultWarehouseId,
+                WarehouseId = chosenWarehouseId,
                 CurrencyId = firstSource.CurrencyId,
                 ExchangeRate = firstSource.ExchangeRate,
                 Notes = string.IsNullOrWhiteSpace(request.Notes)
@@ -204,7 +240,7 @@ namespace ERP.Infrastructure.Services
                     UnitPrice = sl.UnitPrice,
                     DiscountAmount = 0m,
                     TaxRate = sl.TaxRate,
-                    WarehouseId = sl.WarehouseId ?? newDocDto.WarehouseId,
+                    WarehouseId = chosenWarehouseId ?? sl.WarehouseId,
                     CostCenterId = sl.CostCenterId,
                     SerialNumbers = selection.SerialNumbers ?? new List<string>()
                 });

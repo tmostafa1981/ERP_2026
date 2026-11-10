@@ -16,7 +16,10 @@ namespace ERP.Infrastructure.Services
     public class CodeSequenceService : ICodeSequenceService
     {
         private readonly ErpDbContext _context;
-        private static readonly SemaphoreSlim _memoryLock = new SemaphoreSlim(1, 1);
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _memoryLocks = new(StringComparer.OrdinalIgnoreCase);
+
+        private static SemaphoreSlim GetMemoryLock(string entityName, int? branchId) =>
+            _memoryLocks.GetOrAdd($"{entityName}:{branchId ?? 0}", _ => new SemaphoreSlim(1, 1));
 
         public static readonly IReadOnlyDictionary<string, string> DefaultPrefixes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -130,7 +133,8 @@ namespace ERP.Infrastructure.Services
 
         private async Task<string> GetNextCodeInMemoryAsync(string entityName, int? branchId)
         {
-            await _memoryLock.WaitAsync();
+            var memLock = GetMemoryLock(entityName, branchId);
+            await memLock.WaitAsync();
             try
             {
                 var seq = await EnsureSequenceRecordExistsAsync(entityName, branchId);
@@ -151,7 +155,7 @@ namespace ERP.Infrastructure.Services
             }
             finally
             {
-                _memoryLock.Release();
+                memLock.Release();
             }
         }
 
@@ -232,7 +236,7 @@ namespace ERP.Infrastructure.Services
         private async Task<CodeSequence> EnsureSequenceRecordExistsAsync(string entityName, int? branchId)
         {
             var seq = await _context.CodeSequences
-                .FirstOrDefaultAsync(s => s.EntityName.ToLower() == entityName.ToLower() && s.BranchId == branchId);
+                .FirstOrDefaultAsync(s => s.EntityName == entityName && s.BranchId == branchId);
 
             if (seq == null)
             {
@@ -276,7 +280,7 @@ namespace ERP.Infrastructure.Services
                 // In case of concurrency race during initial insert, re-query existing
                 _context.Entry(newSeq).State = EntityState.Detached;
                 var existing = await _context.CodeSequences
-                    .FirstOrDefaultAsync(s => s.EntityName.ToLower() == entityName.ToLower() && s.BranchId == branchId);
+                    .FirstOrDefaultAsync(s => s.EntityName == entityName && s.BranchId == branchId);
                 if (existing != null) return existing;
                 throw;
             }
@@ -289,30 +293,30 @@ namespace ERP.Infrastructure.Services
             var prefix = seq.Prefix;
             List<string> codes = entityName.ToLowerInvariant() switch
             {
-                "item" => await _context.Items.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
+                "item" => await _context.Items.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
                 "customer" => branchId.HasValue && branchId.Value > 0
-                    ? await _context.Customers.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync()
-                    : await _context.Customers.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
+                    ? await _context.Customers.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync()
+                    : await _context.Customers.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
                 "vendor" => branchId.HasValue && branchId.Value > 0
-                    ? await _context.Vendors.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync()
-                    : await _context.Vendors.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
+                    ? await _context.Vendors.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync()
+                    : await _context.Vendors.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
                 "salesman" => branchId.HasValue && branchId.Value > 0
-                    ? await _context.Salesmen.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync()
-                    : await _context.Salesmen.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
+                    ? await _context.Salesmen.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync()
+                    : await _context.Salesmen.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
                 "warehouse" => branchId.HasValue && branchId.Value > 0
-                    ? await _context.Warehouses.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync()
-                    : await _context.Warehouses.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
+                    ? await _context.Warehouses.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync()
+                    : await _context.Warehouses.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
                 "customercategory" => branchId.HasValue && branchId.Value > 0
-                    ? await _context.CustomerCategories.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync()
-                    : await _context.CustomerCategories.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
+                    ? await _context.CustomerCategories.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync()
+                    : await _context.CustomerCategories.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
                 "vendorcategory" => branchId.HasValue && branchId.Value > 0
-                    ? await _context.VendorCategories.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync()
-                    : await _context.VendorCategories.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
-                "unit" => await _context.Units.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
-                "itemgroup" => await _context.ItemGroups.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
-                "currency" => await _context.Currencies.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
-                "city" => await _context.Cities.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
-                "governorate" => await _context.Governorates.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).Select(x => x.Code).ToListAsync(),
+                    ? await _context.VendorCategories.AsNoTracking().Where(x => x.BranchId == branchId.Value && x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync()
+                    : await _context.VendorCategories.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
+                "unit" => await _context.Units.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
+                "itemgroup" => await _context.ItemGroups.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
+                "currency" => await _context.Currencies.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
+                "city" => await _context.Cities.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
+                "governorate" => await _context.Governorates.AsNoTracking().Where(x => x.Code.StartsWith(prefix)).OrderByDescending(x => x.Id).Select(x => x.Code).Take(100).ToListAsync(),
                 _ => new List<string>()
             };
 

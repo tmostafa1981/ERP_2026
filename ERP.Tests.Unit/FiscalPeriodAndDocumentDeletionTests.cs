@@ -272,6 +272,8 @@ namespace ERP.Tests.Unit
             // Enable accounting effect
             var tt = await db.TransactionTypes.FindAsync(1);
             tt!.AccountingEffect = AccountingEffect.FullInvoiceAndCOGS;
+            tt.DefaultDebitAccountId = 1;
+            tt.DefaultCreditAccountId = 2;
             db.GLAccounts.AddRange(
                 new GLAccount { Id = 1, Code = "1101", NameAr = "الصندوق", NameEn = "Cash", AccountCategory = AccountCategory.Assets, IsActive = true },
                 new GLAccount { Id = 2, Code = "4101", NameAr = "المبيعات", NameEn = "Sales", AccountCategory = AccountCategory.Revenues, IsActive = true }

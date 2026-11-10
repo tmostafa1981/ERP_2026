@@ -1727,16 +1727,53 @@ namespace ERP.Infrastructure.Data
             {
                 if (!existingCustDefaultBranchIds.Contains(b.Id))
                 {
-                    context.CustomerCategories.Add(new CustomerCategory
-                    {
-                        BranchId = b.Id,
-                        Code = b.BranchCode,
-                        NameAr = b.NameAr ?? b.Name,
-                        NameEn = b.NameEn ?? b.Name,
-                        IsDefault = true,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    });
+                    bool isSpareParts = (b.NameAr ?? b.Name ?? "").Contains("قطع غيار");
+                    context.CustomerCategories.AddRange(
+                        new CustomerCategory
+                        {
+                            BranchId = b.Id,
+                            Code = "EGP-MAC",
+                            NameAr = "عملاء مصري ماكينات",
+                            NameEn = "Egyptian Customers - Machines",
+                            ControlAccountId = 620,
+                            IsDefault = !isSpareParts,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        },
+                        new CustomerCategory
+                        {
+                            BranchId = b.Id,
+                            Code = "EGP-SPR",
+                            NameAr = "عملاء مصري قطع غيار",
+                            NameEn = "Egyptian Customers - Spare Parts",
+                            ControlAccountId = 622,
+                            IsDefault = isSpareParts,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        },
+                        new CustomerCategory
+                        {
+                            BranchId = b.Id,
+                            Code = "USD-MAC",
+                            NameAr = "عملاء دولار ماكينات",
+                            NameEn = "Dollar Customers - Machines",
+                            ControlAccountId = 624,
+                            IsDefault = false,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        },
+                        new CustomerCategory
+                        {
+                            BranchId = b.Id,
+                            Code = "USD-SPR",
+                            NameAr = "عملاء دولار قطع غيار",
+                            NameEn = "Dollar Customers - Spare Parts",
+                            ControlAccountId = 626,
+                            IsDefault = false,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        }
+                    );
                     existingCustDefaultBranchIds.Add(b.Id);
                 }
 

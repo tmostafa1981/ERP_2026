@@ -897,18 +897,6 @@
         }
     });
 
-    // Enforce FinancialAccountId before submitting Create/Edit Vendor form
-    $(document).on('submit', '.cust-vendor-account-required-form', function (e) {
-        var $form = $(this);
-        var accVal = $form.find('input[name="FinancialAccountId"]').val();
-        if (!accVal || parseInt(accVal, 10) <= 0) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            alert('يرجى تحديد الحساب المالي للمورد في دليل الحسابات (لا يمكن حفظ المورد بدون تسجيل الحساب).');
-            return false;
-        }
-    });
-
     // Vendor Excel Import JS
     $('#vendorExcelFileInput').on('change', function () {
         $('#btnPreviewVendorExcel').prop('disabled', !(this.files && this.files.length > 0));

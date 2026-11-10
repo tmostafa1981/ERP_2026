@@ -41,6 +41,11 @@ namespace ERP.Application.DTOs
         public int? DefaultDiscountAccountId { get; set; }
         public string? DefaultDiscountAccountName { get; set; }
 
+        public int? DefaultCogsAccountId { get; set; }
+        public string? DefaultCogsAccountName { get; set; }
+        public int? DefaultInventoryAccountId { get; set; }
+        public string? DefaultInventoryAccountName { get; set; }
+
         public int? DefaultCustomerId { get; set; }
         public string? DefaultCustomerName { get; set; }
         public int? DefaultVendorId { get; set; }

@@ -1,43 +1,96 @@
 @model IEnumerable<ERP.Application.DTOs.AvailableForConversionDocumentDto>
+@using ERP.Domain.Enums
 @{
     var targetType = ViewBag.TargetType as ERP.Application.DTOs.TransactionTypeDto;
     ViewData["Title"] = $"تحويل إلى {targetType?.LocalizedName}";
+    var warehouses = ViewBag.Warehouses as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var requiresWarehouse = targetType != null && targetType.InventoryEffect != InventoryEffect.None;
+    var requiresSerials = targetType != null && targetType.SerialTrackingPolicy != SerialTrackingPolicy.Disabled;
+    var isReceiveMode = targetType != null && targetType.InventoryEffect == InventoryEffect.ReceiveStock;
+    var defaultWarehouseId = targetType?.DefaultWarehouseId ?? (warehouses.FirstOrDefault()?.Id);
 }
 
 <div class="container-fluid px-4 py-3" id="convApp" v-cloak>
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4 class="fw-bold mb-0 text-dark">
-                <i class="fa-solid fa-arrow-right-arrow-left text-primary me-2"></i> معالج تحويل المستندات
+                <i class="fa-solid fa-arrow-right-arrow-left text-primary me-2"></i> معالج استدعاء وتحويل المستندات
             </h4>
             <span class="text-muted small">
                 المستند الهدف المراد إنشاؤه: 
                 <span class="badge bg-primary fs-6">@(targetType?.LocalizedName)</span>
+                <span class="badge bg-secondary font-monospace ms-1">@(targetType?.Code)</span>
+                @if (isReceiveMode)
+                {
+                    <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">استلام وإضافة مخزون</span>
+                }
+                else if (targetType?.InventoryEffect == InventoryEffect.IssueStock)
+                {
+                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-1">صرف وخصم مخزون</span>
+                }
             </span>
         </div>
         <div>
             <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
-                <i class="fa-solid fa-xmark me-1"></i> إلغاء
+                <i class="fa-solid fa-xmark me-1"></i> إلغاء ورجوع
             </a>
+        </div>
+    </div>
+
+    <!-- Target Document Header Configuration (Warehouse & Date) -->
+    <div class="card shadow-sm border-0 mb-3 bg-light">
+        <div class="card-body py-2">
+            <div class="row g-3 align-items-center">
+                @if (requiresWarehouse)
+                {
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label fw-bold small text-dark mb-1">
+                            <i class="fa-solid fa-warehouse text-primary me-1"></i> المستودع المستهدف للصرف / الاستلام: <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select form-select-sm" v-model="targetWarehouseId" @@change="onWarehouseChange">
+                            <option value="">-- اختر المستودع --</option>
+                            @foreach (var wh in warehouses)
+                            {
+                                <option value="@wh.Id">@wh.Code - @wh.LocalizedName</option>
+                            }
+                        </select>
+                    </div>
+                }
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label fw-bold small text-dark mb-1">
+                        <i class="fa-solid fa-calendar me-1"></i> تاريخ المستند الجديد:
+                    </label>
+                    <input type="date" class="form-control form-control-sm" v-model="documentDate" />
+                </div>
+                <div class="col-md-@(requiresWarehouse ? "5" : "9") col-sm-12">
+                    <label class="form-label fw-bold small text-dark mb-1">
+                        <i class="fa-solid fa-note-sticky me-1"></i> بيان / ملاحظات المستند:
+                    </label>
+                    <input type="text" class="form-control form-control-sm" v-model="conversionNotes" placeholder="بيان اختياري للمستند الجديد..." />
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- Available Documents List -->
     <div class="card shadow-sm border-0 mb-3">
-        <div class="card-header bg-light py-2">
-            <h6 class="mb-0 fw-bold text-dark">المستندات المتاحة للتحويل (ذات رصيد متبقي)</h6>
+        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="fa-solid fa-list-check text-secondary me-1"></i> المستندات المتاحة للتحويل (ذات رصيد متبقي)
+            </h6>
+            <span class="badge bg-light text-muted border">المحدد للتحويل: {{ selectedLineIds.length }} بنود</span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
                     <thead class="table-dark small">
                         <tr>
-                            <th style="width: 40px;"></th>
-                            <th>رقم المستند</th>
-                            <th>التاريخ</th>
+                            <th style="width: 40px;" class="text-center"></th>
+                            <th style="width: 130px;">رقم المستند</th>
+                            <th style="width: 100px;">التاريخ</th>
                             <th>نوع الحركة</th>
-                            <th>الطرف</th>
-                            <th class="text-end">الإجمالي الصافي</th>
+                            <th>الطرف (عميل / مورد)</th>
+                            <th class="text-end" style="width: 130px;">الإجمالي الصافي</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -45,6 +98,7 @@
                         {
                             <tr>
                                 <td colspan="6" class="text-center py-4 text-muted">
+                                    <i class="fa-solid fa-inbox fs-3 d-block mb-2 text-secondary"></i>
                                     لا توجد مستندات مصدر متاحة للتحويل إلى هذا النوع حالياً.
                                 </td>
                             </tr>
@@ -53,26 +107,30 @@
                         {
                             <tr class="table-light">
                                 <td class="text-center">
-                                    <input class="form-check-input" type="checkbox" :value="@doc.DocumentId" v-model="selectedDocIds" @@change="onDocToggle(@doc.DocumentId)" />
+                                    <input class="form-check-input" type="checkbox" :value="@doc.DocumentId" v-model="selectedDocIds" @@change="toggleDocAllLines(@doc.DocumentId)" />
                                 </td>
                                 <td class="font-monospace fw-bold text-primary">@doc.DocumentNumber</td>
                                 <td>@doc.DocumentDate.ToString("yyyy-MM-dd")</td>
                                 <td>@doc.TransactionTypeName</td>
-                                <td>@doc.PartyName</td>
+                                <td>@(string.IsNullOrWhiteSpace(doc.PartyName) ? "-" : doc.PartyName)</td>
                                 <td class="text-end font-monospace fw-bold">@doc.TotalAmountNet.ToString("N2")</td>
                             </tr>
                             <tr v-if="selectedDocIds.includes(@doc.DocumentId)">
                                 <td colspan="6" class="p-0 bg-white">
-                                    <table class="table table-sm table-bordered mb-0 small" style="font-size: 0.8rem;">
+                                    <table class="table table-sm table-bordered mb-0 align-middle small" style="font-size: 0.8rem;">
                                         <thead class="table-secondary">
                                             <tr>
-                                                <th style="width: 30px;">#</th>
+                                                <th style="width: 35px;" class="text-center">#</th>
                                                 <th>الصنف</th>
-                                                <th class="text-end" style="width: 100px;">الكمية الأصلية</th>
-                                                <th class="text-end" style="width: 100px;">المحولة مسبقاً</th>
-                                                <th class="text-end" style="width: 100px;">المتبقية</th>
-                                                <th class="text-end" style="width: 130px;">الكمية للتحويل</th>
-                                                <th class="text-end" style="width: 100px;">السعر</th>
+                                                <th class="text-end" style="width: 90px;">الكمية الأصلية</th>
+                                                <th class="text-end" style="width: 90px;">المحولة مسبقاً</th>
+                                                <th class="text-end" style="width: 90px;">المتبقية</th>
+                                                <th class="text-end" style="width: 120px;">الكمية للتحويل</th>
+                                                <th class="text-end" style="width: 95px;">السعر</th>
+                                                @if (requiresSerials)
+                                                {
+                                                    <th class="text-center" style="width: 185px;">السيريالات</th>
+                                                }
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -82,16 +140,47 @@
                                                     <td class="text-center">
                                                         <input class="form-check-input" type="checkbox" :value="@line.LineId" v-model="selectedLineIds" />
                                                     </td>
-                                                    <td class="fw-bold">@line.ItemCode - @line.ItemName</td>
+                                                    <td>
+                                                        <span class="fw-bold">@line.ItemName</span>
+                                                        <span class="badge bg-light text-muted border font-monospace ms-1">@line.ItemCode</span>
+                                                        @if (line.IsSerial)
+                                                        {
+                                                            <span class="badge bg-warning-subtle text-dark border ms-1" style="font-size: 0.65rem;">
+                                                                <i class="fa-solid fa-barcode"></i> سيريال
+                                                            </span>
+                                                        }
+                                                    </td>
                                                     <td class="text-end font-monospace">@line.OriginalQuantity</td>
                                                     <td class="text-end font-monospace text-muted">@line.ConvertedQuantity</td>
                                                     <td class="text-end font-monospace fw-bold text-success">@line.RemainingQuantity</td>
                                                     <td class="text-end">
                                                         <input type="number" step="1" min="1" max="@line.RemainingQuantity"
-                                                               class="form-control form-control-sm text-end font-monospace"
-                                                               v-model.number="lineQuantities[@line.LineId]" />
+                                                               class="form-control form-control-sm text-end font-monospace py-0"
+                                                               v-model.number="lineQuantities[@line.LineId]"
+                                                               @@change="onQuantityChange(@line.LineId)" />
                                                     </td>
                                                     <td class="text-end font-monospace">@line.UnitPrice.ToString("N2")</td>
+                                                    @if (requiresSerials)
+                                                    {
+                                                        <td class="text-center">
+                                                            @if (line.IsSerial)
+                                                            {
+                                                                <button type="button"
+                                                                        :class="['btn btn-sm py-0 px-2 fw-bold', (selectedSerials[@line.LineId] || []).length === (lineQuantities[@line.LineId] || 1) ? 'btn-success' : 'btn-outline-warning text-dark']"
+                                                                        @@click="openSerialPicker(@line.LineId, @line.ItemId, '@line.ItemName', lineQuantities[@line.LineId] || 1)"
+                                                                        :disabled="requiresWarehouse && !targetWarehouseId">
+                                                                    <i :class="isReceiveMode ? 'fa-solid fa-keyboard' : 'fa-solid fa-barcode'" class="me-1"></i>
+                                                                    <span v-if="isReceiveMode">إدخال السيريالات</span>
+                                                                    <span v-else>اختيار السيريالات</span>
+                                                                    ({{ (selectedSerials[@line.LineId] || []).length }}/{{ lineQuantities[@line.LineId] || 1 }})
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="text-muted small">-</span>
+                                                            }
+                                                        </td>
+                                                    }
                                                 </tr>
                                             }
                                         </tbody>
@@ -117,48 +206,385 @@
             </button>
         </div>
     </div>
+
+    <!-- Modal for Managing Serial Numbers (Dual Mode: Receive Input vs Issue Selection) -->
+    <div class="modal fade" id="serialPickerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" v-if="activeSerialModal">
+                <div class="modal-header bg-light py-2">
+                    <h6 class="modal-title fw-bold text-dark">
+                        <i :class="isReceiveMode ? 'fa-solid fa-keyboard' : 'fa-solid fa-barcode'" class="text-primary me-1"></i>
+                        <span v-if="isReceiveMode">إدخال وتسجيل سيريالات الاستلام: {{ activeSerialModal.itemName }}</span>
+                        <span v-else>اختيار السيريالات المتاحة للصرف: {{ activeSerialModal.itemName }}</span>
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <!-- ==================== MODE 1: RECEIVE MODE (إدخال وكتابة ولصق السيريالات الجديدة) ==================== -->
+                <div class="modal-body p-3" v-if="isReceiveMode">
+                    <div class="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded border">
+                        <div>
+                            <span class="small text-muted">الكمية المطلوب استلامها: <strong class="text-dark">{{ activeSerialModal.requiredCount }}</strong></span>
+                            <span class="ms-3 small text-muted">المسجل حالياً: <strong :class="tempModalSerials.length === activeSerialModal.requiredCount ? 'text-success' : 'text-danger'">{{ tempModalSerials.length }}</strong></span>
+                        </div>
+                        <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" @@click="tempModalSerials = []" :disabled="tempModalSerials.length === 0">
+                            تفريغ الكل
+                        </button>
+                    </div>
+
+                    <!-- Single Barcode Scanner / Manual Input -->
+                    <div class="card border mb-3">
+                        <div class="card-body p-2">
+                            <label class="form-label small fw-bold mb-1">
+                                <i class="fa-solid fa-barcode text-primary me-1"></i> كتابة أو مسح رقم سيريال (Barcode Scanner):
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control font-monospace" dir="ltr"
+                                       v-model="singleSerialInput"
+                                       placeholder="اكتب رقم السيريال الجديد واضغط Enter أو إضافة..."
+                                       @@keydown.enter.prevent="addSingleSerial"
+                                       id="convertSerialInputBox" />
+                                <button type="button" class="btn btn-primary fw-bold" @@click="addSingleSerial">
+                                    <i class="fa-solid fa-plus me-1"></i> إضافة
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Excel Copy / Paste Area -->
+                    <div class="card border mb-3">
+                        <div class="card-body p-2">
+                            <label class="form-label small fw-bold mb-1">
+                                <i class="fa-solid fa-file-excel text-success me-1"></i> لصق مجموعة سيريالات من ملف Excel:
+                            </label>
+                            <textarea class="form-control form-control-sm font-monospace mb-2" rows="2" dir="ltr"
+                                      v-model="bulkSerialsText"
+                                      placeholder="الصق السيريالات هنا (كل سيريال في سطر أو مفصولة بفواصل أو مسافات)..."></textarea>
+                            <button type="button" class="btn btn-outline-success btn-sm fw-bold" @@click="parseBulkSerials">
+                                <i class="fa-solid fa-paste me-1"></i> تحليل وإضافة السيريالات الملصوقة
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Added Serials Badge Container -->
+                    <div class="border rounded p-2 bg-light">
+                        <div class="small fw-bold text-dark mb-2">
+                            <i class="fa-solid fa-list-check text-success me-1"></i> السيريالات المدخلة للاستلام:
+                        </div>
+                        <div v-if="tempModalSerials.length > 0" class="d-flex flex-wrap gap-1" style="max-height: 130px; overflow-y: auto;">
+                            <span v-for="(sn, idx) in tempModalSerials" :key="sn"
+                                  class="badge bg-success-subtle text-success border border-success d-inline-flex align-items-center gap-1 py-1 px-2 font-monospace" dir="ltr">
+                                <span>{{ sn }}</span>
+                                <button type="button" class="btn-close btn-close-sm ms-1" style="font-size: 0.55rem;"
+                                        @@click="removeSerialByIndex(idx)" title="حذف السيريال"></button>
+                            </span>
+                        </div>
+                        <div v-else class="text-muted small text-center py-2">
+                            لم يتم إدخال أي سيريالات بعد. اكتب رقم السيريال واضغط إضافة أو الصق السيريالات من Excel.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== MODE 2: ISSUE MODE (اختيار من السيريالات المتاحة بالمخزن) ==================== -->
+                <div class="modal-body p-3" v-else>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <span class="small text-muted">الكمية المطلوبة: <strong class="text-dark">{{ activeSerialModal.requiredCount }}</strong></span>
+                            <span class="ms-3 small text-muted">المحدد حالياً: <strong :class="tempModalSerials.length === activeSerialModal.requiredCount ? 'text-success' : 'text-danger'">{{ tempModalSerials.length }}</strong></span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm" @@click="autoSelectFirstSerials" :disabled="availableSerials.length === 0">
+                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i> تحديد تلقائي ({{ activeSerialModal.requiredCount }})
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @@click="tempModalSerials = []" :disabled="tempModalSerials.length === 0">
+                                تفريغ
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Search Input -->
+                    <div class="input-group input-group-sm mb-2">
+                        <span class="input-group-text bg-light"><i class="fa-solid fa-search text-muted"></i></span>
+                        <input type="text" class="form-control" v-model="serialSearch" placeholder="بحث برقم السيريال..." />
+                    </div>
+
+                    <div v-if="loadingSerials" class="text-center py-4 text-muted">
+                        <div class="spinner-border spinner-border-sm text-primary me-2"></div> جاري تحميل السيريالات المتاحة في المخزن...
+                    </div>
+                    <div v-else-if="filteredSerials.length === 0" class="text-center py-4 text-danger small">
+                        <i class="fa-solid fa-triangle-exclamation fs-4 d-block mb-1 text-warning"></i>
+                        لا توجد سيريالات متاحة في هذا المستودع للصنف المحدد.
+                    </div>
+                    <div v-else class="list-group" style="max-height: 280px; overflow-y: auto;">
+                        <label v-for="sn in filteredSerials" :key="sn" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2" style="cursor: pointer;">
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" :value="sn" v-model="tempModalSerials" :disabled="!tempModalSerials.includes(sn) && tempModalSerials.length >= activeSerialModal.requiredCount" />
+                                <span class="font-monospace fw-bold ms-2">{{ sn }}</span>
+                            </div>
+                            <span v-if="tempModalSerials.includes(sn)" class="badge bg-success-subtle text-success border border-success-subtle small">محدد</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-primary btn-sm fw-bold" @@click="saveModalSerials" :disabled="tempModalSerials.length !== activeSerialModal.requiredCount">
+                        <i class="fa-solid fa-check me-1"></i> اعتماد السيريالات ({{ tempModalSerials.length }}/{{ activeSerialModal.requiredCount }})
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
     <script src="~/lib/vue/vue.global.prod.js"></script>
     <script src="~/lib/sweetalert2/sweetalert2.all.min.js"></script>
     <script>
-        const { createApp, ref, reactive } = Vue;
+        const { createApp, ref, reactive, computed } = Vue;
 
         createApp({
             setup() {
                 const targetTypeId = @(targetType?.Id ?? 0);
+                const requiresWarehouse = @(requiresWarehouse ? "true" : "false");
+                const requiresSerials = @(requiresSerials ? "true" : "false");
+                const isReceiveMode = @(isReceiveMode ? "true" : "false");
+
+                const targetWarehouseId = ref('@(defaultWarehouseId ?? "")');
+                const documentDate = ref(new Date().toISOString().split('T')[0]);
+                const conversionNotes = ref('');
+
                 const selectedDocIds = ref([]);
                 const selectedLineIds = ref([]);
                 const lineQuantities = reactive({});
+                const selectedSerials = reactive({});
                 const isConverting = ref(false);
 
-                // Populate initial remaining quantities
+                // Serial modal state
+                const activeSerialModal = ref(null);
+                const availableSerials = ref([]);
+                const serialSearch = ref('');
+                const loadingSerials = ref(false);
+                const tempModalSerials = ref([]);
+                const singleSerialInput = ref('');
+                const bulkSerialsText = ref('');
+                let serialModalInstance = null;
+
+                // Document Line Mappings
+                const docLineMap = {};
+                const lineItemMap = {};
+
                 @foreach (var doc in Model)
                 {
+                    <text>
+                    docLineMap[@doc.DocumentId] = [
+                        @foreach (var line in doc.AvailableLines)
+                        {
+                            <text>@line.LineId,</text>
+                        }
+                    ];
+                    </text>
                     foreach (var line in doc.AvailableLines)
                     {
                         @:lineQuantities[@line.LineId] = @line.RemainingQuantity;
+                        @:lineItemMap[@line.LineId] = { isSerial: @(line.IsSerial ? "true" : "false"), itemId: @line.ItemId, itemName: '@line.ItemName' };
                     }
                 }
 
-                function onDocToggle(docId) {
-                    // Optional toggle logic
+                // Pre-select if passed from document details or index
+                @if (ViewBag.PreSelectedSourceId != null)
+                {
+                    int preId = (int)ViewBag.PreSelectedSourceId;
+                    var preDoc = Model.FirstOrDefault(d => d.DocumentId == preId);
+                    if (preDoc != null)
+                    {
+                        <text>
+                        selectedDocIds.value.push(@preId);
+                        @foreach (var l in preDoc.AvailableLines)
+                        {
+                            @:selectedLineIds.value.push(@l.LineId);
+                        }
+                        </text>
+                    }
+                }
+
+                function toggleDocAllLines(docId) {
+                    const lines = docLineMap[docId] || [];
+                    if (selectedDocIds.value.includes(docId)) {
+                        lines.forEach(lid => {
+                            if (!selectedLineIds.value.includes(lid)) {
+                                selectedLineIds.value.push(lid);
+                            }
+                        });
+                    } else {
+                        selectedLineIds.value = selectedLineIds.value.filter(lid => !lines.includes(lid));
+                    }
+                }
+
+                function onQuantityChange(lineId) {
+                    // Reset serials if quantity changed
+                    if (selectedSerials[lineId]) {
+                        selectedSerials[lineId] = [];
+                    }
+                }
+
+                function onWarehouseChange() {
+                    // Clear selected serials when warehouse changes in issue mode
+                    if (!isReceiveMode) {
+                        for (let key in selectedSerials) {
+                            selectedSerials[key] = [];
+                        }
+                    }
+                }
+
+                async function openSerialPicker(lineId, itemId, itemName, requiredCount) {
+                    if (requiresWarehouse && !targetWarehouseId.value) {
+                        Swal.fire('تنبيه', 'يرجى اختيار المستودع المستهدف أولاً.', 'warning');
+                        return;
+                    }
+
+                    activeSerialModal.value = { lineId, itemId, itemName, requiredCount };
+                    tempModalSerials.value = [...(selectedSerials[lineId] || [])];
+                    singleSerialInput.value = '';
+                    bulkSerialsText.value = '';
+                    serialSearch.value = '';
+
+                    if (!serialModalInstance) {
+                        const el = document.getElementById('serialPickerModal');
+                        serialModalInstance = new bootstrap.Modal(el);
+                    }
+                    serialModalInstance.show();
+
+                    if (isReceiveMode) {
+                        setTimeout(() => {
+                            document.getElementById('convertSerialInputBox')?.focus();
+                        }, 350);
+                    } else {
+                        // Issue Mode: Fetch available serials from warehouse
+                        loadingSerials.value = true;
+                        availableSerials.value = [];
+                        try {
+                            const res = await fetch(`/Documents/GetAvailableSerialsApi?itemId=${itemId}&warehouseId=${targetWarehouseId.value}`);
+                            const data = await res.json();
+                            if (data.success && data.data) {
+                                availableSerials.value = data.data;
+                            } else {
+                                availableSerials.value = [];
+                            }
+                        } catch (e) {
+                            availableSerials.value = [];
+                        } finally {
+                            loadingSerials.value = false;
+                        }
+                    }
+                }
+
+                function addSingleSerial() {
+                    const sn = singleSerialInput.value.trim();
+                    if (!sn) return;
+                    if (tempModalSerials.value.includes(sn)) {
+                        Swal.fire('تنبيه', `السيريال (${sn}) مضاف بالفعل في القائمة.`, 'warning');
+                        return;
+                    }
+                    if (tempModalSerials.value.length >= activeSerialModal.value.requiredCount) {
+                        Swal.fire('تنبيه', `تم استيفاء كامل الكمية المطلوبة (${activeSerialModal.value.requiredCount}) سيريالات.`, 'warning');
+                        return;
+                    }
+                    tempModalSerials.value.push(sn);
+                    singleSerialInput.value = '';
+                }
+
+                function parseBulkSerials() {
+                    if (!bulkSerialsText.value) return;
+                    const tokens = bulkSerialsText.value
+                        .split(/[\r\n,\t; ]+/)
+                        .map(s => s.trim())
+                        .filter(s => s.length > 0);
+
+                    if (tokens.length === 0) return;
+
+                    let addedCount = 0;
+                    for (let sn of tokens) {
+                        if (tempModalSerials.value.length >= activeSerialModal.value.requiredCount) {
+                            break;
+                        }
+                        if (!tempModalSerials.value.includes(sn)) {
+                            tempModalSerials.value.push(sn);
+                            addedCount++;
+                        }
+                    }
+                    bulkSerialsText.value = '';
+                    if (addedCount > 0) {
+                        Swal.fire('تم الإضافة', `تمت إضافة (${addedCount}) سيريالات بنجاح.`, 'success');
+                    }
+                }
+
+                function removeSerialByIndex(idx) {
+                    tempModalSerials.value.splice(idx, 1);
+                }
+
+                const filteredSerials = computed(() => {
+                    const q = serialSearch.value.trim().toLowerCase();
+                    if (!q) return availableSerials.value;
+                    return availableSerials.value.filter(s => s.toLowerCase().includes(q));
+                });
+
+                function autoSelectFirstSerials() {
+                    if (!activeSerialModal.value) return;
+                    const req = activeSerialModal.value.requiredCount;
+                    tempModalSerials.value = availableSerials.value.slice(0, req);
+                }
+
+                function saveModalSerials() {
+                    if (!activeSerialModal.value) return;
+                    const req = activeSerialModal.value.requiredCount;
+                    if (tempModalSerials.value.length !== req) {
+                        Swal.fire('تنبيه', `يجب إدخال عدد سيريالات مساوٍ تماماً للكمية (${req}).`, 'warning');
+                        return;
+                    }
+                    selectedSerials[activeSerialModal.value.lineId] = [...tempModalSerials.value];
+                    if (serialModalInstance) {
+                        serialModalInstance.hide();
+                    }
                 }
 
                 function executeConversion() {
                     if (selectedLineIds.value.length === 0) {
-                        Swal.fire('تنبيه', 'يرجى تحديد بند واحد على الأقل.', 'warning');
+                        Swal.fire('تنبيه', 'يرجى تحديد بند واحد على الأقل للتحويل.', 'warning');
                         return;
+                    }
+
+                    if (requiresWarehouse && (!targetWarehouseId.value || targetWarehouseId.value === '')) {
+                        Swal.fire('تنبيه', 'يرجى تحديد المستودع المستهدف للصرف / الاستلام.', 'warning');
+                        return;
+                    }
+
+                    // Validate serial numbers if required
+                    if (requiresSerials) {
+                        for (let lid of selectedLineIds.value) {
+                            const meta = lineItemMap[lid];
+                            if (meta && meta.isSerial) {
+                                const qty = lineQuantities[lid] || 1;
+                                const serials = selectedSerials[lid] || [];
+                                if (serials.length !== qty) {
+                                    const actionText = isReceiveMode ? 'إدخال' : 'اختيار';
+                                    Swal.fire('تنبيه', `الصنف (${meta.itemName}) يتطلب ${actionText} سيريالات بعدد (${qty}). المسجل حالياً (${serials.length}) فقط.`, 'warning');
+                                    return;
+                                }
+                            }
+                        }
                     }
 
                     isConverting.value = true;
                     const payload = {
                         targetTransactionTypeId: targetTypeId,
-                        documentDate: new Date().toISOString().split('T')[0],
+                        warehouseId: targetWarehouseId.value ? parseInt(targetWarehouseId.value) : null,
+                        documentDate: documentDate.value,
+                        notes: conversionNotes.value,
                         selectedLines: selectedLineIds.value.map(id => ({
                             sourceDocumentLineId: id,
-                            quantityToConvert: lineQuantities[id] || 1
+                            quantityToConvert: lineQuantities[id] || 1,
+                            serialNumbers: selectedSerials[id] || []
                         }))
                     };
 
@@ -173,26 +599,57 @@
                         success: function(res) {
                             isConverting.value = false;
                             if (res.success) {
-                                Swal.fire('تم بنجاح', res.message, 'success').then(() => {
-                                    window.location.href = `@Url.Action("Index", "Documents")`;
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'تم إنشاء المستند بنجاح!',
+                                    text: `رقم المستند المنشأ: ${res.documentNumber || ''}`,
+                                    confirmButtonText: 'عرض المستند'
+                                }).then(() => {
+                                    if (res.newDocumentId) {
+                                        window.location.href = `/Documents/Details/${res.newDocumentId}`;
+                                    } else {
+                                        window.location.href = `@Url.Action("Index", "Documents")`;
+                                    }
                                 });
                             } else {
                                 Swal.fire('خطأ', res.message, 'error');
                             }
                         },
-                        error: function() {
+                        error: function(xhr) {
                             isConverting.value = false;
-                            Swal.fire('خطأ', 'فشل تحويل المستندات.', 'error');
+                            const msg = xhr.responseJSON?.message || 'فشل تحويل المستندات.';
+                            Swal.fire('خطأ', msg, 'error');
                         }
                     });
                 }
 
                 return {
+                    targetWarehouseId,
+                    documentDate,
+                    conversionNotes,
                     selectedDocIds,
                     selectedLineIds,
                     lineQuantities,
+                    selectedSerials,
                     isConverting,
-                    onDocToggle,
+                    isReceiveMode,
+                    toggleDocAllLines,
+                    onQuantityChange,
+                    onWarehouseChange,
+                    openSerialPicker,
+                    activeSerialModal,
+                    loadingSerials,
+                    availableSerials,
+                    filteredSerials,
+                    serialSearch,
+                    tempModalSerials,
+                    singleSerialInput,
+                    bulkSerialsText,
+                    addSingleSerial,
+                    parseBulkSerials,
+                    removeSerialByIndex,
+                    autoSelectFirstSerials,
+                    saveModalSerials,
                     executeConversion
                 };
             }

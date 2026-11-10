@@ -94,6 +94,11 @@ namespace ERP.Infrastructure.Data
         public DbSet<AssetDepreciationHistory> AssetDepreciationHistories { get; set; } = null!;
         public DbSet<AssetTransaction> AssetTransactions { get; set; } = null!;
 
+        // ─── Phase 10 – Inventory Costing & COGS Module ──────────────────────────
+        public DbSet<ItemWarehouseCost> ItemWarehouseCosts { get; set; } = null!;
+        public DbSet<ItemCostHistory> ItemCostHistories { get; set; } = null!;
+        public DbSet<CostAdjustmentRecord> CostAdjustmentRecords { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -862,6 +867,8 @@ namespace ERP.Infrastructure.Data
                 b.HasOne(t => t.DefaultCreditAccount).WithMany().HasForeignKey(t => t.DefaultCreditAccountId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(t => t.DefaultTaxAccount).WithMany().HasForeignKey(t => t.DefaultTaxAccountId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(t => t.DefaultDiscountAccount).WithMany().HasForeignKey(t => t.DefaultDiscountAccountId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(t => t.DefaultCogsAccount).WithMany().HasForeignKey(t => t.DefaultCogsAccountId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(t => t.DefaultInventoryAccount).WithMany().HasForeignKey(t => t.DefaultInventoryAccountId).OnDelete(DeleteBehavior.Restrict);
             });
 
             builder.Entity<UserTransactionTypePermission>(b =>
@@ -907,6 +914,7 @@ namespace ERP.Infrastructure.Data
                 b.Property(s => s.AssetTag).HasMaxLength(100);
                 b.Property(s => s.SourceDocType).HasMaxLength(50);
                 b.Property(s => s.OutDocType).HasMaxLength(50);
+                b.Property(s => s.UnitCost).HasPrecision(18, 4);
                 b.Property(s => s.Notes).HasMaxLength(500);
 
                 b.HasIndex(s => new { s.ItemId, s.SerialNumber }).IsUnique().HasDatabaseName("IX_ItemSerialNumbers_Item_Serial");
@@ -988,6 +996,8 @@ namespace ERP.Infrastructure.Data
                 b.Property(l => l.TaxRate).HasPrecision(18, 4);
                 b.Property(l => l.TaxAmount).HasPrecision(18, 4);
                 b.Property(l => l.LineTotal).HasPrecision(18, 4);
+                b.Property(l => l.UnitCost).HasPrecision(18, 4);
+                b.Property(l => l.TotalCost).HasPrecision(18, 4);
 
                 b.HasIndex(l => new { l.DocumentHeaderId, l.LineNumber }).HasDatabaseName("IX_DocumentLines_Header_LineNum");
                 b.HasIndex(l => l.ItemId).HasDatabaseName("IX_DocumentLines_ItemId");
@@ -1546,6 +1556,76 @@ namespace ERP.Infrastructure.Data
                     .WithMany()
                     .HasForeignKey(t => t.JournalEntryId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ─── Phase 10 – Inventory Costing & COGS Module Configurations ──────────
+            builder.Entity<ItemWarehouseCost>(b =>
+            {
+                b.ToTable("ItemWarehouseCosts");
+                b.HasKey(c => c.Id);
+                b.HasIndex(c => new { c.ItemId, c.WarehouseId, c.BranchId }).IsUnique().HasDatabaseName("IX_ItemWarehouseCosts_Item_WH_Branch");
+                b.Property(c => c.CurrentQuantity).HasPrecision(18, 4);
+                b.Property(c => c.TotalCost).HasPrecision(18, 4);
+                b.Property(c => c.MovingAverageCost).HasPrecision(18, 4);
+                b.Property(c => c.RowVersion).IsRowVersion();
+
+                b.HasOne(c => c.Item).WithMany().HasForeignKey(c => c.ItemId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.Warehouse).WithMany().HasForeignKey(c => c.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.Branch).WithMany().HasForeignKey(c => c.BranchId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.LastDocument).WithMany().HasForeignKey(c => c.LastDocumentId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            builder.Entity<ItemCostHistory>(b =>
+            {
+                b.ToTable("ItemCostHistories");
+                b.HasKey(h => h.Id);
+                b.HasIndex(h => new { h.ItemId, h.WarehouseId, h.BranchId, h.MovementDate }).HasDatabaseName("IX_ItemCostHistories_Item_WH_Branch_Date");
+                b.HasIndex(h => h.DocumentHeaderId).HasDatabaseName("IX_ItemCostHistories_DocumentHeaderId");
+
+                b.Property(h => h.Quantity).HasPrecision(18, 4);
+                b.Property(h => h.UnitCost).HasPrecision(18, 4);
+                b.Property(h => h.TotalCost).HasPrecision(18, 4);
+                b.Property(h => h.PreQuantity).HasPrecision(18, 4);
+                b.Property(h => h.PreTotalCost).HasPrecision(18, 4);
+                b.Property(h => h.PreAverageCost).HasPrecision(18, 4);
+                b.Property(h => h.PostQuantity).HasPrecision(18, 4);
+                b.Property(h => h.PostTotalCost).HasPrecision(18, 4);
+                b.Property(h => h.PostAverageCost).HasPrecision(18, 4);
+                b.Property(h => h.Notes).HasMaxLength(500);
+
+                b.HasOne(h => h.Item).WithMany().HasForeignKey(h => h.ItemId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(h => h.Warehouse).WithMany().HasForeignKey(h => h.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(h => h.Branch).WithMany().HasForeignKey(h => h.BranchId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(h => h.DocumentHeader).WithMany().HasForeignKey(h => h.DocumentHeaderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(h => h.DocumentLine).WithMany().HasForeignKey(h => h.DocumentLineId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            builder.Entity<CostAdjustmentRecord>(b =>
+            {
+                b.ToTable("CostAdjustmentRecords");
+                b.HasKey(r => r.Id);
+                b.Property(r => r.BatchNumber).HasMaxLength(50).IsRequired();
+                b.Property(r => r.Reason).HasMaxLength(500);
+                b.Property(r => r.CreatedByUserId).HasMaxLength(450);
+
+                b.HasIndex(r => r.BatchNumber).HasDatabaseName("IX_CostAdjustmentRecords_BatchNumber");
+                b.HasIndex(r => new { r.ItemId, r.WarehouseId, r.BranchId }).HasDatabaseName("IX_CostAdjustmentRecords_Item_WH_Branch");
+                b.HasIndex(r => r.SourceDocumentHeaderId).HasDatabaseName("IX_CostAdjustmentRecords_SourceDoc");
+                b.HasIndex(r => r.AffectedDocumentHeaderId).HasDatabaseName("IX_CostAdjustmentRecords_AffectedDoc");
+
+                b.Property(r => r.OriginalUnitCost).HasPrecision(18, 4);
+                b.Property(r => r.RecalculatedUnitCost).HasPrecision(18, 4);
+                b.Property(r => r.OriginalTotalCost).HasPrecision(18, 4);
+                b.Property(r => r.RecalculatedTotalCost).HasPrecision(18, 4);
+                b.Property(r => r.CostDifference).HasPrecision(18, 4);
+
+                b.HasOne(r => r.Item).WithMany().HasForeignKey(r => r.ItemId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(r => r.Warehouse).WithMany().HasForeignKey(r => r.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(r => r.Branch).WithMany().HasForeignKey(r => r.BranchId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(r => r.SourceDocumentHeader).WithMany().HasForeignKey(r => r.SourceDocumentHeaderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(r => r.AffectedDocumentHeader).WithMany().HasForeignKey(r => r.AffectedDocumentHeaderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(r => r.AffectedDocumentLine).WithMany().HasForeignKey(r => r.AffectedDocumentLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(r => r.AdjustmentJournalEntry).WithMany().HasForeignKey(r => r.AdjustmentJournalEntryId).OnDelete(DeleteBehavior.Restrict);
             });
         }
 

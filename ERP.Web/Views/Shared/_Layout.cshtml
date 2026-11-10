@@ -1,4 +1,4 @@
-﻿@using System.Globalization
+@using System.Globalization
 @using Microsoft.Extensions.Localization
 @inject ERP.Application.Interfaces.ICurrentUserContext CurrentUserContext
 @inject ERP.Infrastructure.Data.ErpDbContext DbContext
@@ -346,6 +346,8 @@
                         </a>
                         <ul class="collapse erp-submenu" id="menuInventory">
                             <li><a href="@Url.Action("Index", "Documents", new { module = 3 })" class="erp-nav-link"><i class="fa-solid fa-dolly nav-icon"></i><span class="nav-text">حركات وأذون المخازن</span></a></li>
+                            <li><a href="@Url.Action("Index", "InventoryCosting")" class="erp-nav-link"><i class="fa-solid fa-coins nav-icon"></i><span class="nav-text">متوسط التكلفة والتقييم</span></a></li>
+                            <li><a href="@Url.Action("AdjustmentAuditTrail", "InventoryCosting")" class="erp-nav-link"><i class="fa-solid fa-clock-rotate-left nav-icon"></i><span class="nav-text">سجل تسويات التكلفة</span></a></li>
                             @if (CurrentUserContext.HasPermission("Inventory.StockTransfer.Add,Inventory.Items.Add"))
                             {
                                 <li><a href="@Url.Action("Create", "Documents", new { module = 3 })" class="erp-nav-link"><i class="fa-solid fa-circle-plus nav-icon"></i><span class="nav-text">إنشاء إذن / حركة مخزنية</span></a></li>
@@ -629,6 +631,7 @@
                             @if (CurrentUserContext.HasPermission("Inventory.StockDiscrepancy.View,Reports.InventoryReports.View,Reports.GeneralReports.View"))
                             {
                                 <li><a href="@Url.Action("StockDiscrepancy", "InventoryReports")" class="erp-nav-link"><i class="fa-solid fa-scale-unbalanced nav-icon"></i><span class="nav-text">فروقات الرصيد المحسوب</span></a></li>
+                                <li><a href="@Url.Action("Profitability", "InventoryCosting")" class="erp-nav-link"><i class="fa-solid fa-chart-line nav-icon"></i><span class="nav-text">أرباح المبيعات وتكلفة COGS</span></a></li>
                             }
                         </ul>
                     </li>
@@ -901,6 +904,8 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="~/js/erp-lookup.js" asp-append-version="true"></script>
 
     <script>
         $(document).ready(function () {
@@ -923,6 +928,19 @@
                 $('#erpSidebar').removeClass('mobile-open');
                 $('#sidebarOverlay').removeClass('active');
             });
+
+            // Auto-close open dropdowns when clicking on any dropdown item/link
+            $(document).on('click', '.dropdown-menu a, .dropdown-menu button:not([data-keep-open])', function () {
+                var $menu = $(this).closest('.dropdown-menu');
+                $menu.removeClass('show');
+                $menu.closest('.dropdown').find('.dropdown-toggle').removeClass('show').attr('aria-expanded', 'false');
+            });
+        });
+
+        // Close any hung dropdown menus when navigating back/forward (BFCache pageshow)
+        window.addEventListener('pageshow', function (event) {
+            $('.dropdown-menu.show').removeClass('show');
+            $('.dropdown-toggle.show').removeClass('show').attr('aria-expanded', 'false');
         });
     </script>
     @await RenderSectionAsync("Scripts", required: false)

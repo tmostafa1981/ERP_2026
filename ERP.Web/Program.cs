@@ -118,6 +118,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IDocumentConversionService
 builder.Services.AddScoped<ERP.Application.Interfaces.IDocumentAdjustmentService, ERP.Infrastructure.Services.DocumentAdjustmentService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalPeriodService, ERP.Infrastructure.Services.FiscalPeriodService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryAvailabilityService, ERP.Infrastructure.Services.InventoryAvailabilityService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryCostingService, ERP.Infrastructure.Services.InventoryCostingService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.ISalesReportService, ERP.Infrastructure.Services.SalesReportService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPurchaseReportService, ERP.Infrastructure.Services.PurchaseReportService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryReportService, ERP.Infrastructure.Services.InventoryReportService>();

@@ -175,6 +175,8 @@ namespace ERP.Web.Controllers
             existing.DefaultCreditAccountId = model.DefaultCreditAccountId;
             existing.DefaultTaxAccountId = model.DefaultTaxAccountId;
             existing.DefaultDiscountAccountId = model.DefaultDiscountAccountId;
+            existing.DefaultCogsAccountId = model.DefaultCogsAccountId;
+            existing.DefaultInventoryAccountId = model.DefaultInventoryAccountId;
             existing.DefaultCustomerId = model.DefaultCustomerId;
             existing.DefaultVendorId = model.DefaultVendorId;
             existing.DefaultCashBankAccountId = model.DefaultCashBankAccountId;

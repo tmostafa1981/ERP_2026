@@ -834,6 +834,7 @@ namespace ERP.Web.Controllers
 
         // ─── POST: Preview Excel Import for Vendors ───────────────────────────
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [HasPermission("MasterData.Vendors.Add")]
         public async Task<IActionResult> PreviewExcelImport(IFormFile? excelFile)
         {
@@ -858,6 +859,7 @@ namespace ERP.Web.Controllers
 
         // ─── POST: Confirm Excel Import for Vendors ───────────────────────────
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [HasPermission("MasterData.Vendors.Add")]
         public async Task<IActionResult> ConfirmExcelImport(IFormFile? excelFile, bool updateExisting = true)
         {

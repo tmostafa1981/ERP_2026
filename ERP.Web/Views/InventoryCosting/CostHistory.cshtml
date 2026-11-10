@@ -1,0 +1,185 @@
+@model IEnumerable<ERP.Application.DTOs.InventoryCosting.ItemCostHistoryDto>
+@using ERP.Domain.Enums
+@{
+    ViewData["Title"] = "سجل تطور وتاريخ تكلفة الصنف";
+    Layout = "_Layout";
+}
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom d-print-none">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="fa-solid fa-timeline me-2"></i>سجل تطور حركات وتكلفة الصنف (Cost Movement Ledger)
+            </h4>
+            <span class="text-muted small">تتبع زمني تفصيلي لأثر كل حركة مخزنية وفاتورة على رصيد المخزون ومتوسط التكلفة المتحرك</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-outline-secondary btn-sm fw-bold">
+                <i class="fa-solid fa-print me-1"></i> طباعة
+            </button>
+            <a asp-action="Index" class="btn btn-outline-primary btn-sm fw-bold">
+                <i class="fa-solid fa-arrow-right me-1"></i> العودة لاستعلام التكلفة
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card shadow-sm border-0 mb-4 d-print-none">
+        <div class="card-body p-3 bg-light rounded">
+            <form method="get" asp-action="CostHistory">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">الفرع</label>
+                        <select name="branchId" class="form-select form-select-sm" asp-items="ViewBag.Branches">
+                            <option value="">-- كل الفروع --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">المستودع</label>
+                        <select name="warehouseId" class="form-select form-select-sm" asp-items="ViewBag.Warehouses">
+                            <option value="">-- كل المستودعات --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">الصنف</label>
+                        <select name="itemId" class="form-select form-select-sm" asp-items="ViewBag.Items">
+                            <option value="">-- كل الأصناف --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">من تاريخ</label>
+                        <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-bold mb-1">إلى تاريخ</label>
+                        <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-1 d-flex gap-1">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                            <i class="fa-solid fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-bordered">
+                    <thead class="table-dark small">
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>رقم المستند</th>
+                            <th>نوع الحركة</th>
+                            <th>الصنف</th>
+                            <th>المستودع</th>
+                            <th>الكمية السابقة</th>
+                            <th>كمية الحركة</th>
+                            <th>الرصيد بعد الحركة</th>
+                            <th>سعر/تكلفة الوحدة</th>
+                            <th>إجمالي قيمة الحركة</th>
+                            <th>متوسط التكلفة قبل</th>
+                            <th>متوسط التكلفة بعد</th>
+                            <th>ملاحظات</th>
+                        </tr>
+                    </thead>
+                    <tbody class="small">
+                        @if (!Model.Any())
+                        {
+                            <tr>
+                                <td colspan="13" class="text-center py-4 text-muted">
+                                    <i class="fa-regular fa-calendar-xmark fa-2x mb-2 d-block"></i>
+                                    لا توجد حركات تكلفة مسجلة مطابقة لمعايير البحث.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var h in Model)
+                            {
+                                string badgeClass = h.MovementType switch
+                                {
+                                    CostMovementType.OpeningBalance => "bg-secondary",
+                                    CostMovementType.Purchase => "bg-success",
+                                    CostMovementType.SalesIssue => "bg-primary",
+                                    CostMovementType.PurchaseReturn => "bg-danger",
+                                    CostMovementType.SalesReturn => "bg-info text-dark",
+                                    CostMovementType.TransferIn => "bg-teal text-white",
+                                    CostMovementType.TransferOut => "bg-warning text-dark",
+                                    CostMovementType.CostRevaluation => "bg-purple text-white",
+                                    _ => "bg-secondary"
+                                };
+
+                                string typeNameAr = h.MovementType switch
+                                {
+                                    CostMovementType.OpeningBalance => "رصيد أول المدة",
+                                    CostMovementType.Purchase => "شراء بضاعة",
+                                    CostMovementType.SalesIssue => "صرف مبيعات (COGS)",
+                                    CostMovementType.PurchaseReturn => "مردودات مشتريات",
+                                    CostMovementType.SalesReturn => "مردودات مبيعات",
+                                    CostMovementType.TransferIn => "تحويل وارد",
+                                    CostMovementType.TransferOut => "تحويل صادر",
+                                    CostMovementType.CostRevaluation => "إعادة تقييم تكلفة",
+                                    _ => h.MovementType.ToString()
+                                };
+
+                                <tr>
+                                    <td>@h.MovementDate.ToString("yyyy-MM-dd")</td>
+                                    <td class="fw-bold font-monospace">
+                                        @if (h.DocumentHeaderId > 0)
+                                        {
+                                            <a asp-controller="Documents" asp-action="Details" asp-route-id="@h.DocumentHeaderId" class="text-decoration-none">
+                                                @h.DocumentNumber
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            @h.DocumentNumber
+                                        }
+                                    </td>
+                                    <td><span class="badge @badgeClass">@typeArName(h.MovementType)</span></td>
+                                    <td class="text-start">
+                                        <div class="fw-bold">@h.ItemName</div>
+                                        <small class="text-muted font-monospace">@h.ItemCode</small>
+                                    </td>
+                                    <td>@h.WarehouseName</td>
+                                    <td>@h.PreQuantity.ToString("N2")</td>
+                                    <td class="fw-bold @(h.Quantity > 0 ? "text-success" : "text-danger")">
+                                        @(h.Quantity > 0 ? $"+{h.Quantity:N2}" : h.Quantity.ToString("N2"))
+                                    </td>
+                                    <td class="fw-bold bg-light">@h.PostQuantity.ToString("N2")</td>
+                                    <td class="fw-bold">@h.UnitCost.ToString("N4")</td>
+                                    <td class="fw-bold">@h.TotalCost.ToString("N2")</td>
+                                    <td class="text-muted">@h.PreAverageCost.ToString("N4")</td>
+                                    <td class="fw-bold text-success bg-light">@h.PostAverageCost.ToString("N4")</td>
+                                    <td class="text-muted text-start small">@h.Notes</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    string typeArName(CostMovementType type) => type switch
+    {
+        CostMovementType.OpeningBalance => "رصيد أول",
+        CostMovementType.Purchase => "فاتورة شراء",
+        CostMovementType.SalesIssue => "صرف مبيعات COGS",
+        CostMovementType.PurchaseReturn => "مردود شراء",
+        CostMovementType.SalesReturn => "مردود بيع",
+        CostMovementType.TransferIn => "تحويل وارد",
+        CostMovementType.TransferOut => "تحويل صادر",
+        CostMovementType.AdjustmentPlus => "تسوية إضافة",
+        CostMovementType.AdjustmentMinus => "تسوية خصم",
+        CostMovementType.CostRevaluation => "إعادة تقييم",
+        _ => type.ToString()
+    };
+}
