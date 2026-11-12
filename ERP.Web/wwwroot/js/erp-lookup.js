@@ -25,7 +25,7 @@
     };
 
     var modalHtml = `
-    <div class="modal fade" id="erpGlobalLookupModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal fade" id="erpGlobalLookupModal" tabindex="-1" aria-hidden="true" style="z-index: 1070;">
         <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
             <div class="modal-content shadow border-0">
                 <div class="modal-header bg-primary text-white py-2">
@@ -166,12 +166,18 @@
                     }
                 });
             }
+            setTimeout(function () {
+                var $backdrops = $('.modal-backdrop');
+                if ($backdrops.length > 1) {
+                    $backdrops.last().css('z-index', 1065);
+                }
+            }, 10);
         });
 
         $('#erpGlobalLookupModal').on('shown.bs.modal', function () {
             var $backdrops = $('.modal-backdrop');
             if ($backdrops.length > 1) {
-                $backdrops.last().css('z-index', 1058);
+                $backdrops.last().css('z-index', 1065);
             }
             $('#erpGlobalLookupSearchInput').trigger('focus');
         });
@@ -179,7 +185,7 @@
         $('#erpGlobalLookupModal').on('hidden.bs.modal', function () {
             var $openModals = $('.modal.show').not(this);
             if ($openModals.length > 0) {
-                $('body').addClass('modal-open');
+                $('body').addClass('modal-open').css('overflow', 'hidden');
                 if (window.bootstrap && window.bootstrap.Modal) {
                     var topModal = $openModals.last()[0];
                     var instance = window.bootstrap.Modal.getInstance(topModal);

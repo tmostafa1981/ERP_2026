@@ -234,8 +234,11 @@
                         <th class="text-end">متبقي</th>
                         <th class="text-end">سعر الوحدة</th>
                         <th class="text-end">الخصم</th>
-                        <th class="text-end">ض.ق.م (%)</th>
-                        <th class="text-end">قيمة الضريبة</th>
+                        @if (Model.TaxAmount > 0 || Model.Lines.Any(l => l.TaxRate > 0 || l.TaxAmount > 0))
+                        {
+                            <th class="text-end">ض.ق.م (%)</th>
+                            <th class="text-end">قيمة الضريبة</th>
+                        }
                         <th class="text-end">الإجمالي الصافي</th>
                         <th>المستودع</th>
                         <th>مركز التكلفة</th>
@@ -279,8 +282,11 @@
                             <td class="text-end font-monospace text-primary fw-bold">@line.RemainingQuantity.ToString("N2")</td>
                             <td class="text-end font-monospace">@line.UnitPrice.ToString("N2")</td>
                             <td class="text-end font-monospace text-danger">@line.DiscountAmount.ToString("N2")</td>
-                            <td class="text-end font-monospace">@line.TaxRate.ToString("N0")%</td>
-                            <td class="text-end font-monospace">@line.TaxAmount.ToString("N2")</td>
+                            @if (Model.TaxAmount > 0 || Model.Lines.Any(l => l.TaxRate > 0 || l.TaxAmount > 0))
+                            {
+                                <td class="text-end font-monospace">@line.TaxRate.ToString("N0")%</td>
+                                <td class="text-end font-monospace">@line.TaxAmount.ToString("N2")</td>
+                            }
                             <td class="text-end font-monospace fw-bold text-success">@line.LineTotal.ToString("N2")</td>
                             <td>@(string.IsNullOrWhiteSpace(line.WarehouseName) ? "—" : line.WarehouseName)</td>
                             <td>@(string.IsNullOrWhiteSpace(line.CostCenterName) ? "—" : line.CostCenterName)</td>
@@ -378,10 +384,13 @@
                         <span>المصاريف والإضافات:</span>
                         <span class="fw-bold font-monospace">+ @Model.TotalAdditions.ToString("N2")</span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-muted">ضريبة القيمة المضافة:</span>
-                        <span class="fw-bold font-monospace">+ @Model.TaxAmount.ToString("N2")</span>
-                    </div>
+                    @if (Model.TaxAmount > 0 || Model.Lines.Any(l => l.TaxRate > 0 || l.TaxAmount > 0))
+                    {
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">ضريبة القيمة المضافة:</span>
+                            <span class="fw-bold font-monospace">+ @Model.TaxAmount.ToString("N2")</span>
+                        </div>
+                    }
                     <hr class="my-2" />
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="fw-bold fs-5 text-dark">الصافي النهائي المطلوب:</span>

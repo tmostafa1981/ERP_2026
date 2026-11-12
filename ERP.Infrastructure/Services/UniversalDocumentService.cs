@@ -75,12 +75,25 @@ namespace ERP.Infrastructure.Services
             if (!canCreate)
                 return (false, $"غير مصرح لك بإنشاء حركة من نوع ({tt.LocalizedName}).", null, null);
 
-            // Credit vs Cash Validation
-            if (dto.PaymentMethod == VoucherPaymentMethod.Cash && !tt.IsCashAllowed)
-                return (false, "نوع الحركة لا يسمح بالسداد النقدي.", null, null);
+            // Credit vs Cash Validation (only applicable when AccountingEffect != None)
+            if (tt.AccountingEffect != AccountingEffect.None)
+            {
+                if (dto.PaymentMethod == VoucherPaymentMethod.Cash && !tt.IsCashAllowed)
+                {
+                    if (tt.IsCreditAllowed)
+                        dto.PaymentMethod = VoucherPaymentMethod.Cheque; // fallback to Credit when Cash is disallowed
+                    else
+                        return (false, "نوع الحركة لا يسمح بالسداد النقدي.", null, null);
+                }
 
-            if (dto.PaymentMethod != VoucherPaymentMethod.Cash && !tt.IsCreditAllowed)
-                return (false, "نوع الحركة لا يسمح بالتعامل الآجل.", null, null);
+                if (dto.PaymentMethod != VoucherPaymentMethod.Cash && !tt.IsCreditAllowed)
+                {
+                    if (tt.IsCashAllowed)
+                        dto.PaymentMethod = VoucherPaymentMethod.Cash;
+                    else
+                        return (false, "نوع الحركة لا يسمح بالتعامل الآجل.", null, null);
+                }
+            }
 
             if (dto.Lines == null || !dto.Lines.Any())
                 return (false, "يجب إضافة بند واحد على الأقل في المستند.", null, null);
@@ -256,7 +269,9 @@ namespace ERP.Infrastructure.Services
                 decimal gross = Math.Round(l.Quantity * l.UnitPrice, 4);
                 decimal disc = Math.Round(l.DiscountAmount, 4);
                 decimal afterDisc = Math.Max(0, gross - disc);
-                decimal tax = l.TaxRate > 0 ? Math.Round(afterDisc * (l.TaxRate / 100m), 4) : 0m;
+                bool hasTaxConfigured = tt.DefaultTaxAccountId.HasValue && tt.DefaultTaxAccountId.Value > 0;
+                decimal effectiveTaxRate = hasTaxConfigured ? l.TaxRate : 0m;
+                decimal tax = effectiveTaxRate > 0 ? Math.Round(afterDisc * (effectiveTaxRate / 100m), 4) : 0m;
                 decimal lineTotal = afterDisc + tax;
 
                 var line = new DocumentLine
@@ -270,7 +285,7 @@ namespace ERP.Infrastructure.Services
                     ConvertedQuantity = 0m,
                     UnitPrice = l.UnitPrice,
                     DiscountAmount = disc,
-                    TaxRate = l.TaxRate,
+                    TaxRate = effectiveTaxRate,
                     TaxAmount = tax,
                     LineTotal = lineTotal,
                     WarehouseId = lineWarehouseId > 0 ? lineWarehouseId : null,
@@ -770,7 +785,9 @@ namespace ERP.Infrastructure.Services
                             decimal gross = Math.Round(l.Quantity * l.UnitPrice, 4);
                             decimal disc = Math.Round(l.DiscountAmount, 4);
                             decimal afterDisc = Math.Max(0, gross - disc);
-                            decimal tax = l.TaxRate > 0 ? Math.Round(afterDisc * (l.TaxRate / 100m), 4) : 0m;
+                            bool hasTaxConfigured = tt.DefaultTaxAccountId.HasValue && tt.DefaultTaxAccountId.Value > 0;
+                            decimal effectiveTaxRate = hasTaxConfigured ? l.TaxRate : 0m;
+                            decimal tax = effectiveTaxRate > 0 ? Math.Round(afterDisc * (effectiveTaxRate / 100m), 4) : 0m;
                             decimal lineTotal = afterDisc + tax;
 
                             var line = new DocumentLine
@@ -785,7 +802,7 @@ namespace ERP.Infrastructure.Services
                                 ConvertedQuantity = 0m,
                                 UnitPrice = l.UnitPrice,
                                 DiscountAmount = disc,
-                                TaxRate = l.TaxRate,
+                                TaxRate = effectiveTaxRate,
                                 TaxAmount = tax,
                                 LineTotal = lineTotal,
                                 WarehouseId = lineWarehouseId > 0 ? lineWarehouseId : null,
@@ -1736,7 +1753,91 @@ namespace ERP.Infrastructure.Services
 
             int lineNum = 1;
 
-            if (tt.Module == TransactionModule.Sales)
+            bool isInventoryVoucherOnly = tt.AccountingEffect == AccountingEffect.COGSAndInventoryOnly
+                                       || tt.BaseNature == DocumentBaseNature.ReceiptVoucher
+                                       || tt.BaseNature == DocumentBaseNature.IssueVoucher;
+
+            if (isInventoryVoucherOnly)
+            {
+                decimal voucherForeignAmount = Math.Max(0m, doc.TotalAmountBeforeTax - doc.DiscountAmount + doc.TotalAdditions);
+                decimal voucherLocalAmount = Math.Round(voucherForeignAmount * rate, 4);
+
+                if (tt.InventoryEffect == InventoryEffect.IssueStock && doc.Lines != null && doc.Lines.Any())
+                {
+                    var costLines = doc.Lines.Where(l => (l.Item == null || !l.Item.IsService) && l.TotalCost > 0).ToList();
+                    decimal totalIssueCostLocal = costLines.Sum(l => l.TotalCost);
+                    if (totalIssueCostLocal > 0)
+                    {
+                        voucherLocalAmount = Math.Round(totalIssueCostLocal, 4);
+                        voucherForeignAmount = rate > 0 ? Math.Round(voucherLocalAmount / rate, 4) : voucherLocalAmount;
+                    }
+                }
+
+                if (voucherLocalAmount <= 0)
+                {
+                    return (false, "قيمة المستند المخزني صفر ولا يمكن إنشاء قيد محاسبي له.", null);
+                }
+
+                int debitAccId = tt.DefaultDebitAccountId ?? 0;
+                int creditAccId = tt.DefaultCreditAccountId ?? 0;
+
+                if (tt.InventoryEffect == InventoryEffect.ReceiveStock)
+                {
+                    if (debitAccId <= 0)
+                    {
+                        int whId = doc.WarehouseId ?? tt.DefaultWarehouseId ?? doc.Lines?.FirstOrDefault()?.WarehouseId ?? 0;
+                        var wh = whId > 0 ? await _context.Warehouses.FindAsync(whId) : null;
+                        debitAccId = wh?.InventoryAccountId ?? tt.DefaultInventoryAccountId ?? 0;
+                    }
+                }
+                else if (tt.InventoryEffect == InventoryEffect.IssueStock)
+                {
+                    if (debitAccId <= 0)
+                    {
+                        debitAccId = tt.DefaultCogsAccountId ?? 0;
+                    }
+                    if (creditAccId <= 0)
+                    {
+                        int whId = doc.WarehouseId ?? tt.DefaultWarehouseId ?? doc.Lines?.FirstOrDefault()?.WarehouseId ?? 0;
+                        var wh = whId > 0 ? await _context.Warehouses.FindAsync(whId) : null;
+                        creditAccId = wh?.InventoryAccountId ?? tt.DefaultInventoryAccountId ?? 0;
+                    }
+                }
+
+                if (debitAccId <= 0 || creditAccId <= 0)
+                {
+                    return (false, $"لا يمكن ترحيل المستند: يرجى تحديد الحساب المدين والحساب الدائن الافتراضي في إعدادات نوع الحركة '{tt.LocalizedName}'.", null);
+                }
+
+                je.Lines.Add(new JournalEntryLine
+                {
+                    LineNumber = lineNum++,
+                    AccountId = debitAccId,
+                    DebitLocal = voucherLocalAmount,
+                    CreditLocal = 0m,
+                    DebitForeign = voucherForeignAmount,
+                    CreditForeign = 0m,
+                    CurrencyId = doc.CurrencyId,
+                    ExchangeRate = doc.ExchangeRate,
+                    Description = $"{tt.LocalizedName} - {doc.DocumentNumber}",
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                je.Lines.Add(new JournalEntryLine
+                {
+                    LineNumber = lineNum++,
+                    AccountId = creditAccId,
+                    DebitLocal = 0m,
+                    CreditLocal = voucherLocalAmount,
+                    DebitForeign = 0m,
+                    CreditForeign = voucherForeignAmount,
+                    CurrencyId = doc.CurrencyId,
+                    ExchangeRate = doc.ExchangeRate,
+                    Description = $"{tt.LocalizedName} - {doc.DocumentNumber}",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            else if (tt.Module == TransactionModule.Sales)
             {
                 // Account Resolution for Sales
                 bool isCashWithCustomer = (doc.PaymentMethod == VoucherPaymentMethod.Cash && doc.PartyType == DocumentPartyType.Customer && doc.PartyId.HasValue);

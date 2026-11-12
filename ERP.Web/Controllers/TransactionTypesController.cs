@@ -59,7 +59,7 @@ namespace ERP.Web.Controllers
                 .Select(v => new { v.Id, v.Code, v.LocalizedName })
                 .ToListAsync();
             ViewBag.CashAccounts = await _context.GLAccounts
-                .Where(a => a.IsActive && !a.IsGroup && a.AccountCategory == AccountCategory.Assets)
+                .Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("120101") || a.Code.StartsWith("120102") || a.SubLedgerType == SubLedgerType.Bank))
                 .OrderBy(a => a.Code)
                 .Select(a => new { a.Id, a.Code, a.LocalizedName })
                 .ToListAsync();

@@ -235,7 +235,7 @@
                             <th style="width: 120px;">الكمية</th>
                             <th style="width: 120px;">سعر الوحدة</th>
                             <th style="width: 100px;">الخصم</th>
-                            <th style="width: 90px;">الضريبة %</th>
+                            <th v-if="isTaxSupported" style="width: 90px;">الضريبة %</th>
                             <th style="width: 130px;">الإجمالي الصافي</th>
                             <th v-if="currentType.inventoryEffect !== 0" style="width: 130px;">السيريالات</th>
                             <th style="width: 45px;">حذف</th>
@@ -322,7 +322,7 @@
                             </td>
 
                             <!-- Tax Rate % -->
-                            <td>
+                            <td v-if="isTaxSupported">
                                 <input type="number" step="1" min="0" max="100" class="form-control form-control-sm text-end font-monospace"
                                        v-model.number="line.taxRate" @@input="calcLine(line)" />
                             </td>
@@ -481,7 +481,7 @@
                     <span class="small text-primary d-block">المصاريف والإضافات</span>
                     <span class="fw-bold font-monospace fs-6 text-primary">+ {{ formatNumber(header.totalAdditions) }}</span>
                 </div>
-                <div class="col-md-2 border-end">
+                <div class="col-md-2 border-end" v-if="isTaxSupported">
                     <span class="small text-muted d-block">ضريبة القيمة المضافة</span>
                     <span class="fw-bold font-monospace fs-6 text-dark">+ {{ formatNumber(header.taxAmount) }}</span>
                 </div>
@@ -1045,6 +1045,10 @@
                     return currentType.module === 1 && currentType.baseNature === 2;
                 });
 
+                const isTaxSupported = computed(() => {
+                    return !!(currentType.defaultTaxAccountId && currentType.defaultTaxAccountId > 0);
+                });
+
                 function createDefaultLine() {
                     return {
                         id: 'line_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -1056,7 +1060,7 @@
                         quantity: 1,
                         unitPrice: 0,
                         discountAmount: 0,
-                        taxRate: 14,
+                        taxRate: isTaxSupported.value ? 14 : 0,
                         lineTotal: 0,
                         notes: '',
                         warehouseId: null,

@@ -276,7 +276,7 @@ namespace ERP.Web.Controllers
             ViewBag.Warehouses = new SelectList(warehouses, "Id", "LocalizedName");
 
             var cashAccounts = await _context.GLAccounts.IgnoreQueryFilters().AsNoTracking()
-                .Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("1101") || a.Code.StartsWith("1102")))
+                .Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("120101") || a.Code.StartsWith("120102") || a.SubLedgerType == SubLedgerType.Bank))
                 .OrderBy(a => a.Code)
                 .Select(a => new { a.Id, Display = $"{a.Code} - {a.NameAr}" }).ToListAsync();
             ViewBag.CashAccounts = new SelectList(cashAccounts, "Id", "Display");

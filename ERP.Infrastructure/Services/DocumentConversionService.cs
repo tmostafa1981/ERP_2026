@@ -199,6 +199,21 @@ namespace ERP.Infrastructure.Services
                     .FirstOrDefaultAsync();
             }
 
+            // Resolve PaymentMethod compatible with target TransactionType
+            var resolvedPaymentMethod = firstSource.PaymentMethod;
+            if (resolvedPaymentMethod == ERP.Domain.Enums.VoucherPaymentMethod.Cash && !targetTT.IsCashAllowed && targetTT.IsCreditAllowed)
+            {
+                resolvedPaymentMethod = ERP.Domain.Enums.VoucherPaymentMethod.Cheque; // Credit
+            }
+            else if (resolvedPaymentMethod != ERP.Domain.Enums.VoucherPaymentMethod.Cash && !targetTT.IsCreditAllowed && targetTT.IsCashAllowed)
+            {
+                resolvedPaymentMethod = ERP.Domain.Enums.VoucherPaymentMethod.Cash;
+            }
+
+            int? resolvedCashBankAccountId = resolvedPaymentMethod == ERP.Domain.Enums.VoucherPaymentMethod.Cash
+                ? (firstSource.CashBankAccountId ?? targetTT.DefaultCashBankAccountId)
+                : null;
+
             // Build new document DTO
             var newDocDto = new DocumentHeaderDto
             {
@@ -207,8 +222,8 @@ namespace ERP.Infrastructure.Services
                 DocumentDate = request.DocumentDate,
                 PartyType = firstSource.PartyType,
                 PartyId = firstSource.PartyId,
-                PaymentMethod = firstSource.PaymentMethod,
-                CashBankAccountId = firstSource.CashBankAccountId,
+                PaymentMethod = resolvedPaymentMethod,
+                CashBankAccountId = resolvedCashBankAccountId,
                 WarehouseId = chosenWarehouseId,
                 CurrencyId = firstSource.CurrencyId,
                 ExchangeRate = firstSource.ExchangeRate,
@@ -219,6 +234,8 @@ namespace ERP.Infrastructure.Services
             };
 
             var lineSelectionDict = request.SelectedLines.ToDictionary(sl => sl.SourceDocumentLineId);
+
+            bool targetHasTaxAccount = targetTT.DefaultTaxAccountId.HasValue && targetTT.DefaultTaxAccountId.Value > 0;
 
             foreach (var sl in sourceLines)
             {
@@ -231,6 +248,29 @@ namespace ERP.Infrastructure.Services
                     return (false, $"الكمية المطلوبة ({selection.QuantityToConvert}) للصنف ({sl.Item?.LocalizedName}) تتجاوز الكمية المتبقية ({sl.RemainingQuantity}).", null, null);
                 }
 
+                decimal resolvedTaxRate = sl.TaxRate;
+                if (!targetHasTaxAccount)
+                {
+                    resolvedTaxRate = 0m;
+                }
+                else if (resolvedTaxRate <= 0)
+                {
+                    // If converting from a tax-exempt document back to a taxable document,
+                    // recover the original Order's tax rate if linked, or default to 14%
+                    var priorLink = await _context.DocumentLineLinks
+                        .AsNoTracking()
+                        .Include(ll => ll.SourceDocumentLine)
+                        .FirstOrDefaultAsync(ll => ll.TargetDocumentLineId == sl.Id);
+                    if (priorLink?.SourceDocumentLine != null && priorLink.SourceDocumentLine.TaxRate > 0)
+                    {
+                        resolvedTaxRate = priorLink.SourceDocumentLine.TaxRate;
+                    }
+                    else
+                    {
+                        resolvedTaxRate = 14m;
+                    }
+                }
+
                 newDocDto.Lines.Add(new DocumentLineDto
                 {
                     ItemId = sl.ItemId,
@@ -239,7 +279,7 @@ namespace ERP.Infrastructure.Services
                     Quantity = selection.QuantityToConvert,
                     UnitPrice = sl.UnitPrice,
                     DiscountAmount = 0m,
-                    TaxRate = sl.TaxRate,
+                    TaxRate = resolvedTaxRate,
                     WarehouseId = chosenWarehouseId ?? sl.WarehouseId,
                     CostCenterId = sl.CostCenterId,
                     SerialNumbers = selection.SerialNumbers ?? new List<string>()

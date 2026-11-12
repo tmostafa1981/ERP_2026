@@ -842,8 +842,8 @@ namespace ERP.Web.Controllers
         public async Task<IActionResult> CashBankAccounts([FromQuery] string? q, [FromQuery] int? branchId, [FromQuery] int page = 1)
         {
             page = Math.Max(1, page);
-            // Non-group accounts that represent Cash / Bank (either under Cash & Banks 1101 or marked as Bank subledger)
-            var query = _context.GLAccounts.AsNoTracking().Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("1101") || a.SubLedgerType == ERP.Domain.Enums.SubLedgerType.Bank));
+            // Non-group accounts that represent Cash / Bank (under Cash & Banks 1201 or marked as Bank subledger)
+            var query = _context.GLAccounts.AsNoTracking().Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("120101") || a.Code.StartsWith("120102") || a.SubLedgerType == ERP.Domain.Enums.SubLedgerType.Bank));
 
             int currentBranchId = _currentUser.BranchId;
             int? effectiveBranchId = currentBranchId > 0 ? currentBranchId : branchId;
@@ -897,7 +897,7 @@ namespace ERP.Web.Controllers
         public async Task<IActionResult> Banks([FromQuery] string? q, [FromQuery] int? branchId, [FromQuery] int page = 1)
         {
             page = Math.Max(1, page);
-            var query = _context.GLAccounts.AsNoTracking().Where(a => a.IsActive && !a.IsGroup && (a.SubLedgerType == ERP.Domain.Enums.SubLedgerType.Bank || a.Code.StartsWith("110102")));
+            var query = _context.GLAccounts.AsNoTracking().Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("120101") || a.SubLedgerType == ERP.Domain.Enums.SubLedgerType.Bank));
 
             int currentBranchId = _currentUser.BranchId;
             int? effectiveBranchId = currentBranchId > 0 ? currentBranchId : branchId;

@@ -163,7 +163,7 @@ namespace ERP.Web.Controllers
 
             ViewBag.CashAccounts = await _context.GLAccounts
                 .Where(a => a.IsActive && !a.IsGroup &&
-                            (a.AccountCategory == AccountCategory.Assets) &&
+                            (a.Code.StartsWith("120101") || a.Code.StartsWith("120102") || a.SubLedgerType == SubLedgerType.Bank) &&
                             (!a.BranchId.HasValue || a.BranchId == branchId))
                 .OrderBy(a => a.Code)
                 .Select(a => new { a.Id, a.Code, a.LocalizedName })
@@ -292,7 +292,7 @@ namespace ERP.Web.Controllers
 
             ViewBag.CashAccounts = await _context.GLAccounts
                 .Where(a => a.IsActive && !a.IsGroup &&
-                            (a.AccountCategory == AccountCategory.Assets) &&
+                            (a.Code.StartsWith("120101") || a.Code.StartsWith("120102") || a.SubLedgerType == SubLedgerType.Bank) &&
                             (!a.BranchId.HasValue || a.BranchId == branchId))
                 .OrderBy(a => a.Code)
                 .Select(a => new { a.Id, a.Code, a.LocalizedName })

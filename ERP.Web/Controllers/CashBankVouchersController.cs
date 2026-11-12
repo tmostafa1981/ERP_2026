@@ -109,7 +109,7 @@ namespace ERP.Web.Controllers
                 .ToListAsync();
 
             ViewBag.CashBankAccounts = await _context.GLAccounts
-                .Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("1101") || a.SubLedgerType == SubLedgerType.Bank))
+                .Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("120101") || a.Code.StartsWith("120102") || a.SubLedgerType == SubLedgerType.Bank))
                 .Where(a => a.BranchId == null || a.BranchId == _currentUser.BranchId)
                 .OrderBy(a => a.Code)
                 .AsNoTracking()
@@ -1736,7 +1736,7 @@ namespace ERP.Web.Controllers
 
             int? targetBranchId = _currentUser.BranchId;
             ViewBag.CashBankAccounts = await _context.GLAccounts
-                .Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("1101") || a.SubLedgerType == SubLedgerType.Bank))
+                .Where(a => a.IsActive && !a.IsGroup && (a.Code.StartsWith("120101") || a.Code.StartsWith("120102") || a.SubLedgerType == SubLedgerType.Bank))
                 .Where(a => a.BranchId == null || a.BranchId == targetBranchId)
                 .OrderBy(a => a.Code)
                 .AsNoTracking()
